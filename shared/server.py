@@ -100,7 +100,7 @@ class BaseHandler(BaseHTTPRequestHandler):
         for name in dir(cls):
             method = getattr(cls, name, None)
             if callable(method) and hasattr(method, "_route"):
-                routes[method._route] = name
+                routes[method._route] = name  # type: ignore[attr-defined]
         return routes
 
     def _dispatch(self, http_method: str) -> None:
