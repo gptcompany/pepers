@@ -2,12 +2,12 @@
 
 ## Current Position
 
-Phase: 4 of 4 (Test Suite)
-Plan: Not started
-Status: Ready to plan
-Last activity: 2026-02-10 - Phase 03 HTTP Server & Config completed
+Phase: 4 of 4 (Test Suite) — COMPLETE
+Plan: 04-01 complete
+Status: Milestone v1.0 Foundation complete
+Last activity: 2026-02-10 - Phase 04 Test Suite completed
 
-Progress: ███████░░░ 75%
+Progress: ██████████ 100%
 
 ## Accumulated Context
 
@@ -32,18 +32,24 @@ Progress: ███████░░░ 75%
 - Warn + default for missing env vars — development-friendly (Phase 03)
 - Graceful SIGTERM drain — finish current request, then stop (Phase 03)
 - Thread-safe signal registration — signal.signal() only in main thread (Phase 03)
+- Test reali da zero, ignora template .j2 (Phase 04)
+- SQLite in-memory per unit tests, file per integration (Phase 04)
+- Free port allocation per HTTP tests (Phase 04)
+- Fixed requires-python >=3.10 (system Python 3.10.12) (Phase 04)
 
 ### Blockers/Concerns Carried Forward
-- Python 3.10.12 on system vs 3.11 in .python-version (compatible, not blocking)
+- Python 3.10.12 on system vs 3.11 in .python-version (compatible, resolved in pyproject.toml)
 
 ### Roadmap Evolution
 - Milestone v1.0 Foundation created: shared infrastructure library, 4 phases (Phase 1-4)
 - Phase 01 completed: CAS analysis, shared lib skeleton, ARCHITECTURE.md
 - Phase 02 completed: SQLite schema (5 tables, 6 indexes), Pydantic models (8 models), DB layer
 - Phase 03 completed: Base HTTP server (route dispatch, JSON helpers, SIGTERM), config loader
+- Phase 04 completed: Test suite (103 tests, 98% coverage, 0 type errors)
+- **Milestone v1.0 Foundation: COMPLETE**
 
 ## Session Continuity
 
 Last session: 2026-02-10
-Stopped at: Phase 03 complete, Phase 04 ready
+Stopped at: Milestone v1.0 complete, ready for v2.0 (service implementations)
 Resume file: None
