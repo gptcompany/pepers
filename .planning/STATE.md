@@ -2,12 +2,12 @@
 
 ## Current Position
 
-Phase: 3 of 4 (HTTP Server & Config)
+Phase: 4 of 4 (Test Suite)
 Plan: Not started
 Status: Ready to plan
-Last activity: 2026-02-10 - Phase 02 Database & Models completed
+Last activity: 2026-02-10 - Phase 03 HTTP Server & Config completed
 
-Progress: █████░░░░░ 50%
+Progress: ███████░░░ 75%
 
 ## Accumulated Context
 
@@ -28,6 +28,10 @@ Progress: █████░░░░░ 50%
 - Language column for generated_code extensibility (Phase 02)
 - schema_version table for manual migration tracking (Phase 02)
 - JSON fields via Pydantic field_validator for SQLite TEXT round-trip (Phase 02)
+- JSON structured logging for Loki/journald (Phase 03)
+- Warn + default for missing env vars — development-friendly (Phase 03)
+- Graceful SIGTERM drain — finish current request, then stop (Phase 03)
+- Thread-safe signal registration — signal.signal() only in main thread (Phase 03)
 
 ### Blockers/Concerns Carried Forward
 - Python 3.10.12 on system vs 3.11 in .python-version (compatible, not blocking)
@@ -36,9 +40,10 @@ Progress: █████░░░░░ 50%
 - Milestone v1.0 Foundation created: shared infrastructure library, 4 phases (Phase 1-4)
 - Phase 01 completed: CAS analysis, shared lib skeleton, ARCHITECTURE.md
 - Phase 02 completed: SQLite schema (5 tables, 6 indexes), Pydantic models (8 models), DB layer
+- Phase 03 completed: Base HTTP server (route dispatch, JSON helpers, SIGTERM), config loader
 
 ## Session Continuity
 
 Last session: 2026-02-10
-Stopped at: Phase 02 complete, Phase 03 ready
+Stopped at: Phase 03 complete, Phase 04 ready
 Resume file: None

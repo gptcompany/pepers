@@ -26,9 +26,12 @@ Design decisions:
 
 from __future__ import annotations
 
+import logging
 import os
 from dataclasses import dataclass, field
 from pathlib import Path
+
+logger = logging.getLogger(__name__)
 
 # Default database path
 DEFAULT_DB_PATH = Path(__file__).parent.parent / "data" / "research.db"
@@ -76,4 +79,39 @@ def load_config(service_name: str) -> Config:
     Returns:
         Populated Config dataclass.
     """
-    ...
+    prefix = service_name.upper()
+    default_port = SERVICE_PORTS.get(service_name, 8770)
+
+    # Port
+    port_str = os.environ.get(f"RP_{prefix}_PORT", "")
+    if port_str:
+        port = int(port_str)
+    else:
+        logger.warning("RP_%s_PORT not set, using default %d", prefix, default_port)
+        port = default_port
+
+    # DB path
+    db_path_str = os.environ.get("RP_DB_PATH", "")
+    if db_path_str:
+        db_path = Path(db_path_str)
+    else:
+        logger.warning("RP_DB_PATH not set, using default %s", DEFAULT_DB_PATH)
+        db_path = DEFAULT_DB_PATH
+
+    # Log level
+    log_level = os.environ.get("RP_LOG_LEVEL", "INFO").upper()
+
+    # Data dir
+    data_dir_str = os.environ.get("RP_DATA_DIR", "")
+    if data_dir_str:
+        data_dir = Path(data_dir_str)
+    else:
+        data_dir = Path(__file__).parent.parent / "data"
+
+    return Config(
+        service_name=service_name,
+        port=port,
+        db_path=db_path,
+        log_level=log_level,
+        data_dir=data_dir,
+    )
