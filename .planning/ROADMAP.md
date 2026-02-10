@@ -15,7 +15,7 @@ None
 ## Phases
 
 - [ ] **Phase 1: Research & Design** - Analyze CAS microservice pattern, design shared lib architecture
-- [ ] **Phase 2: Database & Models** - SQLite schema, Pydantic models, DB layer
+- [x] **Phase 2: Database & Models** - SQLite schema, Pydantic models, DB layer
 - [ ] **Phase 3: HTTP Server & Config** - Base HTTP server, config management, dotenvx integration
 - [ ] **Phase 4: Test Suite** - Unit tests, integration tests, verification
 
@@ -44,7 +44,7 @@ Plans:
 **Plans**: TBD
 
 Plans:
-- [ ] 02-01: TBD
+- [x] 02-01: SQLite schema + Pydantic models + DB layer implementation
 
 #### Phase 3: HTTP Server & Config
 
@@ -71,6 +71,6 @@ Plans:
 | Phase | Milestone | Plans Complete | Status | Completed |
 |-------|-----------|----------------|--------|-----------|
 | 1. Research & Design | v1.0 | 1/1 | Complete | 2026-02-10 |
-| 2. Database & Models | v1.0 | 0/? | Not started | - |
+| 2. Database & Models | v1.0 | 1/1 | Complete | 2026-02-10 |
 | 3. HTTP Server & Config | v1.0 | 0/? | Not started | - |
 | 4. Test Suite | v1.0 | 0/? | Not started | - |
