@@ -77,3 +77,67 @@ def sample_formula_data():
         "description": "Kelly criterion optimal fraction",
         "formula_type": "equation",
     }
+
+
+@pytest.fixture
+def sample_arxiv_result():
+    """Mock arxiv.Result object for testing."""
+    from unittest.mock import MagicMock
+    from datetime import datetime, timezone
+
+    result = MagicMock()
+    result.entry_id = "http://arxiv.org/abs/2401.00001v2"
+    result.title = "Kelly Criterion in Portfolio Optimization"
+    result.summary = "We study the Kelly criterion for optimal bet sizing."
+    result.doi = "10.1234/test.2024.001"
+    result.pdf_url = "https://arxiv.org/pdf/2401.00001"
+    result.published = datetime(2024, 1, 15, tzinfo=timezone.utc)
+    result.categories = {"q-fin.PM", "stat.ML"}
+
+    author1 = MagicMock()
+    author1.name = "Alice Smith"
+    author2 = MagicMock()
+    author2.name = "Bob Jones"
+    result.authors = [author1, author2]
+
+    return result
+
+
+@pytest.fixture
+def sample_s2_response():
+    """Sample Semantic Scholar API response dict."""
+    return {
+        "paperId": "abc123def456",
+        "citationCount": 42,
+        "referenceCount": 15,
+        "influentialCitationCount": 5,
+        "venue": "Journal of Finance",
+        "s2FieldsOfStudy": [
+            {"category": "Economics"},
+            {"category": "Mathematics"},
+        ],
+        "tldr": {"text": "This paper studies the Kelly criterion."},
+        "openAccessPdf": {"url": "https://example.com/paper.pdf"},
+        "externalIds": {"DOI": "10.1234/test.2024.001", "ArXiv": "2401.00001"},
+        "publicationVenue": {"name": "Journal of Finance"},
+    }
+
+
+@pytest.fixture
+def sample_crossref_response():
+    """Sample CrossRef API response dict."""
+    return {
+        "status": "ok",
+        "message": {
+            "DOI": "10.1234/test.2024.001",
+            "title": ["Kelly Criterion in Portfolio Optimization"],
+            "author": [
+                {"given": "Alice", "family": "Smith"},
+                {"given": "Bob", "family": "Jones"},
+            ],
+            "container-title": ["Journal of Finance"],
+            "published-print": {"date-parts": [[2024, 1, 15]]},
+            "is-referenced-by-count": 42,
+            "type": "journal-article",
+        },
+    }

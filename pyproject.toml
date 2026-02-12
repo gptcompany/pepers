@@ -25,4 +25,5 @@ addopts = "--tb=short -q"
 markers = [
     "unit: Unit tests (fast, no I/O)",
     "integration: Integration tests (DB, HTTP)",
+    "e2e: End-to-end tests (real APIs, network required)",
 ]

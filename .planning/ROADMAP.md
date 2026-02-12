@@ -58,7 +58,7 @@ Plans:
 **Plans**: TBD
 
 Plans:
-- [ ] 07-01: TBD (run /gsd:plan-phase 07 to break down)
+- [x] 07-01: Discovery service test suite (unit + integration + E2E)
 
 ## Progress
 
@@ -70,4 +70,4 @@ Plans:
 | 4. Test Suite | v1.0 | 1/1 | Complete | 2026-02-10 |
 | 5. Discovery Research & Design | v2.0 | 1/1 | Complete | 2026-02-12 |
 | 6. Discovery Implementation | v2.0 | 0/? | Not started | - |
-| 7. Discovery Testing | v2.0 | 0/? | Not started | - |
+| 7. Discovery Testing | v2.0 | 1/1 | Complete | 2026-02-12 |
