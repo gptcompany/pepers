@@ -123,7 +123,7 @@ class TestUpsertPaperDB:
 class TestUpdatePaperS2DB:
     """Integration tests for update_paper_s2() with real SQLite."""
 
-    def _insert_paper(self, db_path):
+    def _insert_paper(self, db_path) -> int:
         paper = {
             "arxiv_id": "2401.00001",
             "title": "Test",
@@ -135,7 +135,9 @@ class TestUpdatePaperS2DB:
             "published_date": "2024-01-15",
             "stage": "discovered",
         }
-        return upsert_paper(str(db_path), paper)
+        paper_id = upsert_paper(str(db_path), paper)
+        assert paper_id is not None
+        return paper_id
 
     def test_update_s2_fields(self, initialized_db):
         paper_id = self._insert_paper(initialized_db)
@@ -207,7 +209,7 @@ class TestUpdatePaperS2DB:
 class TestUpdatePaperCrossrefDB:
     """Integration tests for update_paper_crossref() with real SQLite."""
 
-    def _insert_paper(self, db_path):
+    def _insert_paper(self, db_path) -> int:
         paper = {
             "arxiv_id": "2401.00001",
             "title": "Test",
@@ -219,7 +221,9 @@ class TestUpdatePaperCrossrefDB:
             "published_date": "2024-01-15",
             "stage": "discovered",
         }
-        return upsert_paper(str(db_path), paper)
+        paper_id = upsert_paper(str(db_path), paper)
+        assert paper_id is not None
+        return paper_id
 
     def test_store_crossref_json(self, initialized_db):
         paper_id = self._insert_paper(initialized_db)
@@ -437,7 +441,7 @@ class TestDiscoveryHandlerIntegration:
         ]
         mock_cr.return_value = {"DOI": "10.1234/journal"}
 
-        result = self._post("/process", {"query": "test"})
+        self._post("/process", {"query": "test"})
         # CrossRef should only be called for paper with DOI
         assert mock_cr.call_count == 1
         mock_cr.assert_called_once_with("10.1234/journal")

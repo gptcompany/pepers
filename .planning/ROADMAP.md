@@ -11,7 +11,7 @@ None
 ## Milestones
 
 - [✅ v1.0 Foundation](milestones/v1.0-ROADMAP.md) (Phases 1-4) — SHIPPED 2026-02-10
-- 🚧 **v2.0 Discovery Service** — Phases 5-7 (in progress)
+- [✅ v2.0 Discovery Service] — Phases 5-7 — SHIPPED 2026-02-12
 
 ## Phases
 
@@ -25,7 +25,7 @@ None
 
 </details>
 
-### 🚧 v2.0 Discovery Service (In Progress)
+### ✅ v2.0 Discovery Service (SHIPPED 2026-02-12)
 
 **Milestone Goal:** First microservice in the pipeline — fetches arXiv papers by keywords, enriches with Semantic Scholar and CrossRef metadata, stores in SQLite DB.
 
@@ -48,7 +48,7 @@ Plans:
 **Plans**: TBD
 
 Plans:
-- [ ] 06-01: TBD (run /gsd:plan-phase 06 to break down)
+- [x] 06-01: arXiv search + S2/CrossRef enrichment + HTTP handler + DB persistence
 
 #### Phase 7: Discovery Testing
 
@@ -69,5 +69,5 @@ Plans:
 | 3. HTTP Server & Config | v1.0 | 1/1 | Complete | 2026-02-10 |
 | 4. Test Suite | v1.0 | 1/1 | Complete | 2026-02-10 |
 | 5. Discovery Research & Design | v2.0 | 1/1 | Complete | 2026-02-12 |
-| 6. Discovery Implementation | v2.0 | 0/? | Not started | - |
+| 6. Discovery Implementation | v2.0 | 1/1 | Complete | 2026-02-12 |
 | 7. Discovery Testing | v2.0 | 1/1 | Complete | 2026-02-12 |

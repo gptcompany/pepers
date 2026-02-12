@@ -610,7 +610,7 @@ class TestDiscoveryHandlerValidation:
         handler = self._make_handler()
         from services.discovery.main import DiscoveryHandler
 
-        result = DiscoveryHandler.handle_process(handler, {})
+        DiscoveryHandler.handle_process(handler, {})
         handler.send_error_json.assert_called_once()
         args = handler.send_error_json.call_args
         assert args[0][1] == "VALIDATION_ERROR"
@@ -620,21 +620,21 @@ class TestDiscoveryHandlerValidation:
         handler = self._make_handler()
         from services.discovery.main import DiscoveryHandler
 
-        result = DiscoveryHandler.handle_process(handler, {"query": ""})
+        DiscoveryHandler.handle_process(handler, {"query": ""})
         handler.send_error_json.assert_called_once()
 
     def test_non_string_query_returns_422(self):
         handler = self._make_handler()
         from services.discovery.main import DiscoveryHandler
 
-        result = DiscoveryHandler.handle_process(handler, {"query": 123})
+        DiscoveryHandler.handle_process(handler, {"query": 123})
         handler.send_error_json.assert_called_once()
 
     def test_invalid_max_results_zero(self):
         handler = self._make_handler()
         from services.discovery.main import DiscoveryHandler
 
-        result = DiscoveryHandler.handle_process(
+        DiscoveryHandler.handle_process(
             handler, {"query": "test", "max_results": 0}
         )
         handler.send_error_json.assert_called_once()
@@ -644,7 +644,7 @@ class TestDiscoveryHandlerValidation:
         handler = self._make_handler()
         from services.discovery.main import DiscoveryHandler
 
-        result = DiscoveryHandler.handle_process(
+        DiscoveryHandler.handle_process(
             handler, {"query": "test", "max_results": 501}
         )
         handler.send_error_json.assert_called_once()
@@ -653,7 +653,7 @@ class TestDiscoveryHandlerValidation:
         handler = self._make_handler()
         from services.discovery.main import DiscoveryHandler
 
-        result = DiscoveryHandler.handle_process(
+        DiscoveryHandler.handle_process(
             handler, {"query": "test", "max_results": "ten"}
         )
         handler.send_error_json.assert_called_once()
@@ -663,5 +663,5 @@ class TestDiscoveryHandlerValidation:
         handler = self._make_handler()
         from services.discovery.main import DiscoveryHandler
 
-        result = DiscoveryHandler.handle_process(handler, {"query": "test"})
+        DiscoveryHandler.handle_process(handler, {"query": "test"})
         mock_search.assert_called_once_with("test", DEFAULT_MAX_RESULTS)

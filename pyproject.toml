@@ -21,7 +21,7 @@ include = ["shared*", "services*"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
-addopts = "--tb=short -q"
+addopts = "--tb=short -q -m 'not e2e'"
 markers = [
     "unit: Unit tests (fast, no I/O)",
     "integration: Integration tests (DB, HTTP)",
