@@ -10,61 +10,19 @@ None
 
 ## Milestones
 
-- ✅ **v1.0 Foundation** - Phases 1-4 (complete)
+- [✅ v1.0 Foundation](milestones/v1.0-ROADMAP.md) (Phases 1-4) — SHIPPED 2026-02-10
 
 ## Phases
 
-- [x] **Phase 1: Research & Design** - Analyze CAS microservice pattern, design shared lib architecture
-- [x] **Phase 2: Database & Models** - SQLite schema, Pydantic models, DB layer
-- [x] **Phase 3: HTTP Server & Config** - Base HTTP server, config management, dotenvx integration
-- [x] **Phase 4: Test Suite** - Unit tests, integration tests, verification
+<details>
+<summary>✅ v1.0 Foundation (Phases 1-4) — SHIPPED 2026-02-10</summary>
 
-## Phase Details
+- [x] **Phase 1: Research & Design** (1/1 plans) — completed 2026-02-10
+- [x] **Phase 2: Database & Models** (1/1 plans) — completed 2026-02-10
+- [x] **Phase 3: HTTP Server & Config** (1/1 plans) — completed 2026-02-10
+- [x] **Phase 4: Test Suite** (1/1 plans) — completed 2026-02-10
 
-### ✅ v1.0 Foundation (Complete)
-
-**Milestone Goal:** Shared infrastructure library that all 5 microservices + orchestrator will depend on.
-
-#### Phase 1: Research & Design
-
-**Goal**: Analyze CAS microservice (:8769) as reference pattern, design shared lib architecture (modules, interfaces, directory structure)
-**Depends on**: Nothing (first phase)
-**Research**: Likely (analyzing existing service code, architectural decisions for shared lib design)
-**Research topics**: CAS microservice architecture, http.server patterns, SQLite connection patterns in Python
-**Plans**: 1 plan in 1 wave
-
-Plans:
-- [x] 01-01: Analyze CAS, create shared lib skeleton, write ARCHITECTURE.md
-
-#### Phase 2: Database & Models
-
-**Goal**: SQLite database layer with clean schema + Pydantic models for papers, formulas, validations, generated_code
-**Depends on**: Phase 1
-**Research**: Unlikely (sqlite3 stdlib, pydantic established patterns)
-**Plans**: TBD
-
-Plans:
-- [x] 02-01: SQLite schema + Pydantic models + DB layer implementation
-
-#### Phase 3: HTTP Server & Config
-
-**Goal**: Base HTTP server class (http.server pattern with /health, /status, /process endpoints) + centralized config management with dotenvx
-**Depends on**: Phase 2
-**Research**: Unlikely (follows patterns established in Phase 1 research)
-**Plans**: TBD
-
-Plans:
-- [x] 03-01: Base HTTP server (route dispatch, JSON helpers, SIGTERM) + config loader
-
-#### Phase 4: Test Suite
-
-**Goal**: Comprehensive test suite — unit tests for each module, integration tests with real SQLite DB, endpoint tests for base HTTP server
-**Depends on**: Phase 3
-**Research**: Unlikely (standard pytest patterns)
-**Plans**: TBD
-
-Plans:
-- [x] 04-01: Comprehensive test suite (103 tests, 98% coverage)
+</details>
 
 ## Progress
 

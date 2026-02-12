@@ -12,7 +12,9 @@ Reliable, N8N-free academic paper processing pipeline that discovers Kelly crite
 
 ### Validated
 
-(None yet — ship to validate)
+- ✓ Shared library: DB connection pool, Pydantic models, base HTTP server, config management — v1.0
+- ✓ Each service exposes /health, /status, /process endpoints — v1.0
+- ✓ dotenvx secret management aligned with SSOT at /media/sam/1TB/.env — v1.0
 
 ### Active
 
@@ -24,9 +26,6 @@ Reliable, N8N-free academic paper processing pipeline that discovers Kelly crite
 - [ ] Orchestrator: coordinates pipeline stages, retry logic, error handling, Discord notifications
 - [ ] systemd unit files for all 6 services + daily timer (8AM)
 - [ ] Monitoring integration: process-exporter config, Prometheus alert rules, Grafana dashboard
-- [ ] Shared library: DB connection pool, Pydantic models, base HTTP server, config management
-- [ ] Each service exposes /health, /status, /process endpoints
-- [ ] dotenvx secret management aligned with SSOT at /media/sam/1TB/.env
 
 ### Out of Scope
 
@@ -39,6 +38,14 @@ Reliable, N8N-free academic paper processing pipeline that discovers Kelly crite
 - Cross-server deployment — all services run on Workstation (192.168.1.111)
 
 ## Context
+
+**Current state (v1.0 shipped):**
+- Shared library: 816 LOC Python across 4 modules (db.py, models.py, server.py, config.py)
+- SQLite schema: 5 tables, 6 indexes, WAL mode
+- 8 Pydantic models with JSON field validators
+- Base HTTP server with @route decorator, JSON logging, SIGTERM handling
+- 103 tests, 98% coverage, 0 type errors
+- Tech stack: Python stdlib (http.server, sqlite3, logging, json) + Pydantic
 
 **Origin**: N8N crashed in Jan 2026, external team restored 88 workflows but lost all data. The W1-W5 pipeline (17 N8N workflows) never successfully processed a paper end-to-end — all tables empty, 0 executions. Rather than fix N8N, rebuilding as standalone microservices eliminates the single point of failure.
 
@@ -66,25 +73,31 @@ Reliable, N8N-free academic paper processing pipeline that discovers Kelly crite
 ## Constraints
 
 - **Tech stack**: Python stdlib `http.server` (same pattern as existing CAS microservice). No frameworks.
-- **Database**: PostgreSQL via N8N's existing postgres container. Same tables (papers, formulas, validations, generated_code).
+- **Database**: SQLite with WAL mode (YAGNI — ~10 papers/day batch, zero infra overhead)
 - **Secrets**: dotenvx encrypted, aligned with SSOT `/media/sam/1TB/.env`
 - **Process mgmt**: systemd (native, journald → Loki integration)
 - **LLM**: Ollama qwen3:8b (local, free, already deployed)
 - **Ports**: 8770-8775 (non-conflicting with existing services)
-- **Dependencies**: External services are existing (CAS :8769, RAGAnything :8767, Ollama :11434, PostgreSQL)
+- **Dependencies**: External services are existing (CAS :8769, RAGAnything :8767, Ollama :11434)
 - **KISS/YAGNI**: No abstractions beyond immediate needs. No message queues, no Docker, no frameworks.
 
 ## Key Decisions
 
 | Decision | Rationale | Outcome |
 |----------|-----------|---------|
-| http.server over FastAPI/Flask | Match CAS microservice pattern, zero extra deps, KISS | — Pending |
+| http.server over FastAPI/Flask | Match CAS microservice pattern, zero extra deps, KISS | ✓ Good |
 | Microservices over monolith | User chose for resilience + independent replaceability | — Pending |
-| systemd over PM2/process-compose | Native Linux, journald → Loki, no extra deps, cross-server via SSH | — Pending |
-| Single venv for all services | Shared deps (psycopg2, pydantic), simpler management | — Pending |
+| systemd over PM2/process-compose | Native Linux, journald → Loki, no extra deps | — Pending |
+| Single venv for all services | Shared deps (pydantic), simpler management | ✓ Good |
 | AST-based Rust codegen over regex | Original W5.3 was naive regex JS, quality was insufficient | — Pending |
-| Keep CAS/RAG in N8N_dev | Already working as standalone systemd services, no need to move | — Pending |
+| Keep CAS/RAG in N8N_dev | Already working as standalone systemd services, no need to move | ✓ Good |
 | HTTP sync over async queue | Daily batch of ~10 papers, queue overhead not justified (YAGNI) | — Pending |
+| SQLite over PostgreSQL | YAGNI — ~10 papers/day, zero infra overhead | ✓ Good |
+| @route decorator dispatch | Clean route registration vs monolithic do_POST | ✓ Good |
+| RP_ env var prefix | Namespace isolation for config | ✓ Good |
+| WAL mode SQLite | Concurrent reads during batch processing | ✓ Good |
+| JSON structured logging | Loki/journald parsing | ✓ Good |
+| Warn + default for missing env vars | Development-friendly | ✓ Good |
 
 ---
-*Last updated: 2026-02-10 after initialization*
+*Last updated: 2026-02-12 after v1.0 milestone*
