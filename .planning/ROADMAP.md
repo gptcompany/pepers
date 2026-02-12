@@ -35,10 +35,10 @@ None
 **Depends on**: v1.0 Foundation complete
 **Research**: Likely (external API integration — arXiv, Semantic Scholar, CrossRef)
 **Research topics**: arXiv API query syntax and rate limits, Semantic Scholar API v2 (paper search, batch details, fields), CrossRef REST API (DOI lookup, metadata enrichment), rate limiting strategies for academic APIs
-**Plans**: TBD
+**Plans**: 1 plan in 1 wave
 
 Plans:
-- [ ] 05-01: TBD (run /gsd:plan-phase 05 to break down)
+- [x] 05-01: API research + design decisions + architecture alignment
 
 #### Phase 6: Discovery Implementation
 
@@ -68,6 +68,6 @@ Plans:
 | 2. Database & Models | v1.0 | 1/1 | Complete | 2026-02-10 |
 | 3. HTTP Server & Config | v1.0 | 1/1 | Complete | 2026-02-10 |
 | 4. Test Suite | v1.0 | 1/1 | Complete | 2026-02-10 |
-| 5. Discovery Research & Design | v2.0 | 0/? | Not started | - |
+| 5. Discovery Research & Design | v2.0 | 1/1 | Complete | 2026-02-12 |
 | 6. Discovery Implementation | v2.0 | 0/? | Not started | - |
 | 7. Discovery Testing | v2.0 | 0/? | Not started | - |
