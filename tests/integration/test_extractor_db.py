@@ -9,7 +9,7 @@ import time
 import urllib.error
 import urllib.request
 from pathlib import Path
-from unittest.mock import MagicMock, patch
+from unittest.mock import patch
 
 import pytest
 
@@ -22,7 +22,6 @@ from services.extractor.main import (
     _store_results,
 )
 from services.discovery.main import upsert_paper
-from services.analyzer.main import migrate_db
 from shared.server import BaseService
 
 

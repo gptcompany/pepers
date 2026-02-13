@@ -14,8 +14,7 @@ import urllib.request
 
 import pytest
 
-from shared.db import init_db, transaction
-from shared.models import Paper
+from shared.db import init_db
 from services.extractor.latex import extract_formulas, filter_formulas
 from services.extractor.main import ExtractorHandler
 from services.extractor.rag_client import check_service

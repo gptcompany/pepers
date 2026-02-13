@@ -4,11 +4,9 @@ from __future__ import annotations
 
 import hashlib
 import json
-import time
 import urllib.error
-from io import BytesIO
 from pathlib import Path
-from unittest.mock import MagicMock, patch, call
+from unittest.mock import MagicMock, patch
 
 import pytest
 
@@ -28,7 +26,6 @@ from services.extractor.rag_client import (
 )
 from services.extractor.latex import (
     CONTEXT_WINDOW,
-    MIN_FORMULA_LENGTH,
     extract_context,
     extract_formulas,
     filter_formulas,
@@ -103,7 +100,7 @@ class TestCreateSession:
     def test_session_has_retry_strategy(self):
         session = create_session()
         adapter = session.get_adapter("https://example.com")
-        assert adapter.max_retries.total == 3
+        assert adapter.max_retries.total == 3  # type: ignore[union-attr]
 
 
 # ---------------------------------------------------------------------------
@@ -363,8 +360,6 @@ class TestReadMarkdown:
         host_dir.mkdir(parents=True)
         (host_dir / "output.md").write_text("# Extracted text")
 
-        # Pass container path
-        container_path = str(host_dir).replace("/media/sam/1TB/", "/workspace/1TB/")
         # read_markdown maps /workspace/1TB/ → /media/sam/1TB/
         result = read_markdown(str(host_dir))
         assert "Extracted text" in result
