@@ -5,14 +5,14 @@
 See: .planning/PROJECT.md (updated 2026-02-13)
 
 **Core value:** Reliable, N8N-free academic paper processing pipeline
-**Current focus:** v4.0 Extractor Service — COMPLETE
+**Current focus:** v5.0 Validator Service — Multi-CAS consensus validation
 
 ## Current Position
 
-Phase: 13 of 13 (Extractor Testing) — COMPLETE
-Plan: 13-01 executed
-Status: v4.0 milestone complete, ready for v5.0
-Last activity: 2026-02-13 — Phase 13 completed (60 tests, 999 LOC, 94% coverage)
+Phase: 14 of 16 (Research & Design)
+Plan: Not started
+Status: Ready to plan
+Last activity: 2026-02-13 — Milestone v5.0 created
 
 Progress: 4/7 milestones shipped
 
@@ -25,17 +25,29 @@ Progress: 4/7 milestones shipped
 
 ## Remaining Milestones
 
-- v5.0 Validator (Multi-CAS consensus)
+- v5.0 Validator (Multi-CAS consensus) ← IN PROGRESS
 - v6.0 Codegen (Python/Rust generation)
 - v7.0 Orchestrator + Deploy (systemd, monitoring)
 
 ## Blockers/Concerns Carried Forward
 
-- CAS microservice: only Maxima engine works (SageMath/MATLAB broken)
+- CAS microservice: only Maxima engine works (SageMath/MATLAB broken) — v5.0 will fix SageMath
 - Gemini API: intermittent 503/429 errors (confidence gate rate-limited)
+
+## Constraints (v5.0)
+
+- CAS microservice lives in /media/sam/1TB/N8N_dev (separate repo)
+- SymPy available as Python dependency
+- CAS :8769 API uses `cas` parameter (maxima, sagemath, matlab)
+- All-or-nothing consensus: any engine failure → formula invalid
+- Must handle CAS engine timeouts gracefully
+
+## Roadmap Evolution
+
+- Milestone v5.0 created: Multi-CAS formula validation with consensus, 3 phases (Phase 14-16)
 
 ## Session Continuity
 
 Last session: 2026-02-13
-Stopped at: v4.0 complete
-Next step: /gsd:complete-milestone or /gsd:new-milestone v5.0
+Stopped at: Milestone v5.0 initialization
+Resume file: None
