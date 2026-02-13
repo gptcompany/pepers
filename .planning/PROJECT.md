@@ -15,11 +15,10 @@ Reliable, N8N-free academic paper processing pipeline that discovers Kelly crite
 - ✓ Shared library: DB connection pool, Pydantic models, base HTTP server, config management — v1.0
 - ✓ Each service exposes /health, /status, /process endpoints — v1.0
 - ✓ dotenvx secret management aligned with SSOT at /media/sam/1TB/.env — v1.0
+- ✓ Discovery service: fetch arXiv papers by keywords + enrich via Semantic Scholar/CrossRef — v2.0
+- ✓ Analyzer service: LLM analysis (triple fallback) + 5-criteria relevance scoring + routing — v3.0
 
 ### Active
-
-- [ ] Discovery service: fetch arXiv papers by keywords + enrich via Semantic Scholar/CrossRef
-- [ ] Analyzer service: LLM analysis (Ollama qwen3:8b) + 5-criteria relevance scoring + routing
 - [ ] Extractor service: send PDFs to RAGAnything + regex-based LaTeX formula extraction
 - [ ] Validator service: multi-CAS validation (SymPy, Wolfram, Maxima) with consensus scoring
 - [ ] Codegen service: LLM plain-language explanation + Python codegen (SymPy) + Rust codegen (AST-based)
@@ -39,13 +38,15 @@ Reliable, N8N-free academic paper processing pipeline that discovers Kelly crite
 
 ## Context
 
-**Current state (v1.0 shipped):**
+**Current state (v3.0 shipped):**
 - Shared library: 816 LOC Python across 4 modules (db.py, models.py, server.py, config.py)
-- SQLite schema: 5 tables, 6 indexes, WAL mode
-- 8 Pydantic models with JSON field validators
+- Discovery service: 448 LOC (arXiv + S2 + CrossRef)
+- Analyzer service: 600 LOC (LLM triple fallback + 5-criteria scoring)
+- SQLite schema: 5 tables, 6 indexes, WAL mode + prompt_version migration
+- 8 Pydantic models with JSON field validators + REJECTED stage
 - Base HTTP server with @route decorator, JSON logging, SIGTERM handling
-- 103 tests, 98% coverage, 0 type errors
-- Tech stack: Python stdlib (http.server, sqlite3, logging, json) + Pydantic
+- 236 non-e2e + 8 e2e tests, 91% coverage on analyzer, 0 type errors
+- Tech stack: Python stdlib (http.server, sqlite3, logging, json) + Pydantic + google-genai
 
 **Origin**: N8N crashed in Jan 2026, external team restored 88 workflows but lost all data. The W1-W5 pipeline (17 N8N workflows) never successfully processed a paper end-to-end — all tables empty, 0 executions. Rather than fix N8N, rebuilding as standalone microservices eliminates the single point of failure.
 
@@ -105,4 +106,4 @@ Reliable, N8N-free academic paper processing pipeline that discovers Kelly crite
 | REJECTED stage in PipelineStage | Distinguish deliberate filtering from errors (FAILED) | — Pending |
 
 ---
-*Last updated: 2026-02-12 after v1.0 milestone*
+*Last updated: 2026-02-13 after v3.0 milestone*

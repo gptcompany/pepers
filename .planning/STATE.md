@@ -5,49 +5,37 @@
 See: .planning/PROJECT.md (updated 2026-02-13)
 
 **Core value:** Reliable, N8N-free academic paper processing pipeline
-**Current focus:** v3.0 Analyzer Service — COMPLETE
+**Current focus:** Planning next milestone (v4.0 Extractor Service)
 
 ## Current Position
 
-Phase: 10 of 10 (Analyzer Testing) — COMPLETE
-Plan: 10-01 complete
-Status: v3.0 milestone shipped
-Last activity: 2026-02-13 — Phase 10 test suite (77 new tests, 91% coverage)
+Phase: All 10 phases complete
+Plan: N/A — between milestones
+Status: v3.0 shipped, ready for v4.0
+Last activity: 2026-02-13 — v3.0 Analyzer Service milestone archived
 
-Progress: ██████████ 100%
+Progress: 3/7 milestones shipped
 
-## Accumulated Context
+## Shipped Milestones
 
-### Key Decisions
-- See PROJECT.md Key Decisions table (13 decisions from v1.0)
-- D-14: LLM Client — separate functions + fallback_chain() (KISS)
-- D-15: Scoring — simple mean of 5 criteria (0.0-1.0 each)
-- D-16: Prompt versioning — prompt_version column in papers table
-- D-17: Threshold — 0.7 (restrittivo, ~60% papers filtered)
+- v1.0 Foundation: 4 phases, 103 tests, 2091 LOC — 2026-02-10
+- v2.0 Discovery: 3 phases, 448 LOC — 2026-02-12
+- v3.0 Analyzer: 3 phases, 600 LOC + 1301 LOC tests — 2026-02-13
 
-### Blockers/Concerns Carried Forward
-- server.py run() method: 6 lines uncovered (process-level SIGTERM testing)
+## Remaining Milestones
+
+- v4.0 Extractor (RAGAnything + LaTeX regex)
+- v5.0 Validator (Multi-CAS consensus)
+- v6.0 Codegen (Python/Rust generation)
+- v7.0 Orchestrator + Deploy (systemd, monitoring)
+
+## Blockers/Concerns Carried Forward
+
 - CAS microservice: only Maxima engine works (SageMath/MATLAB broken)
-- Gemini API: intermittent 503 errors, CLI hangs without stdin=DEVNULL
-
-### Roadmap Evolution
-- v1.0 Foundation: SHIPPED 2026-02-10 (4 phases, 4 plans, 103 tests)
-- v2.0 Discovery Service: SHIPPED 2026-02-12 (3 phases: 5-7)
-- v3.0 Analyzer Service: SHIPPED 2026-02-13 (3 phases: 8-10)
-
-### Test Suite Summary
-| Tier | Count | Scope |
-|------|-------|-------|
-| Unit | 60 | prompt, llm, handler, scoring, migration |
-| Integration | 14 | real DB + HTTP server, mock LLM |
-| E2E | 3 | real Ollama (qwen3:8b) |
-| **Total new** | **77** | |
-| **Project total** | **236+8** | 236 non-e2e + 8 e2e |
-| Coverage | 91% | services/analyzer/ |
+- Gemini API: intermittent 503 errors
 
 ## Session Continuity
 
 Last session: 2026-02-13
-Stopped at: v3.0 milestone complete
-Resume file: N/A — milestone shipped
-Next step: Create v4.0 milestone (Extractor Service) or /gsd:complete-milestone
+Stopped at: v3.0 milestone archived
+Next step: /gsd:new-milestone for v4.0 or /gsd:discuss-milestone
