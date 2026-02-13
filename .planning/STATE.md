@@ -5,14 +5,14 @@
 See: .planning/PROJECT.md (updated 2026-02-13)
 
 **Core value:** Reliable, N8N-free academic paper processing pipeline
-**Current focus:** Planning next milestone (v4.0 Extractor Service)
+**Current focus:** v4.0 Extractor Service — PDF processing + LaTeX formula extraction
 
 ## Current Position
 
-Phase: All 10 phases complete
-Plan: N/A — between milestones
-Status: v3.0 shipped, ready for v4.0
-Last activity: 2026-02-13 — v3.0 Analyzer Service milestone archived
+Phase: 11 of 13 (Extractor Research & Design)
+Plan: Not started
+Status: Ready to plan
+Last activity: 2026-02-13 — Milestone v4.0 created
 
 Progress: 3/7 milestones shipped
 
@@ -24,7 +24,7 @@ Progress: 3/7 milestones shipped
 
 ## Remaining Milestones
 
-- v4.0 Extractor (RAGAnything + LaTeX regex)
+- v4.0 Extractor (RAGAnything + LaTeX regex) ← CURRENT
 - v5.0 Validator (Multi-CAS consensus)
 - v6.0 Codegen (Python/Rust generation)
 - v7.0 Orchestrator + Deploy (systemd, monitoring)
@@ -33,9 +33,10 @@ Progress: 3/7 milestones shipped
 
 - CAS microservice: only Maxima engine works (SageMath/MATLAB broken)
 - Gemini API: intermittent 503 errors
+- PDF sourcing strategy: needs research (arXiv download patterns)
 
 ## Session Continuity
 
 Last session: 2026-02-13
-Stopped at: v3.0 milestone archived
-Next step: /gsd:new-milestone for v4.0 or /gsd:discuss-milestone
+Stopped at: Milestone v4.0 initialization
+Next step: /pipeline:gsd 11 or /gsd:plan-phase 11
