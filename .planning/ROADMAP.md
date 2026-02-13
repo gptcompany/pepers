@@ -55,10 +55,10 @@ None
 **Depends on**: v3.0 Analyzer Service complete
 **Research**: Likely (external API integration, N8N workflow analysis, LaTeX patterns)
 **Research topics**: RAGAnything API docs and endpoints, arXiv PDF download patterns, LaTeX formula regex patterns, N8N W3 workflow structure
-**Plans**: TBD
+**Plans**: 1/1
 
 Plans:
-- [ ] 11-01: TBD (run /gsd:plan-phase 11 to break down)
+- [x] 11-01: Extractor Service Design Specification — completed 2026-02-13
 
 #### Phase 12: Extractor Implementation
 
@@ -94,6 +94,6 @@ Plans:
 | 8. Analyzer Research & Design | v3.0 | 1/1 | Complete | 2026-02-13 |
 | 9. Analyzer Implementation | v3.0 | 1/1 | Complete | 2026-02-13 |
 | 10. Analyzer Testing | v3.0 | 1/1 | Complete | 2026-02-13 |
-| 11. Extractor Research & Design | v4.0 | 0/? | Not started | - |
+| 11. Extractor Research & Design | v4.0 | 1/1 | Complete | 2026-02-13 |
 | 12. Extractor Implementation | v4.0 | 0/? | Not started | - |
 | 13. Extractor Testing | v4.0 | 0/? | Not started | - |

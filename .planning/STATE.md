@@ -9,10 +9,10 @@ See: .planning/PROJECT.md (updated 2026-02-13)
 
 ## Current Position
 
-Phase: 11 of 13 (Extractor Research & Design)
+Phase: 12 of 13 (Extractor Implementation)
 Plan: Not started
 Status: Ready to plan
-Last activity: 2026-02-13 — Milestone v4.0 created
+Last activity: 2026-02-13 — Phase 11 completed (DESIGN.md produced)
 
 Progress: 3/7 milestones shipped
 
@@ -24,7 +24,7 @@ Progress: 3/7 milestones shipped
 
 ## Remaining Milestones
 
-- v4.0 Extractor (RAGAnything + LaTeX regex) ← CURRENT
+- v4.0 Extractor (RAGAnything + LaTeX regex) ← CURRENT (Phase 11 done, 12-13 remaining)
 - v5.0 Validator (Multi-CAS consensus)
 - v6.0 Codegen (Python/Rust generation)
 - v7.0 Orchestrator + Deploy (systemd, monitoring)
@@ -33,10 +33,10 @@ Progress: 3/7 milestones shipped
 
 - CAS microservice: only Maxima engine works (SageMath/MATLAB broken)
 - Gemini API: intermittent 503 errors
-- PDF sourcing strategy: needs research (arXiv download patterns)
+- ~~PDF sourcing strategy: needs research~~ → RESOLVED: export.arxiv.org with 3s rate limit
 
 ## Session Continuity
 
 Last session: 2026-02-13
-Stopped at: Milestone v4.0 initialization
-Next step: /pipeline:gsd 11 or /gsd:plan-phase 11
+Stopped at: Phase 11 complete, Phase 12 ready
+Next step: /pipeline:gsd 12
