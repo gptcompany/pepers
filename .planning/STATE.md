@@ -5,14 +5,14 @@
 See: .planning/PROJECT.md (updated 2026-02-13)
 
 **Core value:** Reliable, N8N-free academic paper processing pipeline
-**Current focus:** v4.0 Extractor Service — PDF processing + LaTeX formula extraction
+**Current focus:** v4.0 Extractor Service — Testing
 
 ## Current Position
 
-Phase: 12 of 13 (Extractor Implementation)
+Phase: 13 of 13 (Extractor Testing)
 Plan: Not started
 Status: Ready to plan
-Last activity: 2026-02-13 — Phase 11 completed (DESIGN.md produced)
+Last activity: 2026-02-13 — Phase 12 completed (5 files, 644 LOC)
 
 Progress: 3/7 milestones shipped
 
@@ -24,7 +24,7 @@ Progress: 3/7 milestones shipped
 
 ## Remaining Milestones
 
-- v4.0 Extractor (RAGAnything + LaTeX regex) ← CURRENT (Phase 11 done, 12-13 remaining)
+- v4.0 Extractor (RAGAnything + LaTeX regex) ← CURRENT (Phases 11-12 done, 13 remaining)
 - v5.0 Validator (Multi-CAS consensus)
 - v6.0 Codegen (Python/Rust generation)
 - v7.0 Orchestrator + Deploy (systemd, monitoring)
@@ -32,11 +32,10 @@ Progress: 3/7 milestones shipped
 ## Blockers/Concerns Carried Forward
 
 - CAS microservice: only Maxima engine works (SageMath/MATLAB broken)
-- Gemini API: intermittent 503 errors
-- ~~PDF sourcing strategy: needs research~~ → RESOLVED: export.arxiv.org with 3s rate limit
+- Gemini API: intermittent 503/429 errors (confidence gate rate-limited)
 
 ## Session Continuity
 
 Last session: 2026-02-13
-Stopped at: Phase 11 complete, Phase 12 ready
-Next step: /pipeline:gsd 12
+Stopped at: Phase 12 complete, Phase 13 ready
+Next step: /pipeline:gsd 13

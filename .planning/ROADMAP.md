@@ -65,10 +65,10 @@ Plans:
 **Goal**: Implement PDF download from arXiv, RAGAnything client for text extraction, LaTeX regex engine for formula parsing, HTTP handler (/process, /health, /status), and DB storage for formulas with metadata.
 **Depends on**: Phase 11
 **Research**: Unlikely (follows established service patterns from Discovery/Analyzer)
-**Plans**: TBD
+**Plans**: 1/1
 
 Plans:
-- [ ] 12-01: TBD
+- [x] 12-01: Extractor Service Implementation — completed 2026-02-13
 
 #### Phase 13: Extractor Testing
 
@@ -95,5 +95,5 @@ Plans:
 | 9. Analyzer Implementation | v3.0 | 1/1 | Complete | 2026-02-13 |
 | 10. Analyzer Testing | v3.0 | 1/1 | Complete | 2026-02-13 |
 | 11. Extractor Research & Design | v4.0 | 1/1 | Complete | 2026-02-13 |
-| 12. Extractor Implementation | v4.0 | 0/? | Not started | - |
+| 12. Extractor Implementation | v4.0 | 1/1 | Complete | 2026-02-13 |
 | 13. Extractor Testing | v4.0 | 0/? | Not started | - |

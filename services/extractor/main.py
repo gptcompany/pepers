@@ -1,0 +1,243 @@
+"""Extractor service — PDF download + RAGAnything + LaTeX formula extraction.
+
+Third microservice in the research pipeline. Reads papers with stage='analyzed',
+downloads PDFs from arXiv, sends to RAGAnything for text extraction, parses LaTeX
+formulas via regex, and stores results in the formulas table.
+
+Usage:
+    python -m services.extractor.main
+
+Environment:
+    RP_EXTRACTOR_PORT=8772                    # Service port (default: 8772)
+    RP_EXTRACTOR_MAX_PAPERS=10                # Default batch size
+    RP_EXTRACTOR_PDF_DIR=data/pdfs            # PDF storage directory
+    RP_EXTRACTOR_DOWNLOAD_DELAY=3.0           # Seconds between arXiv downloads
+    RP_EXTRACTOR_RAG_URL=http://localhost:8767 # RAGAnything base URL
+    RP_DB_PATH=data/research.db               # SQLite database path
+    RP_LOG_LEVEL=INFO                         # Log level
+"""
+
+from __future__ import annotations
+
+import logging
+import os
+import time
+from pathlib import Path
+
+from shared.config import load_config
+from shared.db import init_db, transaction
+from shared.models import Formula, Paper
+from shared.server import BaseHandler, BaseService, route
+
+from services.extractor import latex, pdf, rag_client
+
+logger = logging.getLogger(__name__)
+
+
+class ExtractorHandler(BaseHandler):
+    """Handler for the Extractor service.
+
+    Endpoints:
+        POST /process — Extract formulas from analyzed papers.
+    """
+
+    max_papers_default: int = 10
+    pdf_dir: str = "data/pdfs"
+    rag_url: str = "http://localhost:8767"
+    download_delay: float = 3.0
+
+    @route("POST", "/process")
+    def handle_process(self, data: dict) -> dict | None:
+        """Extract formulas from analyzed papers.
+
+        Request body:
+            {
+                "paper_id": 42,        # Optional: process specific paper
+                "max_papers": 10,      # Optional: batch limit (default 10)
+                "force": false         # Optional: reprocess extracted/failed papers
+            }
+
+        Returns:
+            Summary dict with counts and error details.
+        """
+        start = time.time()
+
+        paper_id = data.get("paper_id")
+        max_papers: int = data.get("max_papers", self.max_papers_default)
+        force = data.get("force", False)
+
+        assert self.db_path is not None, "db_path must be set"
+        db_path: str = self.db_path
+
+        papers = _query_papers(db_path, paper_id, max_papers, force)
+        if not papers:
+            return {
+                "success": True,
+                "service": "extractor",
+                "papers_processed": 0,
+                "formulas_extracted": 0,
+                "errors": [],
+                "time_ms": int((time.time() - start) * 1000),
+            }
+
+        # Check RAGAnything before starting batch
+        try:
+            rag_client.check_service(self.rag_url)
+        except Exception as e:
+            self.send_error_json(str(e), "SERVICE_UNAVAILABLE", 503)
+            return None
+
+        session = pdf.create_session()
+        errors: list[str] = []
+        total_formulas = 0
+        papers_ok = 0
+
+        for i, paper_row in enumerate(papers):
+            pid = paper_row["id"]
+            paper = Paper(**paper_row)
+
+            try:
+                # Step 1: Download PDF
+                pdf_path = pdf.download_pdf(
+                    paper, Path(self.pdf_dir), session
+                )
+
+                # Step 2: RAGAnything processing
+                markdown = rag_client.process_paper(
+                    pdf_path, paper.arxiv_id, self.rag_url
+                )
+
+                # Step 3: Extract formulas
+                raw = latex.extract_formulas(markdown)
+                filtered = latex.filter_formulas(raw)
+                formulas = latex.formulas_to_models(pid, markdown, filtered)
+
+                # Step 4: Store formulas + update paper
+                _store_results(db_path, pid, formulas)
+                total_formulas += len(formulas)
+                papers_ok += 1
+
+                logger.info(
+                    "Paper %d: %d formulas extracted (%d raw, %d filtered)",
+                    pid, len(formulas), len(raw), len(filtered),
+                )
+
+            except Exception as e:
+                logger.error("Failed paper %d: %s", pid, e)
+                errors.append(f"paper {pid}: {e}")
+                _mark_failed(db_path, pid, str(e))
+
+            # Rate limit between papers
+            if i < len(papers) - 1:
+                time.sleep(self.download_delay)
+
+        elapsed_ms = int((time.time() - start) * 1000)
+
+        logger.info(
+            "Extraction complete: processed=%d formulas=%d errors=%d time=%dms",
+            papers_ok, total_formulas, len(errors), elapsed_ms,
+        )
+
+        return {
+            "success": True,
+            "service": "extractor",
+            "papers_processed": papers_ok,
+            "formulas_extracted": total_formulas,
+            "papers_failed": len(errors),
+            "errors": errors,
+            "time_ms": elapsed_ms,
+        }
+
+
+def _query_papers(
+    db_path: str,
+    paper_id: int | None,
+    max_papers: int,
+    force: bool,
+) -> list:
+    """Query papers with stage='analyzed' (or specific paper_id with force)."""
+    with transaction(db_path) as conn:
+        if paper_id is not None:
+            if force:
+                cursor = conn.execute(
+                    "SELECT * FROM papers WHERE id=? "
+                    "AND stage IN ('analyzed', 'extracted', 'failed')",
+                    (paper_id,),
+                )
+            else:
+                cursor = conn.execute(
+                    "SELECT * FROM papers WHERE id=? AND stage='analyzed'",
+                    (paper_id,),
+                )
+        else:
+            cursor = conn.execute(
+                "SELECT * FROM papers WHERE stage='analyzed' "
+                "ORDER BY created_at ASC LIMIT ?",
+                (max_papers,),
+            )
+        return [dict(row) for row in cursor.fetchall()]
+
+
+def _store_results(db_path: str, paper_id: int, formulas: list[Formula]) -> None:
+    """Insert formulas and update paper stage."""
+    with transaction(db_path) as conn:
+        for f in formulas:
+            existing = conn.execute(
+                "SELECT id FROM formulas WHERE paper_id=? AND latex_hash=?",
+                (paper_id, f.latex_hash),
+            ).fetchone()
+            if existing:
+                continue
+
+            conn.execute(
+                "INSERT INTO formulas (paper_id, latex, latex_hash, "
+                "description, formula_type, context, stage, error) "
+                "VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
+                (
+                    f.paper_id, f.latex, f.latex_hash,
+                    f.description, f.formula_type, f.context,
+                    f.stage.value, f.error,
+                ),
+            )
+
+        conn.execute(
+            "UPDATE papers SET stage='extracted', updated_at=datetime('now') "
+            "WHERE id=?",
+            (paper_id,),
+        )
+
+
+def _mark_failed(db_path: str, paper_id: int, error: str) -> None:
+    """Mark paper as failed with error message."""
+    with transaction(db_path) as conn:
+        conn.execute(
+            "UPDATE papers SET stage='failed', error=?, "
+            "updated_at=datetime('now') WHERE id=?",
+            (f"extractor: {error}", paper_id),
+        )
+
+
+def main() -> None:
+    """Start the Extractor service."""
+    config = load_config("extractor")
+    init_db(config.db_path)
+
+    ExtractorHandler.max_papers_default = int(
+        os.environ.get("RP_EXTRACTOR_MAX_PAPERS", "10")
+    )
+    ExtractorHandler.pdf_dir = os.environ.get("RP_EXTRACTOR_PDF_DIR", "data/pdfs")
+    ExtractorHandler.rag_url = os.environ.get(
+        "RP_EXTRACTOR_RAG_URL", "http://localhost:8767"
+    )
+    ExtractorHandler.download_delay = float(
+        os.environ.get("RP_EXTRACTOR_DOWNLOAD_DELAY", "3.0")
+    )
+
+    service = BaseService(
+        "extractor", config.port, ExtractorHandler, str(config.db_path)
+    )
+    service.run()
+
+
+if __name__ == "__main__":
+    main()
