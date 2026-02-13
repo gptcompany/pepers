@@ -29,7 +29,7 @@ class TestPipelineStage:
     def test_all_stages_exist(self):
         stages = [s.value for s in PipelineStage]
         assert stages == [
-            "discovered", "analyzed", "extracted",
+            "discovered", "analyzed", "rejected", "extracted",
             "validated", "codegen", "complete", "failed",
         ]
 

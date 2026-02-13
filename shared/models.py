@@ -33,6 +33,7 @@ class PipelineStage(str, Enum):
 
     DISCOVERED = "discovered"
     ANALYZED = "analyzed"
+    REJECTED = "rejected"
     EXTRACTED = "extracted"
     VALIDATED = "validated"
     CODEGEN = "codegen"
