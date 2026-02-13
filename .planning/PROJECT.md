@@ -98,6 +98,11 @@ Reliable, N8N-free academic paper processing pipeline that discovers Kelly crite
 | WAL mode SQLite | Concurrent reads during batch processing | ✓ Good |
 | JSON structured logging | Loki/journald parsing | ✓ Good |
 | Warn + default for missing env vars | Development-friendly | ✓ Good |
+| Separate LLM functions + fallback_chain | KISS, each ~30 LOC, easy to test/mock | — Pending |
+| Simple mean scoring (5 equal-weight criteria) | Easy to debug, no arbitrary weights | — Pending |
+| prompt_version column in papers table | Score comparability across prompt iterations | — Pending |
+| Threshold 0.7 (restrittivo) | Filter ~60% non-relevant, save downstream resources | — Pending |
+| REJECTED stage in PipelineStage | Distinguish deliberate filtering from errors (FAILED) | — Pending |
 
 ---
 *Last updated: 2026-02-12 after v1.0 milestone*

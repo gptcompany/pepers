@@ -77,7 +77,7 @@ Plans:
 **Plans**: TBD
 
 Plans:
-- [ ] 08-01: TBD (run /gsd:plan-phase 8 to break down)
+- [x] 08-01: Analyzer design specification — LLM client, scoring prompt, schema migration, handler design
 
 #### Phase 9: Analyzer Implementation
 
@@ -110,6 +110,6 @@ Plans:
 | 5. Discovery Research & Design | v2.0 | 1/1 | Complete | 2026-02-12 |
 | 6. Discovery Implementation | v2.0 | 1/1 | Complete | 2026-02-12 |
 | 7. Discovery Testing | v2.0 | 1/1 | Complete | 2026-02-12 |
-| 8. Analyzer Research & Design | v3.0 | 0/? | Not started | - |
+| 8. Analyzer Research & Design | v3.0 | 1/1 | Complete | 2026-02-13 |
 | 9. Analyzer Implementation | v3.0 | 0/? | Not started | - |
 | 10. Analyzer Testing | v3.0 | 0/? | Not started | - |
