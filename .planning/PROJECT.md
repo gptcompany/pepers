@@ -17,9 +17,9 @@ Reliable, N8N-free academic paper processing pipeline that discovers Kelly crite
 - ✓ dotenvx secret management aligned with SSOT at /media/sam/1TB/.env — v1.0
 - ✓ Discovery service: fetch arXiv papers by keywords + enrich via Semantic Scholar/CrossRef — v2.0
 - ✓ Analyzer service: LLM analysis (triple fallback) + 5-criteria relevance scoring + routing — v3.0
+- ✓ Extractor service: PDF download + RAGAnything text extraction + 5-pass LaTeX regex + formula storage — v4.0
 
 ### Active
-- [ ] Extractor service: send PDFs to RAGAnything + regex-based LaTeX formula extraction
 - [ ] Validator service: multi-CAS validation (SymPy, Wolfram, Maxima) with consensus scoring
 - [ ] Codegen service: LLM plain-language explanation + Python codegen (SymPy) + Rust codegen (AST-based)
 - [ ] Orchestrator: coordinates pipeline stages, retry logic, error handling, Discord notifications
@@ -38,15 +38,16 @@ Reliable, N8N-free academic paper processing pipeline that discovers Kelly crite
 
 ## Context
 
-**Current state (v3.0 shipped):**
+**Current state (v4.0 shipped):**
 - Shared library: 816 LOC Python across 4 modules (db.py, models.py, server.py, config.py)
 - Discovery service: 448 LOC (arXiv + S2 + CrossRef)
 - Analyzer service: 600 LOC (LLM triple fallback + 5-criteria scoring)
+- Extractor service: 644 LOC (PDF download + RAGAnything client + LaTeX regex engine)
 - SQLite schema: 5 tables, 6 indexes, WAL mode + prompt_version migration
 - 8 Pydantic models with JSON field validators + REJECTED stage
 - Base HTTP server with @route decorator, JSON logging, SIGTERM handling
-- 236 non-e2e + 8 e2e tests, 91% coverage on analyzer, 0 type errors
-- Tech stack: Python stdlib (http.server, sqlite3, logging, json) + Pydantic + google-genai
+- 296 non-e2e + 11 e2e tests, 94% coverage on extractor, 0 type errors
+- Tech stack: Python stdlib (http.server, sqlite3, logging, json) + Pydantic + google-genai + requests
 
 **Origin**: N8N crashed in Jan 2026, external team restored 88 workflows but lost all data. The W1-W5 pipeline (17 N8N workflows) never successfully processed a paper end-to-end — all tables empty, 0 executions. Rather than fix N8N, rebuilding as standalone microservices eliminates the single point of failure.
 
@@ -104,6 +105,11 @@ Reliable, N8N-free academic paper processing pipeline that discovers Kelly crite
 | prompt_version column in papers table | Score comparability across prompt iterations | — Pending |
 | Threshold 0.7 (restrittivo) | Filter ~60% non-relevant, save downstream resources | — Pending |
 | REJECTED stage in PipelineStage | Distinguish deliberate filtering from errors (FAILED) | — Pending |
+| `requests` + `urllib3.Retry` for PDF download | Already in deps, full retry/backoff control vs stdlib | ✓ Good |
+| Sync polling for RAGAnything | KISS, no concurrent state management needed | ✓ Good |
+| Stdlib `re` multi-pass for LaTeX | Zero deps, handles 95% of papers, occupied-span tracking | ✓ Good |
+| Per-paper error isolation | One failure doesn't block batch, paper marked FAILED | ✓ Good |
+| 200-char context window | Approximates N8N W3.2's "2-3 sentences" around formula | ✓ Good |
 
 ---
-*Last updated: 2026-02-13 after v3.0 milestone*
+*Last updated: 2026-02-13 after v4.0 milestone*

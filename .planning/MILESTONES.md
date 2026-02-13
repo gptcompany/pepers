@@ -1,5 +1,33 @@
 # Project Milestones: Research Pipeline
 
+## v4.0 Extractor Service (Shipped: 2026-02-13)
+
+**Delivered:** Third microservice — downloads PDFs from arXiv, sends to RAGAnything for text extraction, parses LaTeX formulas via 5-pass regex engine with occupied-span tracking, and stores formulas with context in SQLite.
+
+**Phases completed:** 11-13 (3 plans total)
+
+**Key accomplishments:**
+
+- RAGAnything API research + N8N W3 workflow analysis with 4 parallel agents
+- arXiv PDF download with `requests` retry strategy and local caching
+- RAGAnything HTTP client with async polling and container→host path mapping
+- 5-pass LaTeX regex engine with occupied-span tracking (equation, align, \[...\], $$...$$, $...$)
+- Formula filtering (hash dedup, min length, LaTeX command check) and context extraction
+- 60 new tests (47 unit, 13 integration, 3 E2E), 94% coverage
+
+**Stats:**
+
+- 21 files changed, 3,379 insertions
+- 644 LOC service + 999 LOC tests = 1,643 total
+- 3 phases, 3 plans
+- 1 day (2026-02-13)
+
+**Git range:** `8f395f8` → `2bed979`
+
+**What's next:** v5.0 — Validator Service (Multi-CAS consensus scoring)
+
+---
+
 ## v3.0 Analyzer Service (Shipped: 2026-02-13)
 
 **Delivered:** LLM-based relevance scoring with triple fallback (Gemini CLI → SDK → Ollama) that filters discovered papers on 5 criteria before expensive downstream processing.

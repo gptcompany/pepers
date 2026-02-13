@@ -13,7 +13,7 @@ None
 - [✅ v1.0 Foundation](milestones/v1.0-ROADMAP.md) (Phases 1-4) — SHIPPED 2026-02-10
 - [✅ v2.0 Discovery Service](milestones/v2.0-ROADMAP.md) (Phases 5-7) — SHIPPED 2026-02-12
 - [✅ v3.0 Analyzer Service](milestones/v3.0-ROADMAP.md) (Phases 8-10) — SHIPPED 2026-02-13
-- [✅ v4.0 Extractor Service](milestones/v4.0/) (Phases 11-13) — SHIPPED 2026-02-13
+- [✅ v4.0 Extractor Service](milestones/v4.0-ROADMAP.md) (Phases 11-13) — SHIPPED 2026-02-13
 
 ## Phases
 
@@ -45,36 +45,14 @@ None
 
 </details>
 
-### ✅ v4.0 Extractor Service — SHIPPED 2026-02-13
+<details>
+<summary>✅ v4.0 Extractor Service (Phases 11-13) — SHIPPED 2026-02-13</summary>
 
-**Milestone Goal:** Extract mathematical formulas from accepted papers using RAGAnything for PDF processing and regex for LaTeX parsing.
+- [x] **Phase 11: Extractor Research & Design** (1/1 plans) — completed 2026-02-13
+- [x] **Phase 12: Extractor Implementation** (1/1 plans) — completed 2026-02-13
+- [x] **Phase 13: Extractor Testing** (1/1 plans) — completed 2026-02-13
 
-#### Phase 11: Extractor Research & Design
-
-**Goal**: Research RAGAnything API, analyze N8N W3 workflow for PDF sourcing, design LaTeX regex patterns, and plan DB schema extension for formula storage.
-**Depends on**: v3.0 Analyzer Service complete
-**Plans**: 1/1
-
-Plans:
-- [x] 11-01: Extractor Service Design Specification — completed 2026-02-13
-
-#### Phase 12: Extractor Implementation
-
-**Goal**: Implement PDF download from arXiv, RAGAnything client for text extraction, LaTeX regex engine for formula parsing, HTTP handler (/process, /health, /status), and DB storage for formulas with metadata.
-**Depends on**: Phase 11
-**Plans**: 1/1
-
-Plans:
-- [x] 12-01: Extractor Service Implementation — completed 2026-02-13
-
-#### Phase 13: Extractor Testing
-
-**Goal**: Comprehensive test suite — unit tests with mocked RAGAnything, integration tests with real SQLite + mock HTTP, E2E tests with real RAGAnything service and sample PDF.
-**Depends on**: Phase 12
-**Plans**: 1/1
-
-Plans:
-- [x] 13-01: Extractor Service Test Suite — completed 2026-02-13
+</details>
 
 ## Progress
 
