@@ -13,7 +13,7 @@ None
 - [✅ v1.0 Foundation](milestones/v1.0-ROADMAP.md) (Phases 1-4) — SHIPPED 2026-02-10
 - [✅ v2.0 Discovery Service](milestones/v2.0-ROADMAP.md) (Phases 5-7) — SHIPPED 2026-02-12
 - [✅ v3.0 Analyzer Service](milestones/v3.0-ROADMAP.md) (Phases 8-10) — SHIPPED 2026-02-13
-- 🚧 **v4.0 Extractor Service** — Phases 11-13 (in progress)
+- [✅ v4.0 Extractor Service](milestones/v4.0/) (Phases 11-13) — SHIPPED 2026-02-13
 
 ## Phases
 
@@ -45,7 +45,7 @@ None
 
 </details>
 
-### 🚧 v4.0 Extractor Service (In Progress)
+### ✅ v4.0 Extractor Service — SHIPPED 2026-02-13
 
 **Milestone Goal:** Extract mathematical formulas from accepted papers using RAGAnything for PDF processing and regex for LaTeX parsing.
 
@@ -53,8 +53,6 @@ None
 
 **Goal**: Research RAGAnything API, analyze N8N W3 workflow for PDF sourcing, design LaTeX regex patterns, and plan DB schema extension for formula storage.
 **Depends on**: v3.0 Analyzer Service complete
-**Research**: Likely (external API integration, N8N workflow analysis, LaTeX patterns)
-**Research topics**: RAGAnything API docs and endpoints, arXiv PDF download patterns, LaTeX formula regex patterns, N8N W3 workflow structure
 **Plans**: 1/1
 
 Plans:
@@ -64,7 +62,6 @@ Plans:
 
 **Goal**: Implement PDF download from arXiv, RAGAnything client for text extraction, LaTeX regex engine for formula parsing, HTTP handler (/process, /health, /status), and DB storage for formulas with metadata.
 **Depends on**: Phase 11
-**Research**: Unlikely (follows established service patterns from Discovery/Analyzer)
 **Plans**: 1/1
 
 Plans:
@@ -74,11 +71,10 @@ Plans:
 
 **Goal**: Comprehensive test suite — unit tests with mocked RAGAnything, integration tests with real SQLite + mock HTTP, E2E tests with real RAGAnything service and sample PDF.
 **Depends on**: Phase 12
-**Research**: Unlikely (follows established test patterns)
-**Plans**: TBD
+**Plans**: 1/1
 
 Plans:
-- [ ] 13-01: TBD
+- [x] 13-01: Extractor Service Test Suite — completed 2026-02-13
 
 ## Progress
 
@@ -96,4 +92,4 @@ Plans:
 | 10. Analyzer Testing | v3.0 | 1/1 | Complete | 2026-02-13 |
 | 11. Extractor Research & Design | v4.0 | 1/1 | Complete | 2026-02-13 |
 | 12. Extractor Implementation | v4.0 | 1/1 | Complete | 2026-02-13 |
-| 13. Extractor Testing | v4.0 | 0/? | Not started | - |
+| 13. Extractor Testing | v4.0 | 1/1 | Complete | 2026-02-13 |

@@ -202,3 +202,63 @@ def migrated_db(initialized_db):
 
     migrate_db(str(initialized_db))
     return initialized_db
+
+
+# ---------------------------------------------------------------------------
+# Extractor service fixtures
+# ---------------------------------------------------------------------------
+
+
+@pytest.fixture
+def analyzed_paper_db(initialized_db, sample_paper_row):
+    """DB with one analyzed paper ready for extraction, migrations applied."""
+    from services.discovery.main import upsert_paper
+    from services.analyzer.main import migrate_db
+
+    row = dict(sample_paper_row)
+    row["stage"] = "analyzed"
+    upsert_paper(str(initialized_db), row)
+    migrate_db(str(initialized_db))
+    return initialized_db
+
+
+@pytest.fixture
+def sample_markdown_with_formulas():
+    """Realistic markdown text with various LaTeX formula types."""
+    return r"""# Kelly Criterion for Portfolio Optimization
+
+## Introduction
+
+The Kelly criterion provides an optimal bet sizing strategy. The key formula is:
+
+\begin{equation}
+f^* = \frac{p}{a} - \frac{q}{b}
+\end{equation}
+
+where $p$ is the probability of winning and $q = 1 - p$ is the probability of losing.
+
+## Continuous Case
+
+For continuous distributions, the optimal fraction becomes:
+
+\[
+f^* = \frac{\mu - r}{\sigma^2}
+\]
+
+The expected growth rate is given by $$G(f) = r + f(\mu - r) - \frac{f^2 \sigma^2}{2}$$
+
+## Multi-Asset Extension
+
+Using matrix notation, we have \(\mathbf{f}^* = \Sigma^{-1}(\boldsymbol{\mu} - r\mathbf{1})\).
+
+The variance of the portfolio is:
+
+\begin{align}
+\sigma_p^2 &= \mathbf{f}^T \Sigma \mathbf{f} \\
+           &= \sum_{i,j} f_i f_j \sigma_{ij}
+\end{align}
+
+## Results
+
+The Sharpe ratio $S = \frac{\mu - r}{\sigma}$ determines the attractiveness of the strategy.
+"""
