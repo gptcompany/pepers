@@ -141,3 +141,64 @@ def sample_crossref_response():
             "type": "journal-article",
         },
     }
+
+
+# ---------------------------------------------------------------------------
+# Analyzer service fixtures
+# ---------------------------------------------------------------------------
+
+
+@pytest.fixture
+def sample_llm_scores():
+    """Valid LLM scoring response as dict (above threshold)."""
+    return {
+        "scores": {
+            "kelly_relevance": 0.85,
+            "mathematical_rigor": 0.70,
+            "novelty": 0.60,
+            "practical_applicability": 0.75,
+            "data_quality": 0.65,
+        },
+        "reasoning": "Relevant paper on Kelly criterion with solid math.",
+    }
+
+
+@pytest.fixture
+def sample_llm_response_json(sample_llm_scores):
+    """Valid LLM JSON response string."""
+    return json.dumps(sample_llm_scores)
+
+
+@pytest.fixture
+def sample_low_score_response():
+    """LLM response with below-threshold scores."""
+    return json.dumps({
+        "scores": {
+            "kelly_relevance": 0.2,
+            "mathematical_rigor": 0.3,
+            "novelty": 0.1,
+            "practical_applicability": 0.2,
+            "data_quality": 0.3,
+        },
+        "reasoning": "Paper not related to Kelly criterion.",
+    })
+
+
+@pytest.fixture
+def discovered_paper_db(initialized_db, sample_paper_row):
+    """DB with one discovered paper ready for analysis, migration applied."""
+    from services.discovery.main import upsert_paper
+    from services.analyzer.main import migrate_db
+
+    upsert_paper(str(initialized_db), sample_paper_row)
+    migrate_db(str(initialized_db))
+    return initialized_db
+
+
+@pytest.fixture
+def migrated_db(initialized_db):
+    """DB with prompt_version migration applied."""
+    from services.analyzer.main import migrate_db
+
+    migrate_db(str(initialized_db))
+    return initialized_db

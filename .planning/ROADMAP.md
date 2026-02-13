@@ -12,7 +12,7 @@ None
 
 - [✅ v1.0 Foundation](milestones/v1.0-ROADMAP.md) (Phases 1-4) — SHIPPED 2026-02-10
 - [✅ v2.0 Discovery Service](milestones/v2.0-ROADMAP.md) (Phases 5-7) — SHIPPED 2026-02-12
-- 🚧 **v3.0 Analyzer Service** — Phases 8-10 (in progress)
+- [✅ v3.0 Analyzer Service](milestones/v3.0-ROADMAP.md) (Phases 8-10) — SHIPPED 2026-02-13
 
 ## Phases
 
@@ -64,7 +64,7 @@ Plans:
 
 </details>
 
-### 🚧 v3.0 Analyzer Service (In Progress)
+### ✅ v3.0 Analyzer Service — SHIPPED 2026-02-13
 
 **Milestone Goal:** Second microservice — LLM-based relevance scoring that filters discovered papers before expensive downstream processing (extraction, validation, codegen). Triple LLM fallback: Gemini CLI → Gemini SDK → Ollama qwen3:8b.
 
@@ -94,10 +94,10 @@ Plans:
 **Goal**: Comprehensive test suite — unit tests with mocked LLM responses, integration tests with real SQLite + mock LLM, E2E tests with real Ollama calls.
 **Depends on**: Phase 9
 **Research**: Unlikely (standard pytest patterns from v1.0/v2.0)
-**Plans**: TBD
+**Plans**: 1 plan
 
 Plans:
-- [ ] 10-01: TBD
+- [x] 10-01: Analyzer test suite (unit + integration + E2E)
 
 ## Progress
 
@@ -112,4 +112,4 @@ Plans:
 | 7. Discovery Testing | v2.0 | 1/1 | Complete | 2026-02-12 |
 | 8. Analyzer Research & Design | v3.0 | 1/1 | Complete | 2026-02-13 |
 | 9. Analyzer Implementation | v3.0 | 1/1 | Complete | 2026-02-13 |
-| 10. Analyzer Testing | v3.0 | 0/? | Not started | - |
+| 10. Analyzer Testing | v3.0 | 1/1 | Complete | 2026-02-13 |
