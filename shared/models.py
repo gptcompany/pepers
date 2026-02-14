@@ -153,6 +153,19 @@ class Validation(BaseModel):
     created_at: datetime | None = None
 
 
+class FormulaExplanation(BaseModel):
+    """LLM-generated explanation of a validated formula.
+
+    Populated by Codegen service. Stored as JSON in formulas.description.
+    Validation-only model (no DB table).
+    """
+
+    explanation: str
+    variables: list[dict[str, str]] = []
+    assumptions: list[str] = []
+    domain: str = ""
+
+
 class GeneratedCode(BaseModel):
     """Generated code from a validated formula.
 

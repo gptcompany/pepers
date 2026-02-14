@@ -5,14 +5,14 @@
 See: .planning/PROJECT.md (updated 2026-02-14)
 
 **Core value:** Reliable, N8N-free academic paper processing pipeline
-**Current focus:** v6.0 Codegen Service — LLM explanation + Python/Rust code generation
+**Current focus:** v6.0 Codegen Service — Testing (Phase 19)
 
 ## Current Position
 
-Phase: 17 of 19 (Codegen Research & Design)
-Plan: Not started — RESEARCH.md + CONTEXT.md done, need PLAN
-Status: Research complete, ready for plan creation
-Last activity: 2026-02-14 — Phase 17 research + context complete
+Phase: 18 of 19 (Codegen Implementation) — COMPLETE
+Plan: 18-01 executed (confidence: 98%)
+Status: Implementation complete, ready for Phase 19 (Testing)
+Last activity: 2026-02-14 — Phase 18 implementation complete
 
 Progress: 5/7 milestones shipped
 
@@ -26,21 +26,26 @@ Progress: 5/7 milestones shipped
 
 ## Remaining Milestones
 
-- v6.0 Codegen (Python/Rust generation) — IN PROGRESS
+- v6.0 Codegen (Python/Rust generation) — Phase 18 done, Phase 19 pending
 - v7.0 Orchestrator + Deploy (systemd, monitoring)
+
+## Phase 18 Summary
+
+- shared/llm.py: 239 LOC — LLM client extracted from analyzer + enhanced
+- services/codegen/generators.py: 181 LOC — SymPy codegen (C99/Rust/Python)
+- services/codegen/explain.py: 88 LOC — LLM explanation (Ollama-first)
+- services/codegen/main.py: 298 LOC — CodegenHandler + DB ops
+- FormulaExplanation model added to shared/models.py
+- Analyzer LLM re-exports (backward compat) + test mock paths updated
+- 344/344 tests pass, 0 regressions
+- antlr4-python3-runtime==4.11.1 installed
 
 ## Blockers/Concerns Carried Forward
 
 - MATLAB license: temporarily unavailable (CAS service has SymPy + Maxima working)
 - Gemini API: intermittent 503/429 errors (confidence gate rate-limited)
-
-## Constraints (v6.0)
-
-- Codegen service: LLM plain-language explanation + Python codegen (SymPy) + Rust codegen (AST-based)
-- Original W5.3 Rust codegen was naive regex JS → needs proper AST approach
-- Tech stack: Python stdlib http.server (same as v1-v5), SymPy for Python codegen
-- LLM: Ollama qwen3:8b for explanations (local, free, already deployed)
-- Port: 8775 (next available in 8770-8775 range)
+- parse_latex brittle on non-standard LaTeX (documented, per-formula error isolation)
+- Rust integer promotion #26967 (documented, known SymPy issue)
 
 ## Future Tasks
 
@@ -54,9 +59,11 @@ Progress: 5/7 milestones shipped
 - Phase 15 (Implementation): CAS + Validator services complete
 - Phase 16 (Testing): Full test suite complete
 - Milestone v6.0 created: Codegen Service (LLM explanation + Python/Rust codegen), 3 phases (Phase 17-19)
+- Phase 17 (Research & Design): DESIGN.md complete
+- Phase 18 (Implementation): Codegen service complete (806 LOC)
 
 ## Session Continuity
 
 Last session: 2026-02-14
-Stopped at: Milestone v6.0 initialization
-Resume file: None
+Stopped at: Phase 18 complete, ready for Phase 19
+Resume file: session-1771077732260-8zsnvo

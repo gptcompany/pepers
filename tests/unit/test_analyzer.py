@@ -143,8 +143,8 @@ class TestGetGeminiApiKey:
 class TestCallGeminiCli:
     """Tests for call_gemini_cli() — mock subprocess.run."""
 
-    @patch("services.analyzer.llm.subprocess.run")
-    @patch("services.analyzer.llm._get_gemini_api_key", return_value="fake-key")
+    @patch("shared.llm.subprocess.run")
+    @patch("shared.llm._get_gemini_api_key", return_value="fake-key")
     def test_success_json_response(self, mock_key, mock_run):
         mock_run.return_value = subprocess.CompletedProcess(
             args=[], returncode=0,
@@ -154,8 +154,8 @@ class TestCallGeminiCli:
         result = call_gemini_cli("prompt", "system")
         assert result == '{"scores": {}}'
 
-    @patch("services.analyzer.llm.subprocess.run")
-    @patch("services.analyzer.llm._get_gemini_api_key", return_value="fake-key")
+    @patch("shared.llm.subprocess.run")
+    @patch("shared.llm._get_gemini_api_key", return_value="fake-key")
     def test_non_zero_exit(self, mock_key, mock_run):
         mock_run.return_value = subprocess.CompletedProcess(
             args=[], returncode=1, stdout="", stderr="Error occurred",
@@ -163,8 +163,8 @@ class TestCallGeminiCli:
         with pytest.raises(RuntimeError, match="Gemini CLI exit 1"):
             call_gemini_cli("prompt", "system")
 
-    @patch("services.analyzer.llm.subprocess.run")
-    @patch("services.analyzer.llm._get_gemini_api_key", return_value="fake-key")
+    @patch("shared.llm.subprocess.run")
+    @patch("shared.llm._get_gemini_api_key", return_value="fake-key")
     def test_api_error_in_response(self, mock_key, mock_run):
         mock_run.return_value = subprocess.CompletedProcess(
             args=[], returncode=0,
@@ -174,15 +174,15 @@ class TestCallGeminiCli:
         with pytest.raises(RuntimeError, match="quota exceeded"):
             call_gemini_cli("prompt", "system")
 
-    @patch("services.analyzer.llm.subprocess.run")
-    @patch("services.analyzer.llm._get_gemini_api_key", return_value="fake-key")
+    @patch("shared.llm.subprocess.run")
+    @patch("shared.llm._get_gemini_api_key", return_value="fake-key")
     def test_timeout(self, mock_key, mock_run):
         mock_run.side_effect = subprocess.TimeoutExpired("gemini", 120)
         with pytest.raises(subprocess.TimeoutExpired):
             call_gemini_cli("prompt", "system")
 
-    @patch("services.analyzer.llm.subprocess.run")
-    @patch("services.analyzer.llm._get_gemini_api_key", return_value="fake-key")
+    @patch("shared.llm.subprocess.run")
+    @patch("shared.llm._get_gemini_api_key", return_value="fake-key")
     def test_strips_fences_from_response(self, mock_key, mock_run):
         mock_run.return_value = subprocess.CompletedProcess(
             args=[], returncode=0,
@@ -201,7 +201,7 @@ class TestCallGeminiCli:
 class TestCallGeminiSdk:
     """Tests for call_gemini_sdk() — mock google.genai."""
 
-    @patch("services.analyzer.llm._get_gemini_api_key", return_value="fake-key")
+    @patch("shared.llm._get_gemini_api_key", return_value="fake-key")
     def test_success(self, mock_key):
         mock_response = MagicMock()
         mock_response.text = '{"scores": {}}'
@@ -214,7 +214,7 @@ class TestCallGeminiSdk:
             "google.genai": MagicMock(),
             "google.genai.types": MagicMock(),
         }):
-            with patch("services.analyzer.llm._get_gemini_api_key", return_value="fake-key"):
+            with patch("shared.llm._get_gemini_api_key", return_value="fake-key"):
                 # Direct test: mock the entire function flow
                 from services.analyzer import llm
                 original = llm.call_gemini_sdk
@@ -229,7 +229,7 @@ class TestCallGeminiSdk:
                 finally:
                     llm.call_gemini_sdk = original
 
-    @patch("services.analyzer.llm._get_gemini_api_key", return_value="fake-key")
+    @patch("shared.llm._get_gemini_api_key", return_value="fake-key")
     def test_api_key_missing(self, mock_key):
         mock_key.side_effect = RuntimeError("GEMINI_API_KEY not set")
         with pytest.raises(RuntimeError, match="GEMINI_API_KEY not set"):
@@ -246,7 +246,7 @@ class TestCallGeminiSdk:
 class TestCallOllama:
     """Tests for call_ollama() — mock urllib.request.urlopen."""
 
-    @patch("services.analyzer.llm.urllib.request.urlopen")
+    @patch("shared.llm.urllib.request.urlopen")
     def test_success(self, mock_urlopen):
         mock_resp = MagicMock()
         mock_resp.status = 200
@@ -260,7 +260,7 @@ class TestCallOllama:
         result = call_ollama("prompt", "system")
         assert result == '{"scores": {"kelly_relevance": 0.8}}'
 
-    @patch("services.analyzer.llm.urllib.request.urlopen")
+    @patch("shared.llm.urllib.request.urlopen")
     def test_error_in_response(self, mock_urlopen):
         mock_resp = MagicMock()
         mock_resp.status = 200
@@ -274,14 +274,14 @@ class TestCallOllama:
         with pytest.raises(RuntimeError, match="model not found"):
             call_ollama("prompt", "system")
 
-    @patch("services.analyzer.llm.urllib.request.urlopen")
+    @patch("shared.llm.urllib.request.urlopen")
     def test_connection_refused(self, mock_urlopen):
         import urllib.error
         mock_urlopen.side_effect = urllib.error.URLError("Connection refused")
         with pytest.raises(urllib.error.URLError):
             call_ollama("prompt", "system")
 
-    @patch("services.analyzer.llm.urllib.request.urlopen")
+    @patch("shared.llm.urllib.request.urlopen")
     def test_custom_base_url(self, mock_urlopen):
         mock_resp = MagicMock()
         mock_resp.status = 200
@@ -303,9 +303,9 @@ class TestCallOllama:
 class TestFallbackChain:
     """Tests for fallback_chain()."""
 
-    @patch("services.analyzer.llm.call_ollama")
-    @patch("services.analyzer.llm.call_gemini_sdk")
-    @patch("services.analyzer.llm.call_gemini_cli")
+    @patch("shared.llm.call_ollama")
+    @patch("shared.llm.call_gemini_sdk")
+    @patch("shared.llm.call_gemini_cli")
     def test_first_provider_success(self, mock_cli, mock_sdk, mock_ollama):
         mock_cli.return_value = '{"scores": {}}'
         result = fallback_chain("prompt", "system")
@@ -313,9 +313,9 @@ class TestFallbackChain:
         mock_sdk.assert_not_called()
         mock_ollama.assert_not_called()
 
-    @patch("services.analyzer.llm.call_ollama")
-    @patch("services.analyzer.llm.call_gemini_sdk")
-    @patch("services.analyzer.llm.call_gemini_cli")
+    @patch("shared.llm.call_ollama")
+    @patch("shared.llm.call_gemini_sdk")
+    @patch("shared.llm.call_gemini_cli")
     def test_fallback_to_second(self, mock_cli, mock_sdk, mock_ollama):
         mock_cli.side_effect = RuntimeError("CLI failed")
         mock_sdk.return_value = '{"scores": {}}'
@@ -323,9 +323,9 @@ class TestFallbackChain:
         assert result == ('{"scores": {}}', "gemini_sdk")
         mock_ollama.assert_not_called()
 
-    @patch("services.analyzer.llm.call_ollama")
-    @patch("services.analyzer.llm.call_gemini_sdk")
-    @patch("services.analyzer.llm.call_gemini_cli")
+    @patch("shared.llm.call_ollama")
+    @patch("shared.llm.call_gemini_sdk")
+    @patch("shared.llm.call_gemini_cli")
     def test_fallback_to_third(self, mock_cli, mock_sdk, mock_ollama):
         mock_cli.side_effect = RuntimeError("CLI failed")
         mock_sdk.side_effect = RuntimeError("SDK failed")
@@ -333,9 +333,9 @@ class TestFallbackChain:
         result = fallback_chain("prompt", "system")
         assert result == ('{"scores": {}}', "ollama")
 
-    @patch("services.analyzer.llm.call_ollama")
-    @patch("services.analyzer.llm.call_gemini_sdk")
-    @patch("services.analyzer.llm.call_gemini_cli")
+    @patch("shared.llm.call_ollama")
+    @patch("shared.llm.call_gemini_sdk")
+    @patch("shared.llm.call_gemini_cli")
     def test_all_fail(self, mock_cli, mock_sdk, mock_ollama):
         mock_cli.side_effect = RuntimeError("CLI failed")
         mock_sdk.side_effect = RuntimeError("SDK failed")
@@ -343,9 +343,9 @@ class TestFallbackChain:
         with pytest.raises(RuntimeError, match="All LLM providers failed"):
             fallback_chain("prompt", "system")
 
-    @patch("services.analyzer.llm.call_ollama")
-    @patch("services.analyzer.llm.call_gemini_sdk")
-    @patch("services.analyzer.llm.call_gemini_cli")
+    @patch("shared.llm.call_ollama")
+    @patch("shared.llm.call_gemini_sdk")
+    @patch("shared.llm.call_gemini_cli")
     def test_error_messages_collected(self, mock_cli, mock_sdk, mock_ollama):
         mock_cli.side_effect = RuntimeError("err1")
         mock_sdk.side_effect = RuntimeError("err2")
@@ -357,9 +357,9 @@ class TestFallbackChain:
         assert "err2" in msg
         assert "err3" in msg
 
-    @patch("services.analyzer.llm.call_ollama")
-    @patch("services.analyzer.llm.call_gemini_sdk")
-    @patch("services.analyzer.llm.call_gemini_cli")
+    @patch("shared.llm.call_ollama")
+    @patch("shared.llm.call_gemini_sdk")
+    @patch("shared.llm.call_gemini_cli")
     def test_returns_tuple(self, mock_cli, mock_sdk, mock_ollama):
         mock_cli.return_value = "text"
         result = fallback_chain("p", "s")
