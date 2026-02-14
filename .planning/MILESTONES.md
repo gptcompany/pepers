@@ -1,5 +1,33 @@
 # Project Milestones: Research Pipeline
 
+## v6.0 Codegen Service (Shipped: 2026-02-14)
+
+**Delivered:** LLM-powered plain-language formula explanation + multi-language code generation (C99/Rust/Python via SymPy) — completing the pipeline from validated math to production code.
+
+**Phases completed:** 17-19 (3 plans total)
+
+**Key accomplishments:**
+
+- LLM client refactoring: shared/llm.py (239 LOC) with configurable fallback order (Ollama-first or Gemini-first)
+- SymPy code generation: C99, Rust, Python via `codegen()` + `pycode()` with per-language error isolation
+- LLM explanation: plain-language formula explanation via Ollama structured output + Gemini fallback
+- Codegen service handler: /process endpoint with 5 DB operations, stage management (validated→codegen)
+- Full test suite: 69 new tests (39 unit + 20 integration + 10 e2e), 86% coverage
+- E2E validated: real SymPy + real Ollama confirmed working end-to-end
+
+**Stats:**
+
+- 23 files changed, 3,253 insertions
+- 806 LOC production + 960 LOC tests = 1,766 LOC total
+- 3 phases, 3 plans
+- 4 days (2026-02-10 → 2026-02-14)
+
+**Git range:** `5f03a10` → `04ee780`
+
+**What's next:** v7.0 — Orchestrator + Deploy (systemd, monitoring, Discord notifications)
+
+---
+
 ## v5.0 Validator Service (Shipped: 2026-02-14)
 
 **Delivered:** Multi-CAS formula validation with all-or-nothing consensus — new standalone CAS microservice (SymPy + Maxima + MATLAB) and Validator service that dispatches, scores consensus, and writes results to SQLite.

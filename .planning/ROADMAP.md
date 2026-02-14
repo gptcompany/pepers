@@ -65,39 +65,14 @@ None
 
 </details>
 
-### ✅ v6.0 Codegen Service — SHIPPED 2026-02-14
+<details>
+<summary>✅ v6.0 Codegen Service (Phases 17-19) — SHIPPED 2026-02-14</summary>
 
-**Milestone Goal:** LLM-powered plain-language explanation of validated formulas, Python code generation via SymPy, and AST-based Rust code generation — completing the pipeline from math to production code.
+- [x] **Phase 17: Codegen Research & Design** (1/1 plans) — completed 2026-02-14
+- [x] **Phase 18: Codegen Implementation** (1/1 plans) — completed 2026-02-14
+- [x] **Phase 19: Codegen Testing** (1/1 plans) — completed 2026-02-14
 
-#### Phase 17: Codegen Research & Design
-
-**Goal**: Investigate SymPy codegen API, Rust AST generation approaches, LLM explanation prompt design, and define service architecture
-**Depends on**: v5.0 Validator complete
-**Research**: Likely (AST-based Rust codegen, SymPy code generation, LLM prompt engineering for mathematical explanations)
-**Research topics**: SymPy codegen module (pycode, ccode, rust-like output), Rust syn/quote crates for AST manipulation, LLM prompt design for LaTeX→plain-language explanation, N8N W5.3 analysis (what failed with regex approach)
-
-Plans:
-- [x] 17-01: Codegen Service Design + LLM Client Refactoring — completed 2026-02-14
-
-#### Phase 18: Codegen Implementation
-
-**Goal**: Implement Codegen service with LLM explanation, Python/SymPy codegen, and Rust AST codegen modules
-**Depends on**: Phase 17
-**Research**: Unlikely (established service patterns from v2-v5)
-**Plans**: TBD
-
-Plans:
-- [x] 18-01: Codegen Service Implementation — completed 2026-02-14
-
-#### Phase 19: Codegen Testing
-
-**Goal**: Complete test suite for Codegen service (unit + integration + E2E with real LLM and CAS)
-**Depends on**: Phase 18
-**Research**: Unlikely (established test patterns)
-**Plans**: TBD
-
-Plans:
-- [x] 19-01: Codegen Service Test Suite — completed 2026-02-14
+</details>
 
 ## Progress
 
