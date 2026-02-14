@@ -16,7 +16,7 @@ None
 - [✅ v4.0 Extractor Service](milestones/v4.0-ROADMAP.md) (Phases 11-13) — SHIPPED 2026-02-13
 - [✅ v5.0 Validator Service](milestones/v5.0-ROADMAP.md) (Phases 14-16) — SHIPPED 2026-02-14
 - [✅ v6.0 Codegen Service](milestones/v6.0-ROADMAP.md) (Phases 17-19) — SHIPPED 2026-02-14
-- 🚧 **v7.0 Orchestrator + Deploy** — Phases 20-22 (in progress)
+- [✅ v7.0 Orchestrator + Deploy](milestones/v7.0-ROADMAP.md) (Phases 20-22) — SHIPPED 2026-02-14
 
 ## Phases
 
@@ -75,7 +75,7 @@ None
 
 </details>
 
-### 🚧 v7.0 Orchestrator + Deploy (In Progress)
+### ✅ v7.0 Orchestrator + Deploy — SHIPPED 2026-02-14
 
 **Milestone Goal:** End-to-end pipeline orchestration with HTTP trigger + cron automation, deployed as Docker containers on Workstation.
 
@@ -105,10 +105,10 @@ Plans:
 **Goal**: Unit, integration, and E2E tests for orchestrator + full pipeline flow through all 5 services in Docker
 **Depends on**: Phase 21
 **Research**: Unlikely (established testing patterns from 6 milestones)
-**Plans**: TBD
+**Plans**: 1/1 complete
 
 Plans:
-- [ ] 22-01: TBD
+- [x] 22-01: Unit, integration, and E2E tests for orchestrator (63 tests, 816 LOC)
 
 ## Progress
 
@@ -135,4 +135,4 @@ Plans:
 | 19. Codegen Testing | v6.0 | 1/1 | Complete | 2026-02-14 |
 | 20. Orchestrator Research & Design | v7.0 | 1/1 | Complete | 2026-02-14 |
 | 21. Orchestrator Implementation + Docker Deploy | v7.0 | 1/1 | Complete | 2026-02-14 |
-| 22. Testing & Integration | v7.0 | 0/? | Not started | - |
+| 22. Testing & Integration | v7.0 | 1/1 | Complete | 2026-02-14 |

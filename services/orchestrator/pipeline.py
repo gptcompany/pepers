@@ -51,6 +51,16 @@ STAGE_PARAMS: dict[str, dict[str, str]] = {
 }
 
 
+# Maps DB stage name to the index in STAGE_ORDER that produced it
+DB_STAGE_INDEX: dict[str, int] = {
+    "discovered": 0,  # After discovery (idx 0)
+    "analyzed": 1,    # After analyzer (idx 1)
+    "extracted": 2,   # After extractor (idx 2)
+    "validated": 3,   # After validator (idx 3)
+    "codegen": 4,     # After codegen (idx 4)
+}
+
+
 class PipelineRunner:
     """Executes pipeline stages sequentially with retry logic."""
 
@@ -175,14 +185,12 @@ class PipelineRunner:
         if paper_id:
             # Determine paper's current stage and start from next
             current = self._get_paper_stage(paper_id)
-            stage_names = [s[0] for s in STAGE_ORDER]
 
-            if current in stage_names:
-                idx = stage_names.index(current) + 1
-            elif current == "rejected" or current == "failed":
+            if current in ("rejected", "failed"):
                 return []  # Can't advance rejected/failed papers
-            else:
-                idx = 0  # Unknown stage, start from beginning
+
+            # Map DB stage names to STAGE_ORDER index (after which service)
+            idx = DB_STAGE_INDEX.get(current, -1) + 1
 
             return STAGE_ORDER[idx : idx + stages]
 

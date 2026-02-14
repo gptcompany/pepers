@@ -22,8 +22,8 @@ Reliable, N8N-free academic paper processing pipeline that discovers Kelly crite
 - ✓ Codegen service: LLM plain-language explanation + C99/Rust/Python codegen via SymPy — v6.0
 
 ### Active
-- [ ] Orchestrator service (port 8775): HTTP trigger (POST /run) + configurable cron scheduling (APScheduler)
-- [ ] Docker Compose deployment: all 6 services, shared SQLite volume, health checks, startup ordering
+- [x] Orchestrator service (port 8775): HTTP trigger (POST /run) + configurable cron scheduling (APScheduler) — v7.0
+- [x] Docker Compose deployment: all 6 services, shared SQLite volume, health checks, startup ordering — v7.0
 - [ ] Monitoring integration: process-exporter config, Prometheus alert rules, Grafana dashboard
 
 ### Out of Scope
@@ -38,7 +38,7 @@ Reliable, N8N-free academic paper processing pipeline that discovers Kelly crite
 
 ## Context
 
-**Current state (v7.0 in progress — orchestrator design complete):**
+**Current state (v7.0 COMPLETE — all milestones shipped):**
 - Shared library: 1,055 LOC Python across 5 modules (db.py, models.py, server.py, config.py, llm.py)
 - Discovery service: 448 LOC (arXiv + S2 + CrossRef)
 - Analyzer service: 600 LOC (LLM triple fallback + 5-criteria scoring)
@@ -47,9 +47,11 @@ Reliable, N8N-free academic paper processing pipeline that discovers Kelly crite
 - Codegen service: 567 LOC (SymPy C99/Rust/Python codegen + LLM explanation)
 - CAS microservice: 698 LOC (standalone at /media/sam/1TB/cas-service/, SymPy + Maxima + MATLAB)
 - SQLite schema: 5 tables, 6 indexes, WAL mode + prompt_version migration + validations table
+- Orchestrator service: 850 LOC (pipeline dispatch, retry logic, cron scheduler)
 - 9 Pydantic models with JSON field validators + FormulaExplanation validation-only model
 - Base HTTP server with @route decorator, JSON logging, SIGTERM handling
-- 403 non-e2e + 29 e2e = 432 total tests, 86% coverage on codegen, 0 type errors
+- Dockerfile (multi-stage) + docker-compose.yml (6 services, network_mode:host)
+- 461 non-e2e + 34 e2e = 495 total tests, 0 type errors
 - Tech stack: Python stdlib (http.server, sqlite3, logging, json) + Pydantic + google-genai + requests + SymPy
 
 **Origin**: N8N crashed in Jan 2026, external team restored 88 workflows but lost all data. The W1-W5 pipeline (17 N8N workflows) never successfully processed a paper end-to-end — all tables empty, 0 executions. Rather than fix N8N, rebuilding as standalone microservices eliminates the single point of failure.
@@ -131,4 +133,4 @@ Reliable, N8N-free academic paper processing pipeline that discovers Kelly crite
 | Shared SQLite volume | Sequential pipeline = no concurrent writers, WAL mode safe | — Pending |
 
 ---
-*Last updated: 2026-02-14 after Phase 20 design (v7.0)*
+*Last updated: 2026-02-14 after Phase 22 — v7.0 COMPLETE (all milestones shipped)*

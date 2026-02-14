@@ -5,16 +5,16 @@
 See: .planning/PROJECT.md (updated 2026-02-14)
 
 **Core value:** Reliable, N8N-free academic paper processing pipeline
-**Current focus:** v7.0 Orchestrator + Deploy
+**Current focus:** v7.0 COMPLETE — all milestones shipped
 
 ## Current Position
 
-Phase: 21 of 22 (Orchestrator Implementation + Docker Deploy) — COMPLETE
-Plan: 21-01 complete (1/1)
-Status: Ready for Phase 22
-Last activity: 2026-02-14 — Phase 21 implementation complete
+Phase: 22 of 22 (Testing & Integration) — COMPLETE
+Plan: 22-01 complete (1/1)
+Status: ALL MILESTONES COMPLETE
+Last activity: 2026-02-14 — v7.0 milestone complete
 
-Progress: 6/7 milestones shipped
+Progress: 7/7 milestones shipped
 
 ## Shipped Milestones
 
@@ -24,32 +24,36 @@ Progress: 6/7 milestones shipped
 - v4.0 Extractor: 3 phases, 644 LOC + 999 LOC tests — 2026-02-13
 - v5.0 Validator: 3 phases, 1178 LOC + 751 LOC tests — 2026-02-14
 - v6.0 Codegen: 3 phases, 806 LOC + 960 LOC tests — 2026-02-14
+- v7.0 Orchestrator + Deploy: 3 phases, 850 LOC + 816 LOC tests — 2026-02-14
 
-## Current Milestone
+## Final Stats
 
-- v7.0 Orchestrator + Deploy (Phases 20-22)
-  - Phase 20: Orchestrator Research & Design — COMPLETE (DESIGN.md + PROJECT.md updated)
-  - Phase 21: Orchestrator Implementation + Docker Deploy — COMPLETE (840 LOC, 10/10 smoke tests)
-  - Phase 22: Testing & Integration — Not started
+- **Total tests**: 495 (461 non-e2e + 34 e2e), all passing
+- **Total LOC**: ~7,500+ across 6 services + shared library + Docker
+- **Services**: 6 microservices (ports 8770-8775) + Docker Compose
+- **Duration**: 5 days (2026-02-10 to 2026-02-14)
 
 ## Blockers/Concerns Carried Forward
 
 - MATLAB license: temporarily unavailable (CAS service has SymPy + Maxima working)
-- Gemini API: intermittent 503/429 errors (orchestrator retry logic designed: 3 retries, exponential backoff)
+- Gemini API: intermittent 503/429 errors (orchestrator retry handles: 3 retries, exponential backoff)
 
 ## Future Tasks
 
 - Isolate RAGAnything from N8N_dev into own repo
 - Decommission old CAS service from N8N_dev
+- Deploy Docker stack to Workstation (production run)
 
 ## Roadmap Evolution
 
 - Milestone v7.0 created: Orchestrator + Deploy, 3 phases (Phase 20-22)
 - Phase 20 complete: DESIGN.md with full architecture, Docker in-scope
 - Phase 21 complete: Orchestrator (617 LOC) + Dockerfile + docker-compose.yml (223 LOC)
+- Phase 22 complete: 63 new tests (43 unit + 15 integration + 5 e2e), 816 LOC tests
+- Bug fix: DB stage → service name mapping in _resolve_stages()
 
 ## Session Continuity
 
 Last session: 2026-02-14
-Stopped at: Phase 21 complete, ready for Phase 22
+Stopped at: ALL COMPLETE
 Resume file: None
