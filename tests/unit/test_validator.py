@@ -270,9 +270,11 @@ class TestCASClient:
 
     def test_validate_http_error(self):
         """HTTPError → CASServiceError."""
+        from email.message import Message
+        hdrs = Message()
         error = urllib.error.HTTPError(
             "http://localhost:8769/validate", 400, "Bad Request",
-            {}, MagicMock(read=MagicMock(return_value=b'{"error": "invalid latex"}')),
+            hdrs, MagicMock(read=MagicMock(return_value=b'{"error": "invalid latex"}')),
         )
 
         with patch("urllib.request.urlopen", side_effect=error):

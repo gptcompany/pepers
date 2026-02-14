@@ -12,7 +12,7 @@ from unittest.mock import MagicMock, patch
 import pytest
 
 from shared.db import transaction
-from services.validator.cas_client import CASServiceError, EngineResult
+from services.validator.cas_client import EngineResult
 from services.validator.consensus import ConsensusOutcome
 from services.validator.main import (
     ValidatorHandler,
@@ -31,7 +31,7 @@ from shared.server import BaseService
 
 
 def _insert_formula(db_path: str, paper_id: int = 1, latex: str = "x^2",
-                    stage: str = "extracted", **kwargs) -> int:
+                    stage: str = "extracted") -> int:
     """Insert a formula and return its id."""
     with transaction(db_path) as conn:
         cursor = conn.execute(
@@ -39,7 +39,8 @@ def _insert_formula(db_path: str, paper_id: int = 1, latex: str = "x^2",
             "VALUES (?, ?, ?, ?)",
             (paper_id, latex, f"hash_{latex}", stage),
         )
-        return cursor.lastrowid
+        fid: int = cursor.lastrowid  # type: ignore[assignment]
+        return fid
 
 
 # ===========================================================================
