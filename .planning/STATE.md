@@ -5,14 +5,14 @@
 See: .planning/PROJECT.md (updated 2026-02-14)
 
 **Core value:** Reliable, N8N-free academic paper processing pipeline
-**Current focus:** v6.0 Codegen Service — Planning next milestone
+**Current focus:** v6.0 Codegen Service — LLM explanation + Python/Rust code generation
 
 ## Current Position
 
-Phase: 16 of 16 (Testing) — COMPLETE
-Plan: 16-01 (Validator Test Suite) — done
-Status: v5.0 Milestone COMPLETE, ready for v6.0
-Last activity: 2026-02-14 — Phase 16 testing complete
+Phase: 17 of 19 (Codegen Research & Design)
+Plan: Not started
+Status: Ready to plan
+Last activity: 2026-02-14 — Milestone v6.0 created
 
 Progress: 5/7 milestones shipped
 
@@ -26,35 +26,21 @@ Progress: 5/7 milestones shipped
 
 ## Remaining Milestones
 
-- v6.0 Codegen (Python/Rust generation)
+- v6.0 Codegen (Python/Rust generation) — IN PROGRESS
 - v7.0 Orchestrator + Deploy (systemd, monitoring)
-
-## Phase 16 Results
-
-- 56 new tests: 30 unit + 18 integration + 8 E2E
-- 363 total tests (was 307), all passing
-- Coverage: 87% on validator module (consensus.py 100%, cas_client.py 96%)
-- E2E with real CAS: SymPy + Maxima on real formulas
-- MATLAB engine: temporarily unavailable (license expired, will return)
-
-## v5.0 Totals
-
-- CAS Microservice: 698 LOC (standalone repo /media/sam/1TB/cas-service/)
-- Validator Service: 480 LOC (services/validator/, 3 modules)
-- Test Suite: 56 tests, 751 LOC, 87% coverage
-- Total v5.0: 1178 impl LOC + 751 test LOC
 
 ## Blockers/Concerns Carried Forward
 
 - MATLAB license: temporarily unavailable (CAS service has SymPy + Maxima working)
 - Gemini API: intermittent 503/429 errors (confidence gate rate-limited)
 
-## Constraints (v5.0)
+## Constraints (v6.0)
 
-- CAS microservice: standalone repo at /media/sam/1TB/cas-service/
-- SymPy + Maxima + MATLAB as CAS engines (MATLAB license temp. unavailable)
-- Consensus: both engines must agree for VALID
-- Engine timeouts handled (SymPy 5s, Maxima 10s)
+- Codegen service: LLM plain-language explanation + Python codegen (SymPy) + Rust codegen (AST-based)
+- Original W5.3 Rust codegen was naive regex JS → needs proper AST approach
+- Tech stack: Python stdlib http.server (same as v1-v5), SymPy for Python codegen
+- LLM: Ollama qwen3:8b for explanations (local, free, already deployed)
+- Port: 8775 (next available in 8770-8775 range)
 
 ## Future Tasks
 
@@ -67,9 +53,10 @@ Progress: 5/7 milestones shipped
 - Phase 14 (Research & Design): DESIGN.md complete
 - Phase 15 (Implementation): CAS + Validator services complete
 - Phase 16 (Testing): Full test suite complete
+- Milestone v6.0 created: Codegen Service (LLM explanation + Python/Rust codegen), 3 phases (Phase 17-19)
 
 ## Session Continuity
 
 Last session: 2026-02-14
-Stopped at: v5.0 complete, ready for v6.0
+Stopped at: Milestone v6.0 initialization
 Resume file: None

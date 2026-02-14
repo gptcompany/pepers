@@ -15,6 +15,7 @@ None
 - [✅ v3.0 Analyzer Service](milestones/v3.0-ROADMAP.md) (Phases 8-10) — SHIPPED 2026-02-13
 - [✅ v4.0 Extractor Service](milestones/v4.0-ROADMAP.md) (Phases 11-13) — SHIPPED 2026-02-13
 - [✅ v5.0 Validator Service](milestones/v5.0-ROADMAP.md) (Phases 14-16) — SHIPPED 2026-02-14
+- 🚧 **v6.0 Codegen Service** — Phases 17-19 (in progress)
 
 ## Phases
 
@@ -64,6 +65,41 @@ None
 
 </details>
 
+### 🚧 v6.0 Codegen Service (In Progress)
+
+**Milestone Goal:** LLM-powered plain-language explanation of validated formulas, Python code generation via SymPy, and AST-based Rust code generation — completing the pipeline from math to production code.
+
+#### Phase 17: Codegen Research & Design
+
+**Goal**: Investigate SymPy codegen API, Rust AST generation approaches, LLM explanation prompt design, and define service architecture
+**Depends on**: v5.0 Validator complete
+**Research**: Likely (AST-based Rust codegen, SymPy code generation, LLM prompt engineering for mathematical explanations)
+**Research topics**: SymPy codegen module (pycode, ccode, rust-like output), Rust syn/quote crates for AST manipulation, LLM prompt design for LaTeX→plain-language explanation, N8N W5.3 analysis (what failed with regex approach)
+**Plans**: TBD
+
+Plans:
+- [ ] 17-01: TBD (run /gsd:plan-phase 17 to break down)
+
+#### Phase 18: Codegen Implementation
+
+**Goal**: Implement Codegen service with LLM explanation, Python/SymPy codegen, and Rust AST codegen modules
+**Depends on**: Phase 17
+**Research**: Unlikely (established service patterns from v2-v5)
+**Plans**: TBD
+
+Plans:
+- [ ] 18-01: TBD
+
+#### Phase 19: Codegen Testing
+
+**Goal**: Complete test suite for Codegen service (unit + integration + E2E with real LLM and CAS)
+**Depends on**: Phase 18
+**Research**: Unlikely (established test patterns)
+**Plans**: TBD
+
+Plans:
+- [ ] 19-01: TBD
+
 ## Progress
 
 | Phase | Milestone | Plans Complete | Status | Completed |
@@ -84,3 +120,6 @@ None
 | 14. Research & Design | v5.0 | 1/1 | Complete | 2026-02-14 |
 | 15. Implementation | v5.0 | 2/2 | Complete | 2026-02-14 |
 | 16. Testing | v5.0 | 1/1 | Complete | 2026-02-14 |
+| 17. Codegen Research & Design | v6.0 | 0/? | Not started | - |
+| 18. Codegen Implementation | v6.0 | 0/? | Not started | - |
+| 19. Codegen Testing | v6.0 | 0/? | Not started | - |
