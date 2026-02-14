@@ -5,14 +5,14 @@
 See: .planning/PROJECT.md (updated 2026-02-14)
 
 **Core value:** Reliable, N8N-free academic paper processing pipeline
-**Current focus:** Planning v7.0 Orchestrator + Deploy
+**Current focus:** v7.0 Orchestrator + Deploy
 
 ## Current Position
 
-Phase: 19 of 19 complete — all services built
-Plan: Not started — v7.0 milestone not yet created
-Status: Ready for v7.0 milestone creation
-Last activity: 2026-02-14 — v6.0 Codegen Service shipped
+Phase: 20 of 22 (Orchestrator Research & Design)
+Plan: Not started
+Status: Ready to plan
+Last activity: 2026-02-14 — Milestone v7.0 created
 
 Progress: 6/7 milestones shipped
 
@@ -25,22 +25,29 @@ Progress: 6/7 milestones shipped
 - v5.0 Validator: 3 phases, 1178 LOC + 751 LOC tests — 2026-02-14
 - v6.0 Codegen: 3 phases, 806 LOC + 960 LOC tests — 2026-02-14
 
-## Remaining Milestones
+## Current Milestone
 
-- v7.0 Orchestrator + Deploy (systemd, monitoring, Discord notifications)
+- v7.0 Orchestrator + Deploy (Phases 20-22)
+  - Phase 20: Orchestrator Research & Design — Not started
+  - Phase 21: Orchestrator Implementation + Docker Deploy — Not started
+  - Phase 22: Testing & Integration — Not started
 
 ## Blockers/Concerns Carried Forward
 
 - MATLAB license: temporarily unavailable (CAS service has SymPy + Maxima working)
-- Gemini API: intermittent 503/429 errors (confidence gate rate-limited)
+- Gemini API: intermittent 503/429 errors (rate limiting needed in orchestrator)
 
 ## Future Tasks
 
 - Isolate RAGAnything from N8N_dev into own repo
 - Decommission old CAS service from N8N_dev
 
+## Roadmap Evolution
+
+- Milestone v7.0 created: Orchestrator + Deploy, 3 phases (Phase 20-22)
+
 ## Session Continuity
 
 Last session: 2026-02-14
-Stopped at: v6.0 milestone archived, ready for v7.0
+Stopped at: Milestone v7.0 initialization
 Resume file: None

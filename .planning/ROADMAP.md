@@ -16,6 +16,7 @@ None
 - [✅ v4.0 Extractor Service](milestones/v4.0-ROADMAP.md) (Phases 11-13) — SHIPPED 2026-02-13
 - [✅ v5.0 Validator Service](milestones/v5.0-ROADMAP.md) (Phases 14-16) — SHIPPED 2026-02-14
 - [✅ v6.0 Codegen Service](milestones/v6.0-ROADMAP.md) (Phases 17-19) — SHIPPED 2026-02-14
+- 🚧 **v7.0 Orchestrator + Deploy** — Phases 20-22 (in progress)
 
 ## Phases
 
@@ -74,6 +75,41 @@ None
 
 </details>
 
+### 🚧 v7.0 Orchestrator + Deploy (In Progress)
+
+**Milestone Goal:** End-to-end pipeline orchestration with HTTP trigger + cron automation, deployed as Docker containers on Workstation.
+
+#### Phase 20: Orchestrator Research & Design
+
+**Goal**: Architecture design for orchestrator service — API contract, cron scheduling, stage coordination, error handling/retry, Docker compose layout
+**Depends on**: v6.0 complete (all 5 services built)
+**Research**: Likely (Docker compose orchestration patterns, cron integration, microservice coordination)
+**Research topics**: Docker compose for multi-service Python apps, APScheduler vs cron for Python scheduling, retry/backoff patterns for HTTP microservice chains
+**Plans**: TBD
+
+Plans:
+- [ ] 20-01: TBD (run /gsd:plan-phase 20 to break down)
+
+#### Phase 21: Orchestrator Implementation + Docker Deploy
+
+**Goal**: Implement orchestrator service with /run endpoint + cron scheduler, Dockerfile and docker-compose.yml for all services
+**Depends on**: Phase 20
+**Research**: Unlikely (follows design from Phase 20)
+**Plans**: TBD
+
+Plans:
+- [ ] 21-01: TBD
+
+#### Phase 22: Testing & Integration
+
+**Goal**: Unit, integration, and E2E tests for orchestrator + full pipeline flow through all 5 services in Docker
+**Depends on**: Phase 21
+**Research**: Unlikely (established testing patterns from 6 milestones)
+**Plans**: TBD
+
+Plans:
+- [ ] 22-01: TBD
+
 ## Progress
 
 | Phase | Milestone | Plans Complete | Status | Completed |
@@ -97,3 +133,6 @@ None
 | 17. Codegen Research & Design | v6.0 | 1/1 | Complete | 2026-02-14 |
 | 18. Codegen Implementation | v6.0 | 1/1 | Complete | 2026-02-14 |
 | 19. Codegen Testing | v6.0 | 1/1 | Complete | 2026-02-14 |
+| 20. Orchestrator Research & Design | v7.0 | 0/? | Not started | - |
+| 21. Orchestrator Implementation + Docker Deploy | v7.0 | 0/? | Not started | - |
+| 22. Testing & Integration | v7.0 | 0/? | Not started | - |
