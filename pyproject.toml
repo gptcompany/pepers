@@ -8,6 +8,8 @@ dependencies = [
     "arxiv>=2.4.0",
     "requests>=2.28",
     "google-genai>=1.0",
+    "apscheduler>=3.10",
+    "sympy>=1.12",
 ]
 
 [project.optional-dependencies]

@@ -1,0 +1,189 @@
+name: research-pipeline
+
+services:
+  discovery:
+    build:
+      context: .
+      dockerfile: Dockerfile
+      args:
+        SERVICE: discovery
+    network_mode: host
+    environment:
+      - RP_DISCOVERY_PORT=8770
+      - RP_DB_PATH=/data/research.db
+      - RP_LOG_LEVEL=INFO
+    env_file: .env
+    volumes:
+      - sqlite-data:/data
+    user: "1000:1000"
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "python", "-c",
+        "import urllib.request; urllib.request.urlopen('http://localhost:8770/health')"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 15s
+
+  analyzer:
+    build:
+      context: .
+      dockerfile: Dockerfile
+      args:
+        SERVICE: analyzer
+    network_mode: host
+    environment:
+      - RP_ANALYZER_PORT=8771
+      - RP_DB_PATH=/data/research.db
+      - RP_ANALYZER_THRESHOLD=0.7
+      - RP_ANALYZER_MAX_PAPERS=10
+      - RP_LOG_LEVEL=INFO
+    env_file: .env
+    volumes:
+      - sqlite-data:/data
+    user: "1000:1000"
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "python", "-c",
+        "import urllib.request; urllib.request.urlopen('http://localhost:8771/health')"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 15s
+    depends_on:
+      discovery:
+        condition: service_healthy
+        restart: true
+
+  extractor:
+    build:
+      context: .
+      dockerfile: Dockerfile
+      args:
+        SERVICE: extractor
+    network_mode: host
+    environment:
+      - RP_EXTRACTOR_PORT=8772
+      - RP_DB_PATH=/data/research.db
+      - RP_EXTRACTOR_MAX_PAPERS=10
+      - RP_EXTRACTOR_PDF_DIR=/data/pdfs
+      - RP_EXTRACTOR_RAG_URL=http://localhost:8767
+      - RP_LOG_LEVEL=INFO
+    env_file: .env
+    volumes:
+      - sqlite-data:/data
+    user: "1000:1000"
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "python", "-c",
+        "import urllib.request; urllib.request.urlopen('http://localhost:8772/health')"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 15s
+    depends_on:
+      analyzer:
+        condition: service_healthy
+        restart: true
+
+  validator:
+    build:
+      context: .
+      dockerfile: Dockerfile
+      args:
+        SERVICE: validator
+    network_mode: host
+    environment:
+      - RP_VALIDATOR_PORT=8773
+      - RP_DB_PATH=/data/research.db
+      - RP_VALIDATOR_CAS_URL=http://localhost:8769
+      - RP_VALIDATOR_MAX_FORMULAS=50
+      - RP_VALIDATOR_ENGINES=sympy,maxima
+      - RP_LOG_LEVEL=INFO
+    env_file: .env
+    volumes:
+      - sqlite-data:/data
+    user: "1000:1000"
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "python", "-c",
+        "import urllib.request; urllib.request.urlopen('http://localhost:8773/health')"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 15s
+    depends_on:
+      extractor:
+        condition: service_healthy
+        restart: true
+
+  codegen:
+    build:
+      context: .
+      dockerfile: Dockerfile
+      args:
+        SERVICE: codegen
+    network_mode: host
+    environment:
+      - RP_CODEGEN_PORT=8774
+      - RP_DB_PATH=/data/research.db
+      - RP_CODEGEN_OLLAMA_URL=http://localhost:11434
+      - RP_CODEGEN_MAX_FORMULAS=50
+      - RP_LOG_LEVEL=INFO
+    env_file: .env
+    volumes:
+      - sqlite-data:/data
+    user: "1000:1000"
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "python", "-c",
+        "import urllib.request; urllib.request.urlopen('http://localhost:8774/health')"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 15s
+    depends_on:
+      validator:
+        condition: service_healthy
+        restart: true
+
+  orchestrator:
+    build:
+      context: .
+      dockerfile: Dockerfile
+      args:
+        SERVICE: orchestrator
+    network_mode: host
+    environment:
+      - RP_ORCHESTRATOR_PORT=8775
+      - RP_DB_PATH=/data/research.db
+      - RP_ORCHESTRATOR_CRON=0 8 * * *
+      - RP_ORCHESTRATOR_CRON_ENABLED=false
+      - RP_ORCHESTRATOR_STAGES_PER_RUN=5
+      - RP_ORCHESTRATOR_DEFAULT_QUERY=abs:"Kelly criterion" AND cat:q-fin.*
+      - RP_ORCHESTRATOR_CRON_MAX_PAPERS=10
+      - RP_ORCHESTRATOR_CRON_MAX_FORMULAS=50
+      - RP_ORCHESTRATOR_RETRY_MAX=3
+      - RP_ORCHESTRATOR_RETRY_BACKOFF=4.0
+      - RP_ORCHESTRATOR_TIMEOUT=300
+      - RP_LOG_LEVEL=INFO
+    env_file: .env
+    volumes:
+      - sqlite-data:/data
+    user: "1000:1000"
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "python", "-c",
+        "import urllib.request; urllib.request.urlopen('http://localhost:8775/health')"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 15s
+    depends_on:
+      codegen:
+        condition: service_healthy
+        restart: true
+
+volumes:
+  sqlite-data:
+    driver: local

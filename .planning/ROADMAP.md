@@ -95,10 +95,10 @@ Plans:
 **Goal**: Implement orchestrator service with /run endpoint + cron scheduler, Dockerfile and docker-compose.yml for all services
 **Depends on**: Phase 20
 **Research**: Unlikely (follows design from Phase 20)
-**Plans**: TBD
+**Plans**: 1/1 complete
 
 Plans:
-- [ ] 21-01: TBD
+- [x] 21-01: Implement orchestrator service + Dockerfile + docker-compose.yml
 
 #### Phase 22: Testing & Integration
 
@@ -134,5 +134,5 @@ Plans:
 | 18. Codegen Implementation | v6.0 | 1/1 | Complete | 2026-02-14 |
 | 19. Codegen Testing | v6.0 | 1/1 | Complete | 2026-02-14 |
 | 20. Orchestrator Research & Design | v7.0 | 1/1 | Complete | 2026-02-14 |
-| 21. Orchestrator Implementation + Docker Deploy | v7.0 | 0/? | Not started | - |
+| 21. Orchestrator Implementation + Docker Deploy | v7.0 | 1/1 | Complete | 2026-02-14 |
 | 22. Testing & Integration | v7.0 | 0/? | Not started | - |
