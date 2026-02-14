@@ -18,9 +18,9 @@ Reliable, N8N-free academic paper processing pipeline that discovers Kelly crite
 - ✓ Discovery service: fetch arXiv papers by keywords + enrich via Semantic Scholar/CrossRef — v2.0
 - ✓ Analyzer service: LLM analysis (triple fallback) + 5-criteria relevance scoring + routing — v3.0
 - ✓ Extractor service: PDF download + RAGAnything text extraction + 5-pass LaTeX regex + formula storage — v4.0
+- ✓ Validator service: multi-CAS validation (SymPy + Maxima + MATLAB) with all-or-nothing consensus — v5.0
 
 ### Active
-- [ ] Validator service: multi-CAS validation (SymPy, Wolfram, Maxima) with consensus scoring
 - [ ] Codegen service: LLM plain-language explanation + Python codegen (SymPy) + Rust codegen (AST-based)
 - [ ] Orchestrator: coordinates pipeline stages, retry logic, error handling, Discord notifications
 - [ ] systemd unit files for all 6 services + daily timer (8AM)
@@ -28,7 +28,7 @@ Reliable, N8N-free academic paper processing pipeline that discovers Kelly crite
 
 ### Out of Scope
 
-- CAS microservice migration — already standalone systemd service at :8769, stays in N8N_dev
+- CAS microservice migration — NOW standalone at /media/sam/1TB/cas-service/ (moved out of N8N_dev in v5.0)
 - RAGAnything migration — already standalone systemd service at :8767, stays in N8N_dev
 - N8N decommissioning — separate task after pipeline proven working
 - Web UI/dashboard — Grafana handles visualization
@@ -38,21 +38,23 @@ Reliable, N8N-free academic paper processing pipeline that discovers Kelly crite
 
 ## Context
 
-**Current state (v4.0 shipped):**
+**Current state (v5.0 shipped):**
 - Shared library: 816 LOC Python across 4 modules (db.py, models.py, server.py, config.py)
 - Discovery service: 448 LOC (arXiv + S2 + CrossRef)
 - Analyzer service: 600 LOC (LLM triple fallback + 5-criteria scoring)
 - Extractor service: 644 LOC (PDF download + RAGAnything client + LaTeX regex engine)
-- SQLite schema: 5 tables, 6 indexes, WAL mode + prompt_version migration
-- 8 Pydantic models with JSON field validators + REJECTED stage
+- Validator service: 492 LOC (CAS client + consensus + handler)
+- CAS microservice: 698 LOC (standalone at /media/sam/1TB/cas-service/, SymPy + Maxima + MATLAB)
+- SQLite schema: 5 tables, 6 indexes, WAL mode + prompt_version migration + validations table
+- 8 Pydantic models with JSON field validators + REJECTED stage + Validation model
 - Base HTTP server with @route decorator, JSON logging, SIGTERM handling
-- 296 non-e2e + 11 e2e tests, 94% coverage on extractor, 0 type errors
+- 344 non-e2e + 19 e2e = 363 total tests, 87% coverage on validator, 0 type errors
 - Tech stack: Python stdlib (http.server, sqlite3, logging, json) + Pydantic + google-genai + requests
 
 **Origin**: N8N crashed in Jan 2026, external team restored 88 workflows but lost all data. The W1-W5 pipeline (17 N8N workflows) never successfully processed a paper end-to-end — all tables empty, 0 executions. Rather than fix N8N, rebuilding as standalone microservices eliminates the single point of failure.
 
 **Existing services that continue working independently**:
-- CAS Microservice (:8769) — systemd user service, 1,090 LOC, only Maxima engine works (SageMath/MATLAB broken)
+- CAS Microservice (:8769) — NEW standalone repo /media/sam/1TB/cas-service/, 698 LOC, SymPy + Maxima + MATLAB (MATLAB license temp. unavailable)
 - RAGAnything (:8767) — systemd system service, 1,100 LOC, 743MB RAM, LightRAG + OpenAI/Ollama
 - Ollama — local LLM (qwen3:8b) on localhost:11434
 - PostgreSQL — N8N's postgres container (n8n-postgres-1), tables in public schema
@@ -110,6 +112,12 @@ Reliable, N8N-free academic paper processing pipeline that discovers Kelly crite
 | Stdlib `re` multi-pass for LaTeX | Zero deps, handles 95% of papers, occupied-span tracking | ✓ Good |
 | Per-paper error isolation | One failure doesn't block batch, paper marked FAILED | ✓ Good |
 | 200-char context window | Approximates N8N W3.2's "2-3 sentences" around formula | ✓ Good |
+| New CAS microservice (standalone repo) | Old N8N_dev CAS was broken (SageMath), clean-room rewrite | ✓ Good |
+| SymPy + Maxima + MATLAB engines | 3 engines for robust consensus; MATLAB license temp. unavailable | ✓ Good |
+| All-or-nothing consensus | Both active engines must agree for VALID, disagreement → INVALID | ✓ Good |
+| stdlib urllib.request for CAS client | No new deps in research-pipeline, consistent with KISS | ✓ Good |
+| UNPARSEABLE stays 'extracted' | Don't promote formulas that no engine could parse | ✓ Good |
+| Overwrite validations on re-run | DELETE+INSERT for same formula+engine, supports re-validation | ✓ Good |
 
 ---
-*Last updated: 2026-02-13 after v4.0 milestone*
+*Last updated: 2026-02-14 after v5.0 milestone*

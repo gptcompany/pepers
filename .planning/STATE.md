@@ -5,7 +5,7 @@
 See: .planning/PROJECT.md (updated 2026-02-14)
 
 **Core value:** Reliable, N8N-free academic paper processing pipeline
-**Current focus:** v5.0 Validator Service — COMPLETE
+**Current focus:** v6.0 Codegen Service — Planning next milestone
 
 ## Current Position
 
@@ -52,7 +52,7 @@ Progress: 5/7 milestones shipped
 ## Constraints (v5.0)
 
 - CAS microservice: standalone repo at /media/sam/1TB/cas-service/
-- SymPy + Maxima as primary CAS engines
+- SymPy + Maxima + MATLAB as CAS engines (MATLAB license temp. unavailable)
 - Consensus: both engines must agree for VALID
 - Engine timeouts handled (SymPy 5s, Maxima 10s)
 

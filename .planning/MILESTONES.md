@@ -1,5 +1,33 @@
 # Project Milestones: Research Pipeline
 
+## v5.0 Validator Service (Shipped: 2026-02-14)
+
+**Delivered:** Multi-CAS formula validation with all-or-nothing consensus — new standalone CAS microservice (SymPy + Maxima + MATLAB) and Validator service that dispatches, scores consensus, and writes results to SQLite.
+
+**Phases completed:** 14-16 (4 plans total)
+
+**Key accomplishments:**
+
+- CAS microservice: standalone repo, SymPy 1.14.0 + Maxima 5.45.1 + MATLAB (license temp. unavailable), 4-phase LaTeX preprocessing
+- Validator service: consensus logic (VALID/INVALID/PARTIAL/UNPARSEABLE), CAS client, DB integration
+- Comprehensive design: 34K LOC DESIGN.md with API contracts and decision matrix
+- 56 new tests (30 unit + 18 integration + 8 E2E), 87% coverage, real CAS E2E validation
+- All 363 tests pass, zero regressions
+
+**Stats:**
+
+- 22 files changed, 3,394 insertions
+- 492 LOC service + 990 LOC tests = 1,482 LOC (research-pipeline)
+- 698 LOC CAS microservice (separate repo)
+- 3 phases, 4 plans
+- 1 day (2026-02-13 → 2026-02-14)
+
+**Git range:** `4545b73` → `1edd27e`
+
+**What's next:** v6.0 — Codegen Service (Python/Rust code generation from validated formulas)
+
+---
+
 ## v4.0 Extractor Service (Shipped: 2026-02-13)
 
 **Delivered:** Third microservice — downloads PDFs from arXiv, sends to RAGAnything for text extraction, parses LaTeX formulas via 5-pass regex engine with occupied-span tracking, and stores formulas with context in SQLite.
