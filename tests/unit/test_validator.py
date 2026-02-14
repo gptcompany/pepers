@@ -129,15 +129,15 @@ class TestApplyConsensus:
         assert result.engine_count == 0
 
     def test_single_engine_valid(self):
-        """Single engine valid → VALID."""
+        """Single engine valid → PARTIAL (insufficient for consensus)."""
         result = apply_consensus([_engine_ok("sympy")])
-        assert result.outcome == ConsensusOutcome.VALID
+        assert result.outcome == ConsensusOutcome.PARTIAL
         assert result.engine_count == 1
 
     def test_single_engine_invalid(self):
-        """Single engine invalid → INVALID."""
+        """Single engine invalid → PARTIAL (insufficient for consensus)."""
         result = apply_consensus([_engine_ok("sympy", valid=False)])
-        assert result.outcome == ConsensusOutcome.INVALID
+        assert result.outcome == ConsensusOutcome.PARTIAL
 
     def test_single_engine_error(self):
         """Single engine error → UNPARSEABLE."""
@@ -164,13 +164,36 @@ class TestApplyConsensus:
         assert result.outcome == ConsensusOutcome.INVALID
 
     def test_three_engines_two_valid_one_error(self):
-        """Three engines, 2 valid + 1 error → PARTIAL."""
+        """Three engines, 2 valid + 1 error → VALID (fallback: 2 agree)."""
         result = apply_consensus([
             _engine_ok("sympy"),
             _engine_ok("maxima"),
             _engine_err("matlab"),
         ])
+        assert result.outcome == ConsensusOutcome.VALID
+        assert result.agree_count == 2
+        assert "fallback" in result.detail
+
+    def test_three_engines_two_invalid_one_error(self):
+        """Three engines, 2 invalid + 1 error → INVALID (fallback: 2 agree)."""
+        result = apply_consensus([
+            _engine_ok("sympy", valid=False),
+            _engine_ok("maxima", valid=False),
+            _engine_err("matlab"),
+        ])
+        assert result.outcome == ConsensusOutcome.INVALID
+        assert result.agree_count == 2
+        assert "fallback" in result.detail
+
+    def test_three_engines_one_valid_two_error(self):
+        """Three engines, 1 valid + 2 error → PARTIAL (only 1 succeeded)."""
+        result = apply_consensus([
+            _engine_ok("sympy"),
+            _engine_err("maxima"),
+            _engine_err("matlab"),
+        ])
         assert result.outcome == ConsensusOutcome.PARTIAL
+        assert result.agree_count == 1
 
 
 class TestConsensusResult:

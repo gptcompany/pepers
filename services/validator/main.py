@@ -11,7 +11,7 @@ Environment:
     RP_VALIDATOR_PORT=8773                    # Service port (default: 8773)
     RP_VALIDATOR_CAS_URL=http://localhost:8769 # CAS microservice URL
     RP_VALIDATOR_MAX_FORMULAS=50              # Default batch size
-    RP_VALIDATOR_ENGINES=sympy,maxima         # Comma-separated engine list
+    RP_VALIDATOR_ENGINES=matlab,sympy,maxima   # Comma-separated engine list
     RP_DB_PATH=data/research.db              # SQLite database path
     RP_LOG_LEVEL=INFO                        # Log level
 """
@@ -41,7 +41,7 @@ class ValidatorHandler(BaseHandler):
 
     cas_url: str = "http://localhost:8769"
     max_formulas_default: int = 50
-    engines: list[str] = ["sympy", "maxima"]
+    engines: list[str] = ["matlab", "sympy", "maxima"]
 
     @route("POST", "/process")
     def handle_process(self, data: dict) -> dict | None:
@@ -53,7 +53,7 @@ class ValidatorHandler(BaseHandler):
                 "formula_id": 456,
                 "max_formulas": 50,
                 "force": false,
-                "engines": ["sympy", "maxima"]
+                "engines": ["matlab", "sympy", "maxima"]
             }
         """
         start = time.time()
@@ -281,7 +281,7 @@ def main() -> None:
     ValidatorHandler.max_formulas_default = int(
         os.environ.get("RP_VALIDATOR_MAX_FORMULAS", "50")
     )
-    engines_str = os.environ.get("RP_VALIDATOR_ENGINES", "sympy,maxima")
+    engines_str = os.environ.get("RP_VALIDATOR_ENGINES", "matlab,sympy,maxima")
     ValidatorHandler.engines = [e.strip() for e in engines_str.split(",")]
 
     service = BaseService(

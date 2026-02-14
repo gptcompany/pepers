@@ -28,19 +28,14 @@ class ConsensusResult:
 def apply_consensus(engine_results: list) -> ConsensusResult:
     """Apply consensus logic to per-engine validation results.
 
-    Decision matrix (2 engines: SymPy + Maxima):
+    Supports 2+ engines with graceful degradation (fallback). If an engine
+    fails but >=2 others succeed and agree, their consensus is used.
 
-    | SymPy      | Maxima     | Outcome      |
-    |------------|------------|--------------|
-    | valid      | valid      | VALID        |
-    | valid      | invalid    | INVALID      |
-    | invalid    | valid      | INVALID      |
-    | invalid    | invalid    | INVALID      |
-    | valid      | error      | PARTIAL      |
-    | error      | valid      | PARTIAL      |
-    | invalid    | error      | PARTIAL      |
-    | error      | invalid    | PARTIAL      |
-    | error      | error      | UNPARSEABLE  |
+    Decision logic:
+      0 succeed           → UNPARSEABLE
+      1 succeeds          → PARTIAL  (insufficient for consensus)
+      >=2 succeed, agree  → VALID or INVALID
+      >=2 succeed, split  → INVALID  (disagreement)
     """
     successful = [r for r in engine_results if r.success]
     failed = [r for r in engine_results if not r.success]
@@ -53,7 +48,7 @@ def apply_consensus(engine_results: list) -> ConsensusResult:
             agree_count=0,
         )
 
-    if len(failed) > 0 and len(successful) > 0:
+    if len(successful) == 1:
         ok_engine = successful[0]
         return ConsensusResult(
             outcome=ConsensusOutcome.PARTIAL,
@@ -62,14 +57,19 @@ def apply_consensus(engine_results: list) -> ConsensusResult:
             agree_count=1,
         )
 
-    # All engines succeeded — check agreement
+    # >=2 engines succeeded — check agreement (fallback: ignore failed engines)
     valid_results = [r for r in successful if r.is_valid]
     invalid_results = [r for r in successful if not r.is_valid]
+
+    failed_note = ""
+    if failed:
+        failed_names = ", ".join(r.engine for r in failed)
+        failed_note = f" ({failed_names} errored, fallback used)"
 
     if len(valid_results) == len(successful):
         return ConsensusResult(
             outcome=ConsensusOutcome.VALID,
-            detail=f"All {len(successful)} engines agree: valid",
+            detail=f"All {len(successful)} engines agree: valid{failed_note}",
             engine_count=len(engine_results),
             agree_count=len(successful),
         )
@@ -77,7 +77,7 @@ def apply_consensus(engine_results: list) -> ConsensusResult:
     if len(invalid_results) == len(successful):
         return ConsensusResult(
             outcome=ConsensusOutcome.INVALID,
-            detail=f"All {len(successful)} engines agree: invalid",
+            detail=f"All {len(successful)} engines agree: invalid{failed_note}",
             engine_count=len(engine_results),
             agree_count=len(successful),
         )
@@ -85,7 +85,7 @@ def apply_consensus(engine_results: list) -> ConsensusResult:
     # Disagreement
     return ConsensusResult(
         outcome=ConsensusOutcome.INVALID,
-        detail=f"Engines disagree: {len(valid_results)} valid, {len(invalid_results)} invalid",
+        detail=f"Engines disagree: {len(valid_results)} valid, {len(invalid_results)} invalid{failed_note}",
         engine_count=len(engine_results),
         agree_count=max(len(valid_results), len(invalid_results)),
     )
