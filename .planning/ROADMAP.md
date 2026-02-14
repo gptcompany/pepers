@@ -15,7 +15,7 @@ None
 - [✅ v3.0 Analyzer Service](milestones/v3.0-ROADMAP.md) (Phases 8-10) — SHIPPED 2026-02-13
 - [✅ v4.0 Extractor Service](milestones/v4.0-ROADMAP.md) (Phases 11-13) — SHIPPED 2026-02-13
 - [✅ v5.0 Validator Service](milestones/v5.0-ROADMAP.md) (Phases 14-16) — SHIPPED 2026-02-14
-- [🚧 v6.0 Codegen Service](milestones/v6.0-ROADMAP.md) (Phases 17-19) — in progress
+- [✅ v6.0 Codegen Service](milestones/v6.0-ROADMAP.md) (Phases 17-19) — SHIPPED 2026-02-14
 
 ## Phases
 
@@ -65,7 +65,7 @@ None
 
 </details>
 
-### 🚧 v6.0 Codegen Service (In Progress)
+### ✅ v6.0 Codegen Service — SHIPPED 2026-02-14
 
 **Milestone Goal:** LLM-powered plain-language explanation of validated formulas, Python code generation via SymPy, and AST-based Rust code generation — completing the pipeline from math to production code.
 
@@ -97,7 +97,7 @@ Plans:
 **Plans**: TBD
 
 Plans:
-- [ ] 19-01: TBD
+- [x] 19-01: Codegen Service Test Suite — completed 2026-02-14
 
 ## Progress
 
@@ -121,4 +121,4 @@ Plans:
 | 16. Testing | v5.0 | 1/1 | Complete | 2026-02-14 |
 | 17. Codegen Research & Design | v6.0 | 1/1 | Complete | 2026-02-14 |
 | 18. Codegen Implementation | v6.0 | 1/1 | Complete | 2026-02-14 |
-| 19. Codegen Testing | v6.0 | 0/? | Not started | - |
+| 19. Codegen Testing | v6.0 | 1/1 | Complete | 2026-02-14 |

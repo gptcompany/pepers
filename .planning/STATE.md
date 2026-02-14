@@ -5,16 +5,16 @@
 See: .planning/PROJECT.md (updated 2026-02-14)
 
 **Core value:** Reliable, N8N-free academic paper processing pipeline
-**Current focus:** v6.0 Codegen Service — Testing (Phase 19)
+**Current focus:** v6.0 Codegen Service — COMPLETE
 
 ## Current Position
 
-Phase: 18 of 19 (Codegen Implementation) — COMPLETE
-Plan: 18-01 executed (confidence: 98%)
-Status: Implementation complete, ready for Phase 19 (Testing)
-Last activity: 2026-02-14 — Phase 18 implementation complete
+Phase: 19 of 19 (Codegen Testing) — COMPLETE
+Plan: 19-01 executed — 69 new tests, 86% coverage
+Status: Milestone v6.0 complete
+Last activity: 2026-02-14 — Phase 19 test suite complete
 
-Progress: 5/7 milestones shipped
+Progress: 6/7 milestones shipped
 
 ## Shipped Milestones
 
@@ -23,10 +23,10 @@ Progress: 5/7 milestones shipped
 - v3.0 Analyzer: 3 phases, 600 LOC + 1301 LOC tests — 2026-02-13
 - v4.0 Extractor: 3 phases, 644 LOC + 999 LOC tests — 2026-02-13
 - v5.0 Validator: 3 phases, 1178 LOC + 751 LOC tests — 2026-02-14
+- v6.0 Codegen: 3 phases, 806 LOC + 960 LOC tests — 2026-02-14
 
 ## Remaining Milestones
 
-- v6.0 Codegen (Python/Rust generation) — Phase 18 done, Phase 19 pending
 - v7.0 Orchestrator + Deploy (systemd, monitoring)
 
 ## Phase 18 Summary
@@ -61,9 +61,19 @@ Progress: 5/7 milestones shipped
 - Milestone v6.0 created: Codegen Service (LLM explanation + Python/Rust codegen), 3 phases (Phase 17-19)
 - Phase 17 (Research & Design): DESIGN.md complete
 - Phase 18 (Implementation): Codegen service complete (806 LOC)
+- Phase 19 (Testing): Test suite complete (69 tests, 960 LOC, 86% coverage)
+
+## Phase 19 Summary
+
+- tests/unit/test_codegen.py: 330 LOC — 39 tests (generators + explain mocked)
+- tests/integration/test_codegen_db.py: 367 LOC — 20 tests (DB ops + HTTP endpoint)
+- tests/e2e/test_codegen_e2e.py: 263 LOC — 10 tests (real SymPy + real Ollama)
+- Total: 403 tests pass, 0 regressions (was 344)
+- Coverage: explain.py 100%, generators.py 88%, main.py 82%
+- Confidence gate: Plan 95%, Implementation 92%
 
 ## Session Continuity
 
 Last session: 2026-02-14
-Stopped at: Phase 18 complete, ready for Phase 19
-Resume file: session-1771077732260-8zsnvo
+Stopped at: Phase 19 complete, v6.0 milestone shipped
+Resume file: None

@@ -256,6 +256,39 @@ def extracted_formula_db(initialized_db, sample_paper_row):
     return initialized_db
 
 
+# ---------------------------------------------------------------------------
+# Codegen service fixtures
+# ---------------------------------------------------------------------------
+
+
+@pytest.fixture
+def validated_formula_db(initialized_db, sample_paper_row):
+    """DB with one paper + validated formula ready for codegen."""
+    from services.discovery.main import upsert_paper
+    from services.analyzer.main import migrate_db
+
+    row = dict(sample_paper_row)
+    row["stage"] = "validated"
+    upsert_paper(str(initialized_db), row)
+    migrate_db(str(initialized_db))
+
+    from shared.db import transaction
+
+    with transaction(str(initialized_db)) as conn:
+        conn.execute(
+            "INSERT INTO formulas (paper_id, latex, latex_hash, context, stage) "
+            "VALUES (?, ?, ?, ?, ?)",
+            (
+                1,
+                r"f^* = \frac{p}{a} - \frac{q}{b}",
+                "codegen_hash_1",
+                "Kelly criterion optimal bet fraction",
+                "validated",
+            ),
+        )
+    return initialized_db
+
+
 @pytest.fixture
 def sample_markdown_with_formulas():
     """Realistic markdown text with various LaTeX formula types."""
