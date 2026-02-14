@@ -10,9 +10,9 @@ See: .planning/PROJECT.md (updated 2026-02-14)
 ## Current Position
 
 Phase: 17 of 19 (Codegen Research & Design)
-Plan: Not started
-Status: Ready to plan
-Last activity: 2026-02-14 — Milestone v6.0 created
+Plan: Not started — RESEARCH.md + CONTEXT.md done, need PLAN
+Status: Research complete, ready for plan creation
+Last activity: 2026-02-14 — Phase 17 research + context complete
 
 Progress: 5/7 milestones shipped
 
