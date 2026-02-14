@@ -222,6 +222,40 @@ def analyzed_paper_db(initialized_db, sample_paper_row):
     return initialized_db
 
 
+# ---------------------------------------------------------------------------
+# Validator service fixtures
+# ---------------------------------------------------------------------------
+
+
+@pytest.fixture
+def extracted_formula_db(initialized_db, sample_paper_row):
+    """DB with one paper + extracted formula ready for validation."""
+    from services.discovery.main import upsert_paper
+    from services.analyzer.main import migrate_db
+
+    row = dict(sample_paper_row)
+    row["stage"] = "extracted"
+    upsert_paper(str(initialized_db), row)
+    migrate_db(str(initialized_db))
+
+    from shared.db import transaction
+
+    with transaction(str(initialized_db)) as conn:
+        conn.execute(
+            "INSERT INTO formulas (paper_id, latex, latex_hash, description, "
+            "formula_type, stage) VALUES (?, ?, ?, ?, ?, ?)",
+            (
+                1,
+                r"f^* = \frac{p}{a} - \frac{q}{b}",
+                "abc123",
+                "Kelly criterion optimal fraction",
+                "equation",
+                "extracted",
+            ),
+        )
+    return initialized_db
+
+
 @pytest.fixture
 def sample_markdown_with_formulas():
     """Realistic markdown text with various LaTeX formula types."""

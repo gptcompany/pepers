@@ -5,16 +5,16 @@
 See: .planning/PROJECT.md (updated 2026-02-14)
 
 **Core value:** Reliable, N8N-free academic paper processing pipeline
-**Current focus:** v5.0 Validator Service — Multi-CAS consensus validation
+**Current focus:** v5.0 Validator Service — COMPLETE
 
 ## Current Position
 
-Phase: 15 of 16 (Implementation) — COMPLETE
-Plan: 15-01 (CAS Microservice) + 15-02 (Validator Service) — both done
-Status: Ready for Phase 16 (Testing)
-Last activity: 2026-02-14 — Phase 15 implementation complete
+Phase: 16 of 16 (Testing) — COMPLETE
+Plan: 16-01 (Validator Test Suite) — done
+Status: v5.0 Milestone COMPLETE, ready for v6.0
+Last activity: 2026-02-14 — Phase 16 testing complete
 
-Progress: 4/7 milestones shipped
+Progress: 5/7 milestones shipped
 
 ## Shipped Milestones
 
@@ -22,35 +22,37 @@ Progress: 4/7 milestones shipped
 - v2.0 Discovery: 3 phases, 448 LOC — 2026-02-12
 - v3.0 Analyzer: 3 phases, 600 LOC + 1301 LOC tests — 2026-02-13
 - v4.0 Extractor: 3 phases, 644 LOC + 999 LOC tests — 2026-02-13
+- v5.0 Validator: 3 phases, 1178 LOC + 751 LOC tests — 2026-02-14
 
 ## Remaining Milestones
 
-- v5.0 Validator (Multi-CAS consensus) ← IN PROGRESS (Phase 15 done, Phase 16 next)
 - v6.0 Codegen (Python/Rust generation)
 - v7.0 Orchestrator + Deploy (systemd, monitoring)
 
-## Phase 15 Results
+## Phase 16 Results
 
-- CAS Microservice: 698 LOC, /media/sam/1TB/cas-service/ (standalone repo)
-  - SymPy 1.14.0 + Maxima 5.45.1 engines
-  - 4-phase LaTeX preprocessing pipeline
-  - E2E verified: expressions + equations
-- Validator Service: 480 LOC, services/validator/ (3 modules)
-  - Consensus: VALID/INVALID/PARTIAL/UNPARSEABLE
-  - CAS client: stdlib urllib.request (no new deps)
-  - DB: validations table + formula stage transitions
-- Total: 1178 LOC, all 296+ existing tests pass (zero regressions)
+- 56 new tests: 30 unit + 18 integration + 8 E2E
+- 363 total tests (was 307), all passing
+- Coverage: 87% on validator module (consensus.py 100%, cas_client.py 96%)
+- E2E with real CAS: SymPy + Maxima on real formulas
+- MATLAB engine: temporarily unavailable (license expired, will return)
+
+## v5.0 Totals
+
+- CAS Microservice: 698 LOC (standalone repo /media/sam/1TB/cas-service/)
+- Validator Service: 480 LOC (services/validator/, 3 modules)
+- Test Suite: 56 tests, 751 LOC, 87% coverage
+- Total v5.0: 1178 impl LOC + 751 test LOC
 
 ## Blockers/Concerns Carried Forward
 
-- CAS microservice: NEW implementation replaces broken N8N_dev version
-  - SymPy + Maxima work, SageMath/MATLAB dropped (SymPy is more reliable)
+- MATLAB license: temporarily unavailable (CAS service has SymPy + Maxima working)
 - Gemini API: intermittent 503/429 errors (confidence gate rate-limited)
 
 ## Constraints (v5.0)
 
-- CAS microservice: NEW standalone repo at /media/sam/1TB/cas-service/
-- SymPy + Maxima as CAS engines (replaced broken SageMath/MATLAB)
+- CAS microservice: standalone repo at /media/sam/1TB/cas-service/
+- SymPy + Maxima as primary CAS engines
 - Consensus: both engines must agree for VALID
 - Engine timeouts handled (SymPy 5s, Maxima 10s)
 
@@ -64,9 +66,10 @@ Progress: 4/7 milestones shipped
 - Milestone v5.0 created: Multi-CAS formula validation with consensus, 3 phases (Phase 14-16)
 - Phase 14 (Research & Design): DESIGN.md complete
 - Phase 15 (Implementation): CAS + Validator services complete
+- Phase 16 (Testing): Full test suite complete
 
 ## Session Continuity
 
 Last session: 2026-02-14
-Stopped at: Phase 15 complete, ready for Phase 16 (Testing)
+Stopped at: v5.0 complete, ready for v6.0
 Resume file: None

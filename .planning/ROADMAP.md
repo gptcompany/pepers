@@ -14,7 +14,7 @@ None
 - [✅ v2.0 Discovery Service](milestones/v2.0-ROADMAP.md) (Phases 5-7) — SHIPPED 2026-02-12
 - [✅ v3.0 Analyzer Service](milestones/v3.0-ROADMAP.md) (Phases 8-10) — SHIPPED 2026-02-13
 - [✅ v4.0 Extractor Service](milestones/v4.0-ROADMAP.md) (Phases 11-13) — SHIPPED 2026-02-13
-- 🚧 **v5.0 Validator Service** - Phases 14-16 (in progress)
+- [✅ v5.0 Validator Service](milestones/v5.0-ROADMAP.md) (Phases 14-16) — SHIPPED 2026-02-14
 
 ## Phases
 
@@ -55,40 +55,14 @@ None
 
 </details>
 
-### 🚧 v5.0 Validator Service (In Progress)
+<details>
+<summary>✅ v5.0 Validator Service (Phases 14-16) — SHIPPED 2026-02-14</summary>
 
-**Milestone Goal:** Multi-CAS formula validation with all-or-nothing consensus, including CAS microservice fix and detailed reporting
+- [x] **Phase 14: Research & Design** (1/1 plans) — completed 2026-02-14
+- [x] **Phase 15: Implementation** (2/2 plans) — completed 2026-02-14
+- [x] **Phase 16: Testing** (1/1 plans) — completed 2026-02-14
 
-#### Phase 14: Research & Design
-
-**Goal**: Investigate CAS microservice fix (SageMath engine failure), design validator service architecture, consensus logic, LaTeX simplification pipeline, validation report format
-**Depends on**: Previous milestone complete
-**Research**: Likely (CAS microservice debugging, external service integration at :8769)
-**Research topics**: SageMath engine failure root cause in /media/sam/1TB/N8N_dev, SymPy API for formula parsing, LaTeX simplification approaches
-**Plans**: TBD
-
-Plans:
-- [ ] 14-01: TBD (run /gsd:plan-phase 14 to break down)
-
-#### Phase 15: Implementation
-
-**Goal**: Fix CAS microservice SageMath engine, implement Validator service (simplification → multi-CAS dispatch → consensus → report → DB update)
-**Depends on**: Phase 14
-**Research**: Unlikely (implementing based on design)
-**Plans**: TBD
-
-Plans:
-- [ ] 15-01: TBD
-
-#### Phase 16: Testing
-
-**Goal**: Unit tests (simplification, consensus logic), integration tests (CAS mock), E2E tests with real CAS engines
-**Depends on**: Phase 15
-**Research**: Unlikely (testing patterns established from v1.0-v4.0)
-**Plans**: TBD
-
-Plans:
-- [ ] 16-01: TBD
+</details>
 
 ## Progress
 
@@ -107,6 +81,6 @@ Plans:
 | 11. Extractor Research & Design | v4.0 | 1/1 | Complete | 2026-02-13 |
 | 12. Extractor Implementation | v4.0 | 1/1 | Complete | 2026-02-13 |
 | 13. Extractor Testing | v4.0 | 1/1 | Complete | 2026-02-13 |
-| 14. Research & Design | v5.0 | 0/? | Not started | - |
-| 15. Implementation | v5.0 | 0/? | Not started | - |
-| 16. Testing | v5.0 | 0/? | Not started | - |
+| 14. Research & Design | v5.0 | 1/1 | Complete | 2026-02-14 |
+| 15. Implementation | v5.0 | 2/2 | Complete | 2026-02-14 |
+| 16. Testing | v5.0 | 1/1 | Complete | 2026-02-14 |
