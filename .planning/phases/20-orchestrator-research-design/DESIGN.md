@@ -105,6 +105,13 @@ Starts a pipeline run. Supports three modes:
 }
 ```
 
+**Input validation rules:**
+- `query` and `paper_id` are **mutually exclusive** — return 422 if both provided
+- `paper_id` must reference an existing paper — return 404 if not found
+- If `paper_id` points to a paper in terminal stage (`complete`, `failed`, `rejected`): return 422 unless `force=true`
+- If `force=true` on a `rejected` paper: re-analyze from `discovered` stage
+- If `force=true` on a `failed` paper: retry from the stage where it failed
+
 **Mode resolution logic:**
 1. If `query` provided → start from Discovery, then continue for `stages` stages
 2. If `paper_id` provided → determine paper's current stage, advance `stages` stages
@@ -187,6 +194,8 @@ Calls each service's `/health` endpoint and returns aggregated status.
     }
 }
 ```
+
+Each `/health` call uses a strict 3-second timeout. If a service doesn't respond within 3s, it's marked as `"error"`.
 
 If a service is unreachable:
 ```json
@@ -353,6 +362,31 @@ If all retries fail:
 
 ## 4. Error Handling & Retry
 
+### Concurrency Control (Run Lock)
+
+The orchestrator must prevent overlapping pipeline runs. Both cron triggers and manual `POST /run` requests execute the same pipeline logic. Without a lock, concurrent runs would cause interleaved service calls and potential SQLITE_BUSY errors.
+
+**Implementation: in-process threading lock.**
+
+```python
+import threading
+
+_run_lock = threading.Lock()
+
+def execute_run(params):
+    acquired = _run_lock.acquire(blocking=False)
+    if not acquired:
+        raise RunInProgressError("A pipeline run is already in progress")
+    try:
+        return _do_run(params)
+    finally:
+        _run_lock.release()
+```
+
+- `POST /run` while another run is active → return 409 Conflict with `{"error": "Pipeline run already in progress", "code": "RUN_IN_PROGRESS"}`
+- Cron trigger while a manual run is active → skip silently, log warning
+- This is sufficient because the orchestrator is a single process (no multi-instance deployment)
+
 ### Per-Paper Error Isolation
 
 One paper failing does NOT block the batch. Each service already implements per-paper error isolation:
@@ -373,13 +407,32 @@ When a service `/process` call fails at the HTTP level (connection refused, 5xx,
 | Max retries | 3 | `RP_ORCHESTRATOR_RETRY_MAX` |
 | Backoff base | 4.0 seconds | `RP_ORCHESTRATOR_RETRY_BACKOFF` |
 | Backoff formula | `base^attempt` → 1s, 4s, 16s | — |
-| Request timeout | 300s (5 min) | `RP_ORCHESTRATOR_TIMEOUT` |
+| Request timeout (default) | 300s (5 min) | `RP_ORCHESTRATOR_TIMEOUT` |
+
+**Per-service timeouts** (override default 300s):
+
+| Service | Timeout | Rationale |
+|---------|---------|-----------|
+| Discovery | 120s | arXiv API + S2 enrichment |
+| Analyzer | 300s | LLM calls with fallback chain |
+| Extractor | 600s | PDF download + RAGAnything processing |
+| Validator | 300s | CAS validation batch |
+| Codegen | 300s | LLM explanation + SymPy codegen |
 
 ```python
-def call_service_with_retry(url, params, max_retries=3, backoff=4.0):
+SERVICE_TIMEOUTS = {
+    "discovery": 120,
+    "analyzer": 300,
+    "extractor": 600,
+    "validator": 300,
+    "codegen": 300,
+}
+
+def call_service_with_retry(service_name, url, params, max_retries=3, backoff=4.0):
+    timeout = SERVICE_TIMEOUTS.get(service_name, 300)
     for attempt in range(max_retries + 1):
         try:
-            resp = requests.post(url, json=params, timeout=300)
+            resp = requests.post(url, json=params, timeout=timeout)
             if resp.status_code < 500:
                 return resp
             # 5xx: retry
@@ -387,11 +440,15 @@ def call_service_with_retry(url, params, max_retries=3, backoff=4.0):
             pass  # retry
 
         if attempt < max_retries:
-            delay = backoff ** attempt  # 1, 4, 16
+            delay = backoff ** attempt  # 4^0=1s, 4^1=4s, 4^2=16s
             time.sleep(delay)
 
-    raise ServiceUnavailableError(f"{url} failed after {max_retries} retries")
+    raise ServiceUnavailableError(
+        f"{service_name} at {url} failed after {max_retries+1} attempts"
+    )
 ```
+
+**Retry terminology:** `max_retries=3` means 4 total attempts (1 initial + 3 retries). Delay schedule: 1s → 4s → 16s (formula: `backoff^attempt` where attempt is 0-indexed).
 
 ### Retry Scope
 
@@ -406,6 +463,27 @@ After max retries exhausted for a stage:
 2. Record the failure in the run results
 3. **Continue to next stage** — other papers at the right stage may still be processable
 4. Mark the run status as `"partial"` (not `"completed"`)
+
+**Important:** "continue to next stage" means the orchestrator calls the next service in the pipeline. That service will process whatever papers/formulas are available at its input stage — these may include backlog from previous runs, not just items from the current run. Each run is a **maintenance sweep**, not a strict causal DAG.
+
+### Run Tracking Persistence
+
+Pipeline runs are tracked **in-memory** (dict of recent runs). This is sufficient because:
+- Run history is not critical data (papers table has the real state)
+- Orchestrator restarts are rare (Docker `restart: unless-stopped`)
+- `/status` endpoint is for operational monitoring, not audit trail
+
+```python
+_recent_runs: list[dict] = []  # Last 50 runs, LIFO
+_MAX_RUNS = 50
+
+def record_run(run_result: dict) -> None:
+    _recent_runs.insert(0, run_result)
+    if len(_recent_runs) > _MAX_RUNS:
+        _recent_runs.pop()
+```
+
+The `/status` endpoint queries the DB for `papers_by_stage` and `formulas_by_stage` (always accurate), and uses in-memory `_recent_runs` for `last_run` and `recent_errors` (best-effort, lost on restart).
 
 ---
 
@@ -469,7 +547,9 @@ All containers use `network_mode: host` because:
 - Simplest networking, zero port mapping confusion
 - No NAT overhead
 
-**Trade-off**: No network isolation between containers. Acceptable for a single-machine deployment.
+**Trade-off**: No network isolation between containers. Acceptable for a single-machine Linux deployment. Not portable to Docker Desktop (macOS/Windows) where `network_mode: host` behaves differently. This is by design — the pipeline runs exclusively on Workstation (192.168.1.111, Ubuntu 22.04).
+
+**Compose version requirement**: Docker Compose v2.20.2+ (for `depends_on.restart: true` and `condition: service_healthy`).
 
 ### docker-compose.yml
 
@@ -495,7 +575,7 @@ services:
     restart: unless-stopped
     healthcheck:
       test: ["CMD", "python", "-c",
-        "import urllib.request; urllib.request.urlopen('http://localhost:8770/health')"]
+        "import urllib.request; urllib.request.urlopen('http://localhost:8770/health', timeout=3)"]
       interval: 30s
       timeout: 5s
       retries: 3
@@ -521,7 +601,7 @@ services:
     restart: unless-stopped
     healthcheck:
       test: ["CMD", "python", "-c",
-        "import urllib.request; urllib.request.urlopen('http://localhost:8771/health')"]
+        "import urllib.request; urllib.request.urlopen('http://localhost:8771/health', timeout=3)"]
       interval: 30s
       timeout: 5s
       retries: 3
@@ -552,7 +632,7 @@ services:
     restart: unless-stopped
     healthcheck:
       test: ["CMD", "python", "-c",
-        "import urllib.request; urllib.request.urlopen('http://localhost:8772/health')"]
+        "import urllib.request; urllib.request.urlopen('http://localhost:8772/health', timeout=3)"]
       interval: 30s
       timeout: 5s
       retries: 3
@@ -583,7 +663,7 @@ services:
     restart: unless-stopped
     healthcheck:
       test: ["CMD", "python", "-c",
-        "import urllib.request; urllib.request.urlopen('http://localhost:8773/health')"]
+        "import urllib.request; urllib.request.urlopen('http://localhost:8773/health', timeout=3)"]
       interval: 30s
       timeout: 5s
       retries: 3
@@ -613,7 +693,7 @@ services:
     restart: unless-stopped
     healthcheck:
       test: ["CMD", "python", "-c",
-        "import urllib.request; urllib.request.urlopen('http://localhost:8774/health')"]
+        "import urllib.request; urllib.request.urlopen('http://localhost:8774/health', timeout=3)"]
       interval: 30s
       timeout: 5s
       retries: 3
@@ -633,10 +713,10 @@ services:
     environment:
       - RP_ORCHESTRATOR_PORT=8775
       - RP_DB_PATH=/data/research.db
-      - RP_ORCHESTRATOR_CRON=0 8 * * *
+      - "RP_ORCHESTRATOR_CRON=0 8 * * *"
       - RP_ORCHESTRATOR_CRON_ENABLED=true
       - RP_ORCHESTRATOR_STAGES_PER_RUN=5
-      - RP_ORCHESTRATOR_DEFAULT_QUERY=abs:"Kelly criterion" AND cat:q-fin.*
+      - 'RP_ORCHESTRATOR_DEFAULT_QUERY=abs:"Kelly criterion" AND cat:q-fin.*'
       - RP_ORCHESTRATOR_RETRY_MAX=3
       - RP_ORCHESTRATOR_RETRY_BACKOFF=4.0
       - RP_ORCHESTRATOR_TIMEOUT=300
@@ -648,7 +728,7 @@ services:
     restart: unless-stopped
     healthcheck:
       test: ["CMD", "python", "-c",
-        "import urllib.request; urllib.request.urlopen('http://localhost:8775/health')"]
+        "import urllib.request; urllib.request.urlopen('http://localhost:8775/health', timeout=3)"]
       interval: 30s
       timeout: 5s
       retries: 3
@@ -667,7 +747,7 @@ volumes:
 
 All 6 containers share a single named volume `sqlite-data` mounted at `/data`:
 - **WAL mode**: Already configured in `shared/db.py` (`PRAGMA journal_mode=WAL`)
-- **busy_timeout**: Not yet set (to be added in Phase 21: `PRAGMA busy_timeout=5000`)
+- **busy_timeout**: Must be added in Phase 21 to `shared/db.py`: `PRAGMA busy_timeout=5000` (5s wait on lock contention)
 - **Same UID**: All containers run as `user: "1000:1000"` — required for WAL SHM file access
 - **Sequential writes**: Orchestrator calls services one-at-a-time, so concurrent writer conflicts are impossible
 - **Named volume**: Linux native filesystem, not NFS — WAL locking works correctly
