@@ -1,5 +1,33 @@
 # Project Milestones: Research Pipeline
 
+## v7.0 Orchestrator + Deploy (Shipped: 2026-02-14)
+
+**Delivered:** End-to-end pipeline orchestration with HTTP trigger (POST /run), optional APScheduler cron (disabled by default), exponential backoff retry, and Docker Compose deployment for all 6 microservices.
+
+**Phases completed:** 20-22 (3 plans total)
+
+**Key accomplishments:**
+
+- Orchestrator service (625 LOC): PipelineRunner with stage dispatch, retry (3 attempts, 1s/4s/16s backoff), pipeline status
+- Docker deployment: multi-stage Dockerfile + docker-compose.yml (6 services, network_mode:host, health checks)
+- 63 new tests (43 unit + 15 integration + 5 E2E), 816 LOC — total project: 495 tests
+- Bug fix: DB stage→service name mapping (DB_STAGE_INDEX)
+- MATLAB engine added to validator with fallback consensus (>=2 engines agree → VALID/INVALID)
+- Complete pipeline: arXiv → S2/CrossRef → LLM analysis → PDF/RAG → LaTeX regex → CAS consensus → SymPy codegen
+
+**Stats:**
+
+- 29 files changed, 3,528 insertions
+- 850 LOC service + 816 LOC tests = 1,666 LOC
+- 3 phases, 3 plans
+- 1 day (2026-02-14)
+
+**Git range:** `e4a0f0e` → `7dccf86`
+
+**What's next:** Production deployment, monitoring integration (Prometheus alerts, Grafana dashboard)
+
+---
+
 ## v6.0 Codegen Service (Shipped: 2026-02-14)
 
 **Delivered:** LLM-powered plain-language formula explanation + multi-language code generation (C99/Rust/Python via SymPy) — completing the pipeline from validated math to production code.

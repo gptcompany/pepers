@@ -5,14 +5,13 @@
 See: .planning/PROJECT.md (updated 2026-02-14)
 
 **Core value:** Reliable, N8N-free academic paper processing pipeline
-**Current focus:** v7.0 COMPLETE — all milestones shipped
+**Current focus:** v7.0 SHIPPED — all milestones archived
 
 ## Current Position
 
-Phase: 22 of 22 (Testing & Integration) — COMPLETE
-Plan: 22-01 complete (1/1)
-Status: ALL MILESTONES COMPLETE
-Last activity: 2026-02-14 — v7.0 milestone complete
+Phase: 22 of 22 — ALL COMPLETE
+Status: v7.0 archived, tagged, ready for production
+Last activity: 2026-02-14 — v7.0 milestone archived
 
 Progress: 7/7 milestones shipped
 
@@ -28,32 +27,27 @@ Progress: 7/7 milestones shipped
 
 ## Final Stats
 
-- **Total tests**: 495 (461 non-e2e + 34 e2e), all passing
+- **Total tests**: 497 (463 non-e2e + 34 e2e), all passing
 - **Total LOC**: ~7,500+ across 6 services + shared library + Docker
 - **Services**: 6 microservices (ports 8770-8775) + Docker Compose
 - **Duration**: 5 days (2026-02-10 to 2026-02-14)
+- **CAS engines**: MATLAB + SymPy + Maxima with fallback consensus
 
 ## Blockers/Concerns Carried Forward
 
-- MATLAB license: temporarily unavailable (CAS service has SymPy + Maxima working)
+- MATLAB license: NOW AVAILABLE (added as first engine with fallback consensus)
 - Gemini API: intermittent 503/429 errors (orchestrator retry handles: 3 retries, exponential backoff)
 
 ## Future Tasks
 
+- Full E2E smoke test: real papers through entire pipeline (planned next session)
+- Monitoring integration: Prometheus alerts, Grafana dashboard
 - Isolate RAGAnything from N8N_dev into own repo
 - Decommission old CAS service from N8N_dev
 - Deploy Docker stack to Workstation (production run)
 
-## Roadmap Evolution
-
-- Milestone v7.0 created: Orchestrator + Deploy, 3 phases (Phase 20-22)
-- Phase 20 complete: DESIGN.md with full architecture, Docker in-scope
-- Phase 21 complete: Orchestrator (617 LOC) + Dockerfile + docker-compose.yml (223 LOC)
-- Phase 22 complete: 63 new tests (43 unit + 15 integration + 5 e2e), 816 LOC tests
-- Bug fix: DB stage → service name mapping in _resolve_stages()
-
 ## Session Continuity
 
 Last session: 2026-02-14
-Stopped at: ALL COMPLETE
+Stopped at: v7.0 milestone archived
 Resume file: None

@@ -22,9 +22,21 @@ Reliable, N8N-free academic paper processing pipeline that discovers Kelly crite
 - ✓ Codegen service: LLM plain-language explanation + C99/Rust/Python codegen via SymPy — v6.0
 
 ### Active
-- [x] Orchestrator service (port 8775): HTTP trigger (POST /run) + configurable cron scheduling (APScheduler) — v7.0
-- [x] Docker Compose deployment: all 6 services, shared SQLite volume, health checks, startup ordering — v7.0
 - [ ] Monitoring integration: process-exporter config, Prometheus alert rules, Grafana dashboard
+- [ ] Production deployment: `docker compose up` on Workstation
+
+### Validated
+
+- ✓ Shared library: DB connection pool, Pydantic models, base HTTP server, config management — v1.0
+- ✓ Each service exposes /health, /status, /process endpoints — v1.0
+- ✓ dotenvx secret management aligned with SSOT at /media/sam/1TB/.env — v1.0
+- ✓ Discovery service: fetch arXiv papers by keywords + enrich via Semantic Scholar/CrossRef — v2.0
+- ✓ Analyzer service: LLM analysis (triple fallback) + 5-criteria relevance scoring + routing — v3.0
+- ✓ Extractor service: PDF download + RAGAnything text extraction + 5-pass LaTeX regex + formula storage — v4.0
+- ✓ Validator service: multi-CAS validation (SymPy + Maxima + MATLAB) with fallback consensus — v5.0
+- ✓ Codegen service: LLM plain-language explanation + C99/Rust/Python codegen via SymPy — v6.0
+- ✓ Orchestrator service (port 8775): HTTP trigger (POST /run) + configurable cron scheduling (APScheduler) — v7.0
+- ✓ Docker Compose deployment: all 6 services, shared SQLite volume, health checks, startup ordering — v7.0
 
 ### Out of Scope
 
@@ -33,17 +45,16 @@ Reliable, N8N-free academic paper processing pipeline that discovers Kelly crite
 - N8N decommissioning — separate task after pipeline proven working
 - Web UI/dashboard — Grafana handles visualization
 - Message queue (Redis/RabbitMQ) — HTTP sync is sufficient for daily batch
-- ~~Docker containerization~~ — **IN SCOPE as of v7.0**: Docker Compose deployment on Workstation
 - Cross-server deployment — all services run on Workstation (192.168.1.111)
 
 ## Context
 
-**Current state (v7.0 COMPLETE — all milestones shipped):**
+**Current state (v7.0 SHIPPED — all milestones complete):**
 - Shared library: 1,055 LOC Python across 5 modules (db.py, models.py, server.py, config.py, llm.py)
 - Discovery service: 448 LOC (arXiv + S2 + CrossRef)
 - Analyzer service: 600 LOC (LLM triple fallback + 5-criteria scoring)
 - Extractor service: 644 LOC (PDF download + RAGAnything client + LaTeX regex engine)
-- Validator service: 492 LOC (CAS client + consensus + handler)
+- Validator service: 492 LOC (CAS client + fallback consensus + handler, engines: matlab/sympy/maxima)
 - Codegen service: 567 LOC (SymPy C99/Rust/Python codegen + LLM explanation)
 - CAS microservice: 698 LOC (standalone at /media/sam/1TB/cas-service/, SymPy + Maxima + MATLAB)
 - SQLite schema: 5 tables, 6 indexes, WAL mode + prompt_version migration + validations table
@@ -51,7 +62,7 @@ Reliable, N8N-free academic paper processing pipeline that discovers Kelly crite
 - 9 Pydantic models with JSON field validators + FormulaExplanation validation-only model
 - Base HTTP server with @route decorator, JSON logging, SIGTERM handling
 - Dockerfile (multi-stage) + docker-compose.yml (6 services, network_mode:host)
-- 461 non-e2e + 34 e2e = 495 total tests, 0 type errors
+- 463 non-e2e + 34 e2e = 497 total tests, 0 type errors
 - Tech stack: Python stdlib (http.server, sqlite3, logging, json) + Pydantic + google-genai + requests + SymPy
 
 **Origin**: N8N crashed in Jan 2026, external team restored 88 workflows but lost all data. The W1-W5 pipeline (17 N8N workflows) never successfully processed a paper end-to-end — all tables empty, 0 executions. Rather than fix N8N, rebuilding as standalone microservices eliminates the single point of failure.
@@ -132,5 +143,7 @@ Reliable, N8N-free academic paper processing pipeline that discovers Kelly crite
 | network_mode: host | External services (RAG:8767, CAS:8769, Ollama:11434) on host, simplest networking | — Pending |
 | Shared SQLite volume | Sequential pipeline = no concurrent writers, WAL mode safe | — Pending |
 
+| MATLAB first engine + fallback | MATLAB available, graceful degradation if down (>=2 agree → consensus) | — Pending |
+
 ---
-*Last updated: 2026-02-14 after Phase 22 — v7.0 COMPLETE (all milestones shipped)*
+*Last updated: 2026-02-14 after v7.0 milestone archived*
