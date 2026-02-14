@@ -85,10 +85,10 @@ None
 **Depends on**: v6.0 complete (all 5 services built)
 **Research**: Likely (Docker compose orchestration patterns, cron integration, microservice coordination)
 **Research topics**: Docker compose for multi-service Python apps, APScheduler vs cron for Python scheduling, retry/backoff patterns for HTTP microservice chains
-**Plans**: TBD
+**Plans**: 1/1 complete
 
 Plans:
-- [ ] 20-01: TBD (run /gsd:plan-phase 20 to break down)
+- [x] 20-01: Design orchestrator architecture + Docker deployment (DESIGN.md + PROJECT.md)
 
 #### Phase 21: Orchestrator Implementation + Docker Deploy
 
@@ -133,6 +133,6 @@ Plans:
 | 17. Codegen Research & Design | v6.0 | 1/1 | Complete | 2026-02-14 |
 | 18. Codegen Implementation | v6.0 | 1/1 | Complete | 2026-02-14 |
 | 19. Codegen Testing | v6.0 | 1/1 | Complete | 2026-02-14 |
-| 20. Orchestrator Research & Design | v7.0 | 0/? | Not started | - |
+| 20. Orchestrator Research & Design | v7.0 | 1/1 | Complete | 2026-02-14 |
 | 21. Orchestrator Implementation + Docker Deploy | v7.0 | 0/? | Not started | - |
 | 22. Testing & Integration | v7.0 | 0/? | Not started | - |

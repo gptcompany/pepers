@@ -2,7 +2,7 @@
 
 ## What This Is
 
-A set of 5 standalone Python microservices + 1 orchestrator that replaces the N8N W1-W5 research paper pipeline. Fetches academic papers from arXiv, enriches with citation data, analyzes with LLM, extracts formulas, validates with multi-CAS consensus, and generates Python/Rust code. Managed by systemd, monitored by the existing monitoring-stack (Prometheus + Grafana + Loki).
+A set of 5 standalone Python microservices + 1 orchestrator that replaces the N8N W1-W5 research paper pipeline. Fetches academic papers from arXiv, enriches with citation data, analyzes with LLM, extracts formulas, validates with multi-CAS consensus, and generates Python/Rust code. Deployed via Docker Compose on Workstation, monitored by the existing monitoring-stack (Prometheus + Grafana + Loki).
 
 ## Core Value
 
@@ -22,8 +22,8 @@ Reliable, N8N-free academic paper processing pipeline that discovers Kelly crite
 - ✓ Codegen service: LLM plain-language explanation + C99/Rust/Python codegen via SymPy — v6.0
 
 ### Active
-- [ ] Orchestrator: coordinates pipeline stages, retry logic, error handling, Discord notifications
-- [ ] systemd unit files for all 6 services + daily timer (8AM)
+- [ ] Orchestrator service (port 8775): HTTP trigger (POST /run) + configurable cron scheduling (APScheduler)
+- [ ] Docker Compose deployment: all 6 services, shared SQLite volume, health checks, startup ordering
 - [ ] Monitoring integration: process-exporter config, Prometheus alert rules, Grafana dashboard
 
 ### Out of Scope
@@ -33,12 +33,12 @@ Reliable, N8N-free academic paper processing pipeline that discovers Kelly crite
 - N8N decommissioning — separate task after pipeline proven working
 - Web UI/dashboard — Grafana handles visualization
 - Message queue (Redis/RabbitMQ) — HTTP sync is sufficient for daily batch
-- Docker containerization — systemd native services, no Docker overhead
+- ~~Docker containerization~~ — **IN SCOPE as of v7.0**: Docker Compose deployment on Workstation
 - Cross-server deployment — all services run on Workstation (192.168.1.111)
 
 ## Context
 
-**Current state (v6.0 shipped):**
+**Current state (v7.0 in progress — orchestrator design complete):**
 - Shared library: 1,055 LOC Python across 5 modules (db.py, models.py, server.py, config.py, llm.py)
 - Discovery service: 448 LOC (arXiv + S2 + CrossRef)
 - Analyzer service: 600 LOC (LLM triple fallback + 5-criteria scoring)
@@ -80,11 +80,11 @@ Reliable, N8N-free academic paper processing pipeline that discovers Kelly crite
 - **Tech stack**: Python stdlib `http.server` (same pattern as existing CAS microservice). No frameworks.
 - **Database**: SQLite with WAL mode (YAGNI — ~10 papers/day batch, zero infra overhead)
 - **Secrets**: dotenvx encrypted, aligned with SSOT `/media/sam/1TB/.env`
-- **Process mgmt**: systemd (native, journald → Loki integration)
+- **Process mgmt**: Docker Compose (health checks, restart policies, startup ordering)
 - **LLM**: Ollama qwen3:8b (local, free, already deployed)
 - **Ports**: 8770-8775 (non-conflicting with existing services)
 - **Dependencies**: External services are existing (CAS :8769, RAGAnything :8767, Ollama :11434)
-- **KISS/YAGNI**: No abstractions beyond immediate needs. No message queues, no Docker, no frameworks.
+- **KISS/YAGNI**: No abstractions beyond immediate needs. No message queues, no frameworks.
 
 ## Key Decisions
 
@@ -92,7 +92,7 @@ Reliable, N8N-free academic paper processing pipeline that discovers Kelly crite
 |----------|-----------|---------|
 | http.server over FastAPI/Flask | Match CAS microservice pattern, zero extra deps, KISS | ✓ Good |
 | Microservices over monolith | User chose for resilience + independent replaceability | — Pending |
-| systemd over PM2/process-compose | Native Linux, journald → Loki, no extra deps | — Pending |
+| Docker Compose over systemd | User chose Docker for v7.0 — single `docker-compose up`, health checks, restart policies | — Pending |
 | Single venv for all services | Shared deps (pydantic), simpler management | ✓ Good |
 | AST-based Rust codegen over regex | Original W5.3 was naive regex JS, quality was insufficient | — Pending |
 | Keep CAS/RAG in N8N_dev | Already working as standalone systemd services, no need to move | ✓ Good |
@@ -126,5 +126,9 @@ Reliable, N8N-free academic paper processing pipeline that discovers Kelly crite
 | FormulaExplanation validation-only model | JSON stored in formulas.description, no separate table | ✓ Good |
 | LLM client extraction to shared/llm.py | Reusable across analyzer + codegen, configurable fallback order | ✓ Good |
 
+| APScheduler over host cron | Pure Python, travels with Docker stack, full env var access | — Pending |
+| network_mode: host | External services (RAG:8767, CAS:8769, Ollama:11434) on host, simplest networking | — Pending |
+| Shared SQLite volume | Sequential pipeline = no concurrent writers, WAL mode safe | — Pending |
+
 ---
-*Last updated: 2026-02-14 after v6.0 milestone*
+*Last updated: 2026-02-14 after Phase 20 design (v7.0)*

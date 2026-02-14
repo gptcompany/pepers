@@ -9,10 +9,10 @@ See: .planning/PROJECT.md (updated 2026-02-14)
 
 ## Current Position
 
-Phase: 20 of 22 (Orchestrator Research & Design)
-Plan: Not started
-Status: Ready to plan
-Last activity: 2026-02-14 — Milestone v7.0 created
+Phase: 20 of 22 (Orchestrator Research & Design) — COMPLETE
+Plan: 20-01 complete (1/1)
+Status: Ready for Phase 21
+Last activity: 2026-02-14 — Phase 20 design complete
 
 Progress: 6/7 milestones shipped
 
@@ -28,14 +28,14 @@ Progress: 6/7 milestones shipped
 ## Current Milestone
 
 - v7.0 Orchestrator + Deploy (Phases 20-22)
-  - Phase 20: Orchestrator Research & Design — Not started
+  - Phase 20: Orchestrator Research & Design — COMPLETE (DESIGN.md + PROJECT.md updated)
   - Phase 21: Orchestrator Implementation + Docker Deploy — Not started
   - Phase 22: Testing & Integration — Not started
 
 ## Blockers/Concerns Carried Forward
 
 - MATLAB license: temporarily unavailable (CAS service has SymPy + Maxima working)
-- Gemini API: intermittent 503/429 errors (rate limiting needed in orchestrator)
+- Gemini API: intermittent 503/429 errors (orchestrator retry logic designed: 3 retries, exponential backoff)
 
 ## Future Tasks
 
@@ -45,9 +45,10 @@ Progress: 6/7 milestones shipped
 ## Roadmap Evolution
 
 - Milestone v7.0 created: Orchestrator + Deploy, 3 phases (Phase 20-22)
+- Phase 20 complete: DESIGN.md with full architecture, Docker in-scope
 
 ## Session Continuity
 
 Last session: 2026-02-14
-Stopped at: Milestone v7.0 initialization
+Stopped at: Phase 20 complete, ready for Phase 21
 Resume file: None
