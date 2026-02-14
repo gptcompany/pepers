@@ -110,6 +110,15 @@ Plans:
 Plans:
 - [x] 22-01: Unit, integration, and E2E tests for orchestrator (63 tests, 816 LOC)
 
+### Phase 23: E2E Smoke Test (Real Papers)
+
+**Goal**: Full pipeline smoke test with real arXiv papers — verify every service works end-to-end, honest assessment of bugs/performance/gaps
+**Depends on**: v7.0 complete + all external services running
+**Plans**: 0/1
+
+Plans:
+- [ ] 23-01: Full pipeline E2E smoke test with real papers (7 steps + confidence gates)
+
 ## Progress
 
 | Phase | Milestone | Plans Complete | Status | Completed |
@@ -136,3 +145,4 @@ Plans:
 | 20. Orchestrator Research & Design | v7.0 | 1/1 | Complete | 2026-02-14 |
 | 21. Orchestrator Implementation + Docker Deploy | v7.0 | 1/1 | Complete | 2026-02-14 |
 | 22. Testing & Integration | v7.0 | 1/1 | Complete | 2026-02-14 |
+| 23. E2E Smoke Test (Real Papers) | post-v7.0 | 0/1 | Not started | - |
