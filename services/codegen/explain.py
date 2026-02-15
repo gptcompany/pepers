@@ -35,7 +35,7 @@ Respond ONLY with valid JSON matching this schema:
   "domain": "<mathematical finance | probability | optimization | statistics>"
 }"""
 
-CODEGEN_FALLBACK_ORDER = ["ollama", "gemini_sdk", "gemini_cli"]
+CODEGEN_FALLBACK_ORDER = ["ollama", "openrouter", "gemini_cli"]
 
 
 def explain_formula(
@@ -80,7 +80,7 @@ def explain_formula(
         result, provider = fallback_chain(
             prompt=user_prompt,
             system=EXPLANATION_SYSTEM_PROMPT,
-            order=["gemini_sdk", "gemini_cli"],
+            order=["openrouter", "gemini_cli"],
         )
         return FormulaExplanation.model_validate_json(result).model_dump()
     except Exception as e:

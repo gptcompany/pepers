@@ -24,6 +24,7 @@ from __future__ import annotations
 import json
 import logging
 import os
+import re
 import time
 
 from shared.config import load_config
@@ -239,6 +240,16 @@ def _query_papers(
         return [dict(row) for row in cursor.fetchall()]
 
 
+def _clean_json_text(text: str) -> str:
+    """Clean common LLM JSON quirks before parsing."""
+    text = text.strip().lstrip("\ufeff")
+    # trailing commas: ,} or ,]
+    text = re.sub(r",\s*([}\]])", r"\1", text)
+    # single-line comments
+    text = re.sub(r"//[^\n]*", "", text)
+    return text
+
+
 def _parse_llm_response(
     response_text: str,
     prompt: str,
@@ -247,7 +258,7 @@ def _parse_llm_response(
 ) -> dict | None:
     """Parse LLM JSON response, retry once on failure."""
     try:
-        return json.loads(response_text)
+        return json.loads(_clean_json_text(response_text))
     except json.JSONDecodeError:
         logger.warning("Invalid JSON from LLM for paper %d, retrying", paper_id)
 
@@ -258,7 +269,7 @@ def _parse_llm_response(
     )
     try:
         response_text, _ = fallback_chain(retry_prompt, SCORING_SYSTEM_PROMPT)
-        return json.loads(response_text)
+        return json.loads(_clean_json_text(response_text))
     except (json.JSONDecodeError, RuntimeError) as e:
         errors.append(f"paper {paper_id}: invalid JSON after retry: {e}")
         return None

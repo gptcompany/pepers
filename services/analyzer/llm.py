@@ -16,5 +16,6 @@ from shared.llm import (  # noqa: F401
     call_gemini_cli,
     call_gemini_sdk,
     call_ollama,
+    call_openrouter,
     fallback_chain,
 )

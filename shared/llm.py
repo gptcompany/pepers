@@ -21,7 +21,7 @@ import urllib.request
 
 logger = logging.getLogger(__name__)
 
-DEFAULT_FALLBACK_ORDER = ["gemini_cli", "gemini_sdk", "ollama"]
+DEFAULT_FALLBACK_ORDER = ["gemini_cli", "openrouter", "ollama"]
 
 
 def _get_gemini_api_key() -> str:
@@ -53,7 +53,7 @@ def call_gemini_cli(
     prompt: str,
     system: str,
     model: str = "gemini-2.5-flash",
-    timeout: int = 120,
+    timeout: int = int(os.environ.get("RP_LLM_TIMEOUT_GEMINI_CLI", "120")),
 ) -> str:
     """Call Gemini via CLI subprocess.
 
@@ -99,7 +99,7 @@ def call_gemini_sdk(
     prompt: str,
     system: str,
     model: str = "gemini-2.5-flash",
-    timeout: float = 30.0,
+    timeout: float = float(os.environ.get("RP_LLM_TIMEOUT_GEMINI_SDK", "60")),
 ) -> str:
     """Call Gemini via Python SDK.
 
@@ -137,11 +137,62 @@ def call_gemini_sdk(
     return response.text
 
 
+def call_openrouter(
+    prompt: str,
+    system: str,
+    model: str = "google/gemini-2.5-flash",
+    timeout: int = int(os.environ.get("RP_LLM_TIMEOUT_OPENROUTER", "60")),
+) -> str:
+    """Call OpenRouter API (OpenAI-compatible).
+
+    Args:
+        prompt: User prompt text.
+        system: System instruction text.
+        model: Model identifier on OpenRouter.
+        timeout: HTTP timeout in seconds.
+
+    Returns:
+        Raw response text.
+
+    Raises:
+        RuntimeError: On API error, missing key, or timeout.
+    """
+    api_key = os.environ.get("OPENROUTER_API_KEY", "")
+    if not api_key:
+        raise RuntimeError("OPENROUTER_API_KEY not set")
+
+    payload = json.dumps({
+        "model": model,
+        "messages": [
+            {"role": "system", "content": system},
+            {"role": "user", "content": prompt},
+        ],
+        "temperature": 0.3,
+        "max_tokens": 500,
+    }).encode()
+
+    req = urllib.request.Request(
+        "https://openrouter.ai/api/v1/chat/completions",
+        data=payload,
+        headers={
+            "Content-Type": "application/json",
+            "Authorization": f"Bearer {api_key}",
+        },
+    )
+    with urllib.request.urlopen(req, timeout=timeout) as resp:
+        data = json.loads(resp.read())
+
+    if "error" in data:
+        raise RuntimeError(f"OpenRouter error: {data['error']}")
+
+    return data["choices"][0]["message"]["content"]
+
+
 def call_ollama(
     prompt: str,
     system: str,
     model: str = "qwen3:8b",
-    timeout: int = 300,
+    timeout: int = int(os.environ.get("RP_LLM_TIMEOUT_OLLAMA", "600")),
     base_url: str = "http://localhost:11434",
     format: str | dict = "json",
     options: dict | None = None,
@@ -220,6 +271,7 @@ def fallback_chain(
     provider_funcs = {
         "gemini_cli": call_gemini_cli,
         "gemini_sdk": call_gemini_sdk,
+        "openrouter": call_openrouter,
         "ollama": call_ollama,
     }
 

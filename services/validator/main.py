@@ -40,6 +40,7 @@ class ValidatorHandler(BaseHandler):
     """Handler for the Validator service."""
 
     cas_url: str = "http://localhost:8769"
+    cas_timeout: int = 120
     max_formulas_default: int = 50
     engines: list[str] = ["matlab", "sympy", "maxima"]
 
@@ -83,7 +84,7 @@ class ValidatorHandler(BaseHandler):
                 "time_ms": int((time.time() - start) * 1000),
             }
 
-        client = CASClient(base_url=self.cas_url)
+        client = CASClient(base_url=self.cas_url, timeout=self.cas_timeout)
 
         # Check CAS service health before batch
         if not client.health():
@@ -277,6 +278,9 @@ def main() -> None:
 
     ValidatorHandler.cas_url = os.environ.get(
         "RP_VALIDATOR_CAS_URL", "http://localhost:8769"
+    )
+    ValidatorHandler.cas_timeout = int(
+        os.environ.get("RP_VALIDATOR_CAS_TIMEOUT", "120")
     )
     ValidatorHandler.max_formulas_default = int(
         os.environ.get("RP_VALIDATOR_MAX_FORMULAS", "50")

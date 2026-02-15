@@ -125,9 +125,14 @@ class BaseHandler(BaseHTTPRequestHandler):
                     result = handler()
                 if result is not None:
                     self.send_json(result)
+            except BrokenPipeError:
+                logger.warning("Client disconnected before response sent")
             except Exception as e:
                 logger.exception("Handler error: %s", e)
-                self.send_error_json(str(e), "INTERNAL_ERROR", 500)
+                try:
+                    self.send_error_json(str(e), "INTERNAL_ERROR", 500)
+                except BrokenPipeError:
+                    logger.warning("Client disconnected during error response")
         else:
             self.send_error_json(
                 f"Not found: {self.path}", "NOT_FOUND", 404

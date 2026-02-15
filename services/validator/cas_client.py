@@ -46,7 +46,7 @@ class CASClient:
     """HTTP client for the CAS microservice."""
 
     def __init__(self, base_url: str = "http://localhost:8769",
-                 timeout: int = 30) -> None:
+                 timeout: int = 120) -> None:
         self.base_url = base_url.rstrip("/")
         self.timeout = timeout
 
