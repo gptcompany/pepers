@@ -22,6 +22,7 @@ Reliable, N8N-free academic paper processing pipeline that discovers Kelly crite
 - ✓ Codegen service: LLM plain-language explanation + C99/Rust/Python codegen via SymPy — v6.0
 
 ### Active
+- [ ] GitHub Discovery: search GitHub repos for paper implementations, analyze with Gemini CLI — v8.0
 - [ ] Monitoring integration: process-exporter config, Prometheus alert rules, Grafana dashboard
 - [ ] Production deployment: `docker compose up` on Workstation
 

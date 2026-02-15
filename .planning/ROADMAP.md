@@ -137,14 +137,13 @@ Plans:
 
 #### Phase 25: GitHub Discovery Research & Design
 
-**Goal**: Research Gemini CLI capabilities (--include-directories, output formats), GitHub REST API patterns, prompt engineering for code analysis
+**Goal**: Research Gemini CLI capabilities, GitHub REST API patterns, prompt engineering for code analysis → produce DESIGN.md
 **Depends on**: Phase 24 (orchestrator GET endpoints available)
-**Research**: Likely (Gemini CLI flags, GitHub API rate limits, prompt engineering for repo analysis)
-**Research topics**: Gemini CLI --include-directories behavior, GitHub search API filters, dynamic prompt generation from paper context, Docker vs host CLI execution
-**Plans**: TBD
+**Research**: Done (Gemini CLI verified, GitHub API verified, no existing OSS tool found)
+**Plans**: 1/1 complete
 
 Plans:
-- [ ] 25-01: TBD (run /gsd:plan-phase 25 to break down)
+- [x] 25-01: Design GitHub Discovery architecture (DESIGN.md + CONTEXT.md + PROJECT.md)
 
 #### Phase 26: GitHub Discovery Implementation
 
@@ -194,6 +193,6 @@ Plans:
 | 22. Testing & Integration | v7.0 | 1/1 | Complete | 2026-02-14 |
 | 23. E2E Smoke Test (Real Papers) | post-v7.0 | 1/1 | Complete | 2026-02-15 |
 | 24. Skill Alignment + GET Endpoints | post-v7.0 | 1/1 | Complete | 2026-02-15 |
-| 25. GitHub Discovery Research & Design | v8.0 | 0/? | Not started | - |
+| 25. GitHub Discovery Research & Design | v8.0 | 1/1 | Complete | 2026-02-15 |
 | 26. GitHub Discovery Implementation | v8.0 | 0/? | Not started | - |
 | 27. GitHub Discovery Testing | v8.0 | 0/? | Not started | - |

@@ -9,12 +9,12 @@ See: .planning/PROJECT.md (updated 2026-02-15)
 
 ## Current Position
 
-Phase: 25 (GitHub Discovery Research & Design)
+Phase: 26 (GitHub Discovery Implementation)
 Plan: Not started
 Status: **Ready to plan**
-Last activity: 2026-02-15 — Milestone v8.0 created
+Last activity: 2026-02-15 — Phase 25 DESIGN.md completed
 
-Progress: 7/7 milestones shipped + Phase 23-24 complete, v8.0 in progress
+Progress: 7/7 milestones shipped + Phase 23-25 complete, v8.0 in progress
 
 ## Shipped Milestones
 
@@ -30,6 +30,7 @@ Progress: 7/7 milestones shipped + Phase 23-24 complete, v8.0 in progress
 
 - Phase 23: E2E Smoke Test — 6 bugs fixed, 5/6 services validated, production_ready: true — 2026-02-15
 - Phase 24: Skill Alignment + GET Endpoints — /research and /research-papers skills aligned to pipeline, GET /papers and GET /formulas endpoints added, 11 new integration tests — 2026-02-15
+- Phase 25: GitHub Discovery Research & Design — DESIGN.md completed with full architecture, schema, API contracts, Gemini CLI integration — 2026-02-15
 
 ## Final Stats
 
@@ -45,26 +46,35 @@ Progress: 7/7 milestones shipped + Phase 23-24 complete, v8.0 in progress
 
 | Phase | Goal | Status |
 |-------|------|--------|
-| 25. Research & Design | Gemini CLI capabilities, GitHub API, prompt engineering | Not started |
-| 26. Implementation | github_search.py, POST /search-github, skill update | Not started |
+| 25. Research & Design | Gemini CLI, GitHub API, prompt engineering | Complete |
+| 26. Implementation | github_search.py refine, POST /search-github, schema extension | Not started |
 | 27. Testing | Unit, integration, E2E with real repos | Not started |
 
-### Key Decisions
+### Key Decisions (from Phase 25 Research)
 
-- **Gemini CLI direct** (not PAL MCP) for repo analysis — domain-specific prompts, zero middleware
-- **`--include-directories`** flag for native filesystem access (1M context)
-- **Dynamic prompt** generated from paper context (title, abstract, formulas)
-- **SDK fallback** when CLI unavailable (Docker containers)
-- **Head start**: `github_search.py` module already created (will be refined in Phase 26)
+- **Gemini CLI on host**, SDK fallback in Docker — CLI has `--include-directories` for 1M context
+- **GitHub PAT** from SSOT — 30 req/min search rate
+- **New SQLite tables**: `github_repos` + `github_analyses` with FK to papers
+- **Python + Rust + C++** language scope — aligned with codegen service
+- **Gemini 2.5 Pro** for analysis (configurable via `RP_GITHUB_ANALYSIS_MODEL`)
+- **Papers With Code shut down** July 2025 — no existing OSS alternative found
+- **Head-start module** (297 LOC) validates architecture, gaps identified for Phase 26
+
+### Research Findings
+
+- Gemini CLI free tier: 5 RPM / 100 RPD (cut Dec 2025). Paid Tier 1: 150-300 RPM
+- GitHub search: 30 req/min with PAT, max 1000 results, `in:readme` qualifier essential
+- Known bugs: `--include-directories` (#13669), JSON output (#9009) — need testing
+- Live test: "kelly criterion language:python stars:>5" → 11 results found
 
 ## Blockers/Concerns
 
-- Gemini CLI on host only, not in Docker — SDK fallback needed
-- GitHub API rate limits (60 req/h unauthenticated, 5000 with PAT)
-- Gemini CLI output format parsing may need refinement
+- Gemini CLI bugs may require CLI version pinning or workarounds
+- Free tier rate limits may be insufficient for large batches (>30 repos)
+- Repo clone disk usage — shallow clone + cleanup mitigates
 
 ## Session Continuity
 
 Last session: 2026-02-15
-Stopped at: Milestone v8.0 created, ready to plan Phase 25
-Resume file: .planning/ROADMAP.md
+Stopped at: Phase 25 complete, ready to plan Phase 26
+Resume file: .planning/phases/25-github-discovery-research-design/DESIGN.md
