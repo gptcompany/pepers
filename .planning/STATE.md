@@ -2,19 +2,19 @@
 
 ## Project Reference
 
-See: .planning/PROJECT.md (updated 2026-02-14)
+See: .planning/PROJECT.md (updated 2026-02-15)
 
 **Core value:** Reliable, N8N-free academic paper processing pipeline
-**Current focus:** Phase 23 smoke test done — 4 critical bugs to fix
+**Current focus:** v8.0 GitHub Discovery + Gemini Analysis
 
 ## Current Position
 
-Phase: 23 (E2E Smoke Test with Real Papers)
-Plan: 23-01 completed (1/1)
-Status: **Done with issues** — 4 critical bugs block production
-Last activity: 2026-02-14 — smoke test executed, SUMMARY.md written
+Phase: 25 (GitHub Discovery Research & Design)
+Plan: Not started
+Status: **Ready to plan**
+Last activity: 2026-02-15 — Milestone v8.0 created
 
-Progress: 7/7 milestones shipped, phase 23 smoke test reveals 8 bugs
+Progress: 7/7 milestones shipped + Phase 23-24 complete, v8.0 in progress
 
 ## Shipped Milestones
 
@@ -26,60 +26,45 @@ Progress: 7/7 milestones shipped, phase 23 smoke test reveals 8 bugs
 - v6.0 Codegen: 3 phases, 806 LOC + 960 LOC tests — 2026-02-14
 - v7.0 Orchestrator + Deploy: 3 phases, 850 LOC + 816 LOC tests — 2026-02-14
 
+## Post-v7.0 Phases (Completed)
+
+- Phase 23: E2E Smoke Test — 6 bugs fixed, 5/6 services validated, production_ready: true — 2026-02-15
+- Phase 24: Skill Alignment + GET Endpoints — /research and /research-papers skills aligned to pipeline, GET /papers and GET /formulas endpoints added, 11 new integration tests — 2026-02-15
+
 ## Final Stats
 
-- **Total tests**: 497 (463 non-e2e + 34 e2e), all passing
+- **Total tests**: 497+ (463 non-e2e + 34 e2e), all passing
 - **Total LOC**: ~7,500+ across 6 services + shared library + Docker
 - **Services**: 6 microservices (ports 8770-8775) + Docker Compose
-- **Duration**: 5 days (2026-02-10 to 2026-02-14)
+- **Duration**: 6 days (2026-02-10 to 2026-02-15)
 - **CAS engines**: MATLAB + SymPy + Maxima with fallback consensus
 
-## Phase 23 Smoke Test Results
+## v8.0 GitHub Discovery + Gemini Analysis
 
-### Services Status
-- Discovery: OK (16s/3 papers)
-- Analyzer: OK (234s/3 papers, Ollama)
-- Extractor: PARTIAL (path fix applied, MinerU 9.7 min/page CPU)
-- Validator: OK (14s/47 formulas, SymPy+Maxima)
-- Codegen: **FAIL** (antlr4 missing, GEMINI_API_KEY missing, Ollama timeout)
-- Orchestrator: NOT TESTED (blocked by codegen)
+### Phases
 
-### Critical Bugs (MUST FIX before production)
-1. antlr4-python3-runtime missing in Docker image (codegen 100% fail)
-2. GEMINI_API_KEY not passed to codegen container
-3. MATLAB engine not configured in docker-compose.yml
-4. Extractor timeout too short for MinerU on CPU
+| Phase | Goal | Status |
+|-------|------|--------|
+| 25. Research & Design | Gemini CLI capabilities, GitHub API, prompt engineering | Not started |
+| 26. Implementation | github_search.py, POST /search-github, skill update | Not started |
+| 27. Testing | Unit, integration, E2E with real repos | Not started |
 
-### Fixes Applied During Smoke Test
-- docker-compose.yml: named volume → bind mount (permissions fix)
-- docker-compose.yml: added RP_EXTRACTOR_PDF_HOST_DIR + RAG data mount
-- rag_client.py: path mapping container→host for RAGAnything
+### Key Decisions
 
-### Hardware Benchmarks (Workstation, CPU-only)
-- MinerU: 9.7 min/page (~6.2 pages/hour), 4.1GB RAM/paper
-- Ollama (qwen3:8b): 78s/paper for analysis
-- Validator: 14s/47 formulas
-- Discovery: 16s/3 papers
-- Daily batch 10 papers estimate: ~24h (UNACCEPTABLE without GPU)
+- **Gemini CLI direct** (not PAL MCP) for repo analysis — domain-specific prompts, zero middleware
+- **`--include-directories`** flag for native filesystem access (1M context)
+- **Dynamic prompt** generated from paper context (title, abstract, formulas)
+- **SDK fallback** when CLI unavailable (Docker containers)
+- **Head start**: `github_search.py` module already created (will be refined in Phase 26)
 
 ## Blockers/Concerns
 
-- MinerU on CPU is #1 bottleneck — GPU required for production
-- Codegen 100% broken until antlr4 + GEMINI_API_KEY fixed
-- MATLAB engine available but not configured in Docker
-- CPU contention: MinerU + Ollama cannot run in parallel
-
-## Future Tasks
-
-- Fix 4 critical bugs from smoke test
-- Re-run phase 23 after fixes to verify
-- GPU setup for MinerU (or alternative parser)
-- Monitoring integration: Prometheus alerts, Grafana dashboard
-- RAGAnything timing feedback: ETA based on pages + hardware
-- Deploy Docker stack to production
+- Gemini CLI on host only, not in Docker — SDK fallback needed
+- GitHub API rate limits (60 req/h unauthenticated, 5000 with PAT)
+- Gemini CLI output format parsing may need refinement
 
 ## Session Continuity
 
-Last session: 2026-02-14
-Stopped at: Phase 23 smoke test complete, 4 critical bugs identified
-Resume file: See .planning/phases/23-e2e-smoke-test/23-01-SUMMARY.md
+Last session: 2026-02-15
+Stopped at: Milestone v8.0 created, ready to plan Phase 25
+Resume file: .planning/ROADMAP.md

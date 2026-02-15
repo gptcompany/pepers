@@ -2,7 +2,7 @@
 
 ## Overview
 
-Replace the failed N8N W1-W5 research paper pipeline with standalone Python microservices. Starting with shared infrastructure (v1.0), then building each service incrementally: Discovery → Analyzer → Extractor → Validator → Codegen → Orchestrator.
+Replace the failed N8N W1-W5 research paper pipeline with standalone Python microservices. Starting with shared infrastructure (v1.0), then building each service incrementally: Discovery → Analyzer → Extractor → Validator → Codegen → Orchestrator. Extended with GitHub Discovery + Gemini analysis (v8.0).
 
 ## Domain Expertise
 
@@ -17,6 +17,7 @@ None
 - [✅ v5.0 Validator Service](milestones/v5.0-ROADMAP.md) (Phases 14-16) — SHIPPED 2026-02-14
 - [✅ v6.0 Codegen Service](milestones/v6.0-ROADMAP.md) (Phases 17-19) — SHIPPED 2026-02-14
 - [✅ v7.0 Orchestrator + Deploy](milestones/v7.0-ROADMAP.md) (Phases 20-22) — SHIPPED 2026-02-14
+- 🚧 **v8.0 GitHub Discovery + Gemini Analysis** — Phases 25-27 (in progress)
 
 ## Phases
 
@@ -75,9 +76,8 @@ None
 
 </details>
 
-### ✅ v7.0 Orchestrator + Deploy — SHIPPED 2026-02-14
-
-**Milestone Goal:** End-to-end pipeline orchestration with HTTP trigger + cron automation, deployed as Docker containers on Workstation.
+<details>
+<summary>✅ v7.0 Orchestrator + Deploy (Phases 20-22) — SHIPPED 2026-02-14</summary>
 
 #### Phase 20: Orchestrator Research & Design
 
@@ -110,14 +110,61 @@ Plans:
 Plans:
 - [x] 22-01: Unit, integration, and E2E tests for orchestrator (63 tests, 816 LOC)
 
-### Phase 23: E2E Smoke Test (Real Papers)
+</details>
+
+### ✅ Phase 23: E2E Smoke Test (Real Papers)
 
 **Goal**: Full pipeline smoke test with real arXiv papers — verify every service works end-to-end, honest assessment of bugs/performance/gaps
 **Depends on**: v7.0 complete + all external services running
-**Plans**: 0/1
+**Plans**: 1/1 complete
 
 Plans:
-- [ ] 23-01: Full pipeline E2E smoke test with real papers (7 steps + confidence gates)
+- [x] 23-01: Full pipeline E2E smoke test with real papers — 6 bugs fixed, 5/6 services validated
+
+### ✅ Phase 24: Skill Alignment + GET Endpoints (Retroactive)
+
+**Goal**: Align /research and /research-papers skills to pipeline microservices, add GET /papers and GET /formulas query endpoints to orchestrator
+**Depends on**: Phase 23
+**Research**: Unlikely (internal patterns)
+**Plans**: 1/1 complete
+
+Plans:
+- [x] 24-01: GET endpoints + skill alignment + E2E re-test (11 new integration tests, 0 bugs)
+
+### 🚧 v8.0 GitHub Discovery + Gemini Analysis (In Progress)
+
+**Milestone Goal:** Add GitHub repository search and deep analysis using Gemini CLI (1M context) with dynamic prompts generated from paper context (title, abstract, formulas). Enables the /research skill to find existing implementations of academic papers on GitHub.
+
+#### Phase 25: GitHub Discovery Research & Design
+
+**Goal**: Research Gemini CLI capabilities (--include-directories, output formats), GitHub REST API patterns, prompt engineering for code analysis
+**Depends on**: Phase 24 (orchestrator GET endpoints available)
+**Research**: Likely (Gemini CLI flags, GitHub API rate limits, prompt engineering for repo analysis)
+**Research topics**: Gemini CLI --include-directories behavior, GitHub search API filters, dynamic prompt generation from paper context, Docker vs host CLI execution
+**Plans**: TBD
+
+Plans:
+- [ ] 25-01: TBD (run /gsd:plan-phase 25 to break down)
+
+#### Phase 26: GitHub Discovery Implementation
+
+**Goal**: Implement github_search.py module (search, clone, analyze via Gemini CLI with SDK fallback), POST /search-github endpoint, update /research skill with dynamic prompt generation
+**Depends on**: Phase 25
+**Research**: Unlikely (follows design from Phase 25)
+**Plans**: TBD
+
+Plans:
+- [ ] 26-01: TBD
+
+#### Phase 27: GitHub Discovery Testing
+
+**Goal**: Unit tests for github_search module, integration tests for /search-github endpoint, E2E test with real GitHub repos and Gemini CLI analysis
+**Depends on**: Phase 26
+**Research**: Unlikely (established testing patterns)
+**Plans**: TBD
+
+Plans:
+- [ ] 27-01: TBD
 
 ## Progress
 
@@ -145,4 +192,8 @@ Plans:
 | 20. Orchestrator Research & Design | v7.0 | 1/1 | Complete | 2026-02-14 |
 | 21. Orchestrator Implementation + Docker Deploy | v7.0 | 1/1 | Complete | 2026-02-14 |
 | 22. Testing & Integration | v7.0 | 1/1 | Complete | 2026-02-14 |
-| 23. E2E Smoke Test (Real Papers) | post-v7.0 | 0/1 | Not started | - |
+| 23. E2E Smoke Test (Real Papers) | post-v7.0 | 1/1 | Complete | 2026-02-15 |
+| 24. Skill Alignment + GET Endpoints | post-v7.0 | 1/1 | Complete | 2026-02-15 |
+| 25. GitHub Discovery Research & Design | v8.0 | 0/? | Not started | - |
+| 26. GitHub Discovery Implementation | v8.0 | 0/? | Not started | - |
+| 27. GitHub Discovery Testing | v8.0 | 0/? | Not started | - |
