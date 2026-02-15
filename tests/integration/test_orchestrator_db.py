@@ -281,3 +281,152 @@ class TestOrchestratorHTTP:
         with pytest.raises(urllib.error.HTTPError) as exc_info:
             urllib.request.urlopen(req)
         assert exc_info.value.code == 400
+
+
+# ---------------------------------------------------------------------------
+# GET /papers and /formulas endpoint tests
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.integration
+class TestQueryEndpoints:
+    """Test GET /papers and GET /formulas endpoints."""
+
+    @pytest.fixture(autouse=True)
+    def setup(self, initialized_db):
+        self.db_path = str(initialized_db)
+        self.port = _get_free_port()
+
+        # Seed test data: 2 papers, 2 formulas, 1 validation, 1 codegen
+        with transaction(self.db_path) as conn:
+            conn.execute(
+                "INSERT INTO papers (arxiv_id, title, stage, score) "
+                "VALUES (?, ?, ?, ?)",
+                ("2401.00001", "Paper One", "analyzed", 0.85),
+            )
+            conn.execute(
+                "INSERT INTO papers (arxiv_id, title, stage) "
+                "VALUES (?, ?, ?)",
+                ("2401.00002", "Paper Two", "discovered"),
+            )
+            conn.execute(
+                "INSERT INTO formulas (paper_id, latex, latex_hash, stage) "
+                "VALUES (?, ?, ?, ?)",
+                (1, "x^2", "hash_a", "validated"),
+            )
+            conn.execute(
+                "INSERT INTO formulas (paper_id, latex, latex_hash, stage) "
+                "VALUES (?, ?, ?, ?)",
+                (1, "y^3", "hash_b", "extracted"),
+            )
+            conn.execute(
+                "INSERT INTO validations (formula_id, engine, is_valid, time_ms) "
+                "VALUES (?, ?, ?, ?)",
+                (1, "sympy", 1, 120),
+            )
+            conn.execute(
+                "INSERT INTO generated_code (formula_id, language, code, stage) "
+                "VALUES (?, ?, ?, ?)",
+                (1, "python", "def f(x): return x**2", "codegen"),
+            )
+
+        runner = PipelineRunner(self.db_path)
+        OrchestratorHandler.runner = runner
+
+        self.service = BaseService(
+            "orchestrator", self.port, OrchestratorHandler, self.db_path
+        )
+        self.thread = threading.Thread(target=self.service.run, daemon=True)
+        self.thread.start()
+        time.sleep(0.3)
+        yield
+        if self.service.server:
+            self.service.server.shutdown()
+        OrchestratorHandler.runner = None
+        OrchestratorHandler._routes = None
+
+    def test_list_all_papers(self):
+        resp = urllib.request.urlopen(f"http://localhost:{self.port}/papers")
+        data = json.loads(resp.read())
+        assert isinstance(data, list)
+        assert len(data) == 2
+
+    def test_list_papers_filter_stage(self):
+        resp = urllib.request.urlopen(
+            f"http://localhost:{self.port}/papers?stage=analyzed"
+        )
+        data = json.loads(resp.read())
+        assert len(data) == 1
+        assert data[0]["arxiv_id"] == "2401.00001"
+        assert data[0]["stage"] == "analyzed"
+
+    def test_list_papers_limit(self):
+        resp = urllib.request.urlopen(
+            f"http://localhost:{self.port}/papers?limit=1"
+        )
+        data = json.loads(resp.read())
+        assert len(data) == 1
+
+    def test_paper_detail_by_id(self):
+        resp = urllib.request.urlopen(
+            f"http://localhost:{self.port}/papers?id=1"
+        )
+        data = json.loads(resp.read())
+        assert isinstance(data, dict)
+        assert data["arxiv_id"] == "2401.00001"
+        assert "formulas" in data
+        assert len(data["formulas"]) == 2
+        # Check nested validations and generated_code
+        validated_formula = next(
+            f for f in data["formulas"] if f["latex"] == "x^2"
+        )
+        assert len(validated_formula["validations"]) == 1
+        assert validated_formula["validations"][0]["engine"] == "sympy"
+        assert len(validated_formula["generated_code"]) == 1
+        assert validated_formula["generated_code"][0]["language"] == "python"
+
+    def test_paper_detail_not_found(self):
+        with pytest.raises(urllib.error.HTTPError) as exc_info:
+            urllib.request.urlopen(
+                f"http://localhost:{self.port}/papers?id=999"
+            )
+        assert exc_info.value.code == 404
+
+    def test_list_formulas_all(self):
+        resp = urllib.request.urlopen(
+            f"http://localhost:{self.port}/formulas"
+        )
+        data = json.loads(resp.read())
+        assert isinstance(data, list)
+        assert len(data) == 2
+
+    def test_list_formulas_by_paper(self):
+        resp = urllib.request.urlopen(
+            f"http://localhost:{self.port}/formulas?paper_id=1"
+        )
+        data = json.loads(resp.read())
+        assert len(data) == 2
+        assert all(f["paper_id"] == 1 for f in data)
+
+    def test_list_formulas_by_stage(self):
+        resp = urllib.request.urlopen(
+            f"http://localhost:{self.port}/formulas?stage=validated"
+        )
+        data = json.loads(resp.read())
+        assert len(data) == 1
+        assert data[0]["latex"] == "x^2"
+
+    def test_list_formulas_combined_filter(self):
+        resp = urllib.request.urlopen(
+            f"http://localhost:{self.port}/formulas?paper_id=1&stage=extracted"
+        )
+        data = json.loads(resp.read())
+        assert len(data) == 1
+        assert data[0]["latex"] == "y^3"
+
+    def test_list_formulas_empty_result(self):
+        resp = urllib.request.urlopen(
+            f"http://localhost:{self.port}/formulas?paper_id=999"
+        )
+        data = json.loads(resp.read())
+        assert data == []

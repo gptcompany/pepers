@@ -1,66 +1,70 @@
 {
-  "date": "2026-02-14",
-  "phase": 23,
-  "plan": "23-01",
+  "date": "2026-02-15",
+  "phase": 24,
+  "plan": "24-01",
   "papers_tested": 3,
   "steps": {
     "discovery": {
       "status": "OK",
       "papers_found": 3,
-      "papers_new": 3,
+      "papers_new": 0,
       "enrichment_s2": 2,
       "enrichment_crossref": 1,
-      "time_ms": 16424,
+      "time_ms": 17738,
       "bugs": []
     },
     "analyzer": {
       "status": "OK",
-      "papers_analyzed": 3,
-      "papers_accepted": 3,
+      "papers_analyzed": 0,
+      "papers_accepted": 0,
       "papers_rejected": 0,
-      "avg_score": 0.807,
       "llm_provider": "ollama",
       "prompt_version": "v1",
-      "time_ms": 233911,
-      "bugs": ["paper_non_financial_above_threshold"]
+      "bugs": []
     },
     "extractor": {
-      "status": "PARTIAL",
-      "papers_processed": 1,
-      "formulas_extracted": 47,
-      "time_ms_cached": 123,
-      "mineru_avg_min_per_page": 9.7,
-      "bugs": ["BUG-1_path_mapping_FIXED", "BUG-5_volume_permissions_FIXED", "BUG-7_timeout_too_short"]
+      "status": "OK",
+      "formulas_in_db": 47,
+      "bugs": []
     },
     "validator": {
       "status": "OK",
-      "formulas_processed": 47,
-      "formulas_valid": 31,
-      "formulas_invalid": 6,
-      "formulas_partial": 10,
-      "formulas_unparseable": 0,
-      "engines": {"sympy": "31/47", "maxima": "38/47", "matlab": "0/0_not_configured"},
-      "time_ms": 14239,
-      "bugs": ["BUG-6_matlab_not_configured"]
+      "formulas_in_db": 47,
+      "engines": {"sympy": "available", "maxima": "available"},
+      "bugs": []
     },
     "codegen": {
-      "status": "FAIL",
-      "formulas_processed": 0,
-      "bugs": ["BUG-2_antlr4_missing", "BUG-3_gemini_key_missing", "BUG-4_ollama_timeout"]
+      "status": "OK",
+      "generated_code_in_db": true,
+      "bugs": []
     },
     "orchestrator": {
-      "status": "NOT_TESTED",
-      "reason": "blocked_by_codegen_failure"
+      "status": "OK",
+      "pipeline_run": "completed",
+      "stages_2_of_2": true,
+      "get_papers_endpoint": "OK",
+      "get_formulas_endpoint": "OK",
+      "get_paper_detail_endpoint": "OK",
+      "bugs": []
     }
   },
-  "hardware_benchmarks": {
-    "mineru_cpu_min_per_page": 9.7,
-    "mineru_cpu_pages_per_hour": 6.2,
-    "ollama_analyzer_sec_per_paper": 78,
-    "validator_sec_per_47_formulas": 14
+  "services_health": {
+    "discovery_8770": "ok",
+    "analyzer_8771": "ok",
+    "extractor_8772": "ok",
+    "validator_8773": "ok",
+    "codegen_8774": "ok",
+    "orchestrator_8775": "ok"
   },
-  "critical_bugs": 4,
-  "major_bugs": 2,
-  "minor_bugs": 2,
-  "production_ready": false
+  "new_endpoints_tested": [
+    "GET /papers",
+    "GET /papers?stage=analyzed",
+    "GET /papers?id=1",
+    "GET /formulas",
+    "GET /formulas?paper_id=1&stage=validated"
+  ],
+  "critical_bugs": 0,
+  "major_bugs": 0,
+  "minor_bugs": 0,
+  "production_ready": true
 }

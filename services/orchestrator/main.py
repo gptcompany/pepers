@@ -27,9 +27,11 @@ from __future__ import annotations
 import logging
 import os
 import time
+from urllib.parse import parse_qs
 
 from shared.config import load_config
-from shared.db import init_db
+from shared.db import init_db, transaction
+from shared.models import Formula, Paper
 from shared.server import BaseHandler, BaseService, route
 
 from services.orchestrator.pipeline import PipelineRunner
@@ -121,6 +123,126 @@ class OrchestratorHandler(BaseHandler):
         """Check health of all downstream services."""
         assert self.runner is not None, "PipelineRunner not initialized"
         return self.runner.get_services_health()
+
+    # -- Query endpoints for reading pipeline data --
+
+    def _query_params(self) -> dict[str, str]:
+        """Parse query string from self.path into {key: value} dict."""
+        qs = self.path.split("?", 1)[1] if "?" in self.path else ""
+        raw = parse_qs(qs, keep_blank_values=False)
+        return {k: v[0] for k, v in raw.items()}
+
+    @route("GET", "/papers")
+    def handle_papers(self) -> dict | list | None:
+        """Query papers from the pipeline database.
+
+        GET /papers?stage=analyzed&limit=50  → list papers
+        GET /papers?id=42                    → single paper with formulas,
+                                               validations, and generated code
+        """
+        params = self._query_params()
+        paper_id = params.get("id")
+
+        if paper_id is not None:
+            return self._get_paper_detail(int(paper_id))
+
+        stage = params.get("stage")
+        limit = min(int(params.get("limit", "50")), 200)
+        return self._list_papers(stage=stage, limit=limit)
+
+    @route("GET", "/formulas")
+    def handle_formulas(self) -> list | None:
+        """Query formulas from the pipeline database.
+
+        GET /formulas?paper_id=42&stage=validated&limit=50
+        """
+        params = self._query_params()
+        paper_id = params.get("paper_id")
+        stage = params.get("stage")
+        limit = min(int(params.get("limit", "50")), 200)
+
+        clauses = []
+        bind: list = []
+        if paper_id is not None:
+            clauses.append("f.paper_id = ?")
+            bind.append(int(paper_id))
+        if stage:
+            clauses.append("f.stage = ?")
+            bind.append(stage)
+
+        where = ("WHERE " + " AND ".join(clauses)) if clauses else ""
+
+        with transaction(self.db_path) as conn:
+            rows = conn.execute(
+                f"SELECT f.* FROM formulas f {where} "  # noqa: S608
+                f"ORDER BY f.id DESC LIMIT ?",
+                [*bind, limit],
+            ).fetchall()
+        return [Formula(**dict(r)).model_dump(mode="json") for r in rows]
+
+    # -- Helpers for paper queries --
+
+    def _list_papers(
+        self, *, stage: str | None = None, limit: int = 50
+    ) -> list[dict]:
+        clauses = []
+        bind: list = []
+        if stage:
+            clauses.append("p.stage = ?")
+            bind.append(stage)
+
+        where = ("WHERE " + " AND ".join(clauses)) if clauses else ""
+
+        with transaction(self.db_path) as conn:
+            rows = conn.execute(
+                f"SELECT p.* FROM papers p {where} "  # noqa: S608
+                f"ORDER BY p.created_at DESC LIMIT ?",
+                [*bind, limit],
+            ).fetchall()
+        return [Paper(**dict(r)).model_dump(mode="json") for r in rows]
+
+    def _get_paper_detail(self, paper_id: int) -> dict | None:
+        with transaction(self.db_path) as conn:
+            row = conn.execute(
+                "SELECT * FROM papers WHERE id = ?", [paper_id]
+            ).fetchone()
+            if row is None:
+                self.send_error_json(
+                    f"Paper {paper_id} not found", "NOT_FOUND", 404
+                )
+                return None
+
+            paper = Paper(**dict(row)).model_dump(mode="json")
+
+            # Formulas for this paper
+            f_rows = conn.execute(
+                "SELECT * FROM formulas WHERE paper_id = ? ORDER BY id",
+                [paper_id],
+            ).fetchall()
+            formulas = []
+            for fr in f_rows:
+                formula = Formula(**dict(fr)).model_dump(mode="json")
+
+                # Validations for this formula
+                v_rows = conn.execute(
+                    "SELECT * FROM validations WHERE formula_id = ? "
+                    "ORDER BY id",
+                    [fr["id"]],
+                ).fetchall()
+                formula["validations"] = [dict(vr) for vr in v_rows]
+
+                # Generated code for this formula
+                gc_rows = conn.execute(
+                    "SELECT * FROM generated_code WHERE formula_id = ? "
+                    "ORDER BY id",
+                    [fr["id"]],
+                ).fetchall()
+                formula["generated_code"] = [dict(gcr) for gcr in gc_rows]
+
+                formulas.append(formula)
+
+            paper["formulas"] = formulas
+        return paper
 
 
 def _cron_run() -> None:
