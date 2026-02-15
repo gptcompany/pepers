@@ -141,7 +141,7 @@ def call_ollama(
     prompt: str,
     system: str,
     model: str = "qwen3:8b",
-    timeout: int = 120,
+    timeout: int = 300,
     base_url: str = "http://localhost:11434",
     format: str | dict = "json",
     options: dict | None = None,

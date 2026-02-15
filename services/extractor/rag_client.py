@@ -10,6 +10,7 @@ from __future__ import annotations
 
 import json
 import logging
+import os
 import time
 import urllib.request
 from pathlib import Path
@@ -18,7 +19,11 @@ logger = logging.getLogger(__name__)
 
 DEFAULT_BASE_URL = "http://localhost:8767"
 DEFAULT_POLL_INTERVAL = 10
-DEFAULT_TIMEOUT = 600
+DEFAULT_TIMEOUT = 7200  # 2h — MinerU on CPU: ~10 min/page, 25-page paper = ~4h
+
+# Container→host path mapping for RAGAnything (host-based service)
+_PDF_DIR = os.environ.get("RP_EXTRACTOR_PDF_DIR", "/data/pdfs")
+_PDF_HOST_DIR = os.environ.get("RP_EXTRACTOR_PDF_HOST_DIR", "")
 
 
 def check_service(base_url: str = DEFAULT_BASE_URL) -> dict:
@@ -36,6 +41,16 @@ def check_service(base_url: str = DEFAULT_BASE_URL) -> dict:
     return data
 
 
+def _map_to_host_path(container_path: Path) -> str:
+    """Map container PDF path to host path for RAGAnything."""
+    path_str = str(container_path)
+    if _PDF_HOST_DIR and path_str.startswith(_PDF_DIR):
+        mapped = path_str.replace(_PDF_DIR, _PDF_HOST_DIR, 1)
+        logger.debug("Path mapped: %s → %s", path_str, mapped)
+        return mapped
+    return path_str
+
+
 def submit_pdf(
     pdf_path: Path, paper_id: str, base_url: str = DEFAULT_BASE_URL
 ) -> dict:
@@ -44,8 +59,9 @@ def submit_pdf(
     Returns:
         Dict with 'cached' bool and either 'result' or 'job_id'.
     """
+    host_path = _map_to_host_path(pdf_path)
     payload = json.dumps({
-        "pdf_path": str(pdf_path),
+        "pdf_path": host_path,
         "paper_id": paper_id,
     }).encode()
 
@@ -101,22 +117,33 @@ def read_markdown(output_dir: str) -> str:
     """Read markdown output from RAGAnything's extraction directory.
 
     Handles container→host path mapping and finds the largest .md file.
+    Tries multiple path mappings to support both Docker and host execution.
 
     Raises:
         FileNotFoundError: If no markdown files found.
     """
-    # Handle container path mapping
-    host_dir = output_dir.replace("/workspace/1TB/", "/media/sam/1TB/")
-    host_dir = host_dir.replace("/workspace/3TB-WDC/", "/media/sam/3TB-WDC/")
+    # Path mappings to try (RAGAnything output → accessible path)
+    candidates = [
+        output_dir,
+        output_dir.replace("/workspace/1TB/", "/media/sam/1TB/"),
+        output_dir.replace("/workspace/3TB-WDC/", "/media/sam/3TB-WDC/"),
+        # Docker container: RAG data mounted at /rag-data
+        output_dir.replace("/media/sam/1TB/rag-service/data", "/rag-data"),
+        output_dir.replace("/workspace/1TB/rag-service/data", "/rag-data"),
+    ]
 
-    path = Path(host_dir)
-    md_files = list(path.glob("**/*.md"))
-    if not md_files:
-        raise FileNotFoundError(f"No markdown files in {host_dir}")
+    for candidate in candidates:
+        path = Path(candidate)
+        if path.exists():
+            md_files = list(path.glob("**/*.md"))
+            if md_files:
+                md_files.sort(key=lambda f: f.stat().st_size, reverse=True)
+                logger.debug("Reading markdown from: %s", md_files[0])
+                return md_files[0].read_text(encoding="utf-8")
 
-    # Read largest .md file (the main extraction output)
-    md_files.sort(key=lambda f: f.stat().st_size, reverse=True)
-    return md_files[0].read_text(encoding="utf-8")
+    raise FileNotFoundError(
+        f"No markdown files found. Tried: {[c for c in candidates if c != output_dir]}"
+    )
 
 
 def process_paper(

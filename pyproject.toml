@@ -10,6 +10,7 @@ dependencies = [
     "google-genai>=1.0",
     "apscheduler>=3.10",
     "sympy>=1.12",
+    "antlr4-python3-runtime==4.11",
 ]
 
 [project.optional-dependencies]

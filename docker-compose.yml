@@ -14,7 +14,7 @@ services:
       - RP_LOG_LEVEL=INFO
     env_file: .env
     volumes:
-      - sqlite-data:/data
+      - ./data:/data
     user: "1000:1000"
     restart: unless-stopped
     healthcheck:
@@ -40,7 +40,7 @@ services:
       - RP_LOG_LEVEL=INFO
     env_file: .env
     volumes:
-      - sqlite-data:/data
+      - ./data:/data
     user: "1000:1000"
     restart: unless-stopped
     healthcheck:
@@ -67,11 +67,13 @@ services:
       - RP_DB_PATH=/data/research.db
       - RP_EXTRACTOR_MAX_PAPERS=10
       - RP_EXTRACTOR_PDF_DIR=/data/pdfs
+      - RP_EXTRACTOR_PDF_HOST_DIR=/media/sam/1TB/research-pipeline/data/pdfs
       - RP_EXTRACTOR_RAG_URL=http://localhost:8767
       - RP_LOG_LEVEL=INFO
     env_file: .env
     volumes:
-      - sqlite-data:/data
+      - ./data:/data
+      - /media/sam/1TB/rag-service/data:/rag-data:ro
     user: "1000:1000"
     restart: unless-stopped
     healthcheck:
@@ -98,11 +100,11 @@ services:
       - RP_DB_PATH=/data/research.db
       - RP_VALIDATOR_CAS_URL=http://localhost:8769
       - RP_VALIDATOR_MAX_FORMULAS=50
-      - RP_VALIDATOR_ENGINES=sympy,maxima
+      - RP_VALIDATOR_ENGINES=matlab,sympy,maxima
       - RP_LOG_LEVEL=INFO
     env_file: .env
     volumes:
-      - sqlite-data:/data
+      - ./data:/data
     user: "1000:1000"
     restart: unless-stopped
     healthcheck:
@@ -132,7 +134,7 @@ services:
       - RP_LOG_LEVEL=INFO
     env_file: .env
     volumes:
-      - sqlite-data:/data
+      - ./data:/data
     user: "1000:1000"
     restart: unless-stopped
     healthcheck:
@@ -169,7 +171,7 @@ services:
       - RP_LOG_LEVEL=INFO
     env_file: .env
     volumes:
-      - sqlite-data:/data
+      - ./data:/data
     user: "1000:1000"
     restart: unless-stopped
     healthcheck:
@@ -183,7 +185,3 @@ services:
       codegen:
         condition: service_healthy
         restart: true
-
-volumes:
-  sqlite-data:
-    driver: local
