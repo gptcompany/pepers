@@ -289,6 +289,76 @@ def validated_formula_db(initialized_db, sample_paper_row):
     return initialized_db
 
 
+# ---------------------------------------------------------------------------
+# GitHub Discovery fixtures
+# ---------------------------------------------------------------------------
+
+
+@pytest.fixture
+def sample_github_repo_data():
+    """Sample GitHub repo dict as returned by search_github()."""
+    return {
+        "full_name": "user/kelly-criterion-py",
+        "url": "https://github.com/user/kelly-criterion-py",
+        "clone_url": "https://github.com/user/kelly-criterion-py.git",
+        "description": "Kelly criterion implementation in Python",
+        "stars": 42,
+        "language": "Python",
+        "updated_at": "2025-06-01T00:00:00Z",
+        "topics": ["kelly-criterion", "finance", "portfolio"],
+    }
+
+
+@pytest.fixture
+def sample_github_analysis_data():
+    """Sample Gemini analysis result dict."""
+    return {
+        "relevance_score": 85,
+        "quality_score": 70,
+        "formula_matches": [
+            {
+                "formula_latex": r"f^* = \frac{p}{a} - \frac{q}{b}",
+                "code_file": "kelly.py",
+                "function_name": "optimal_fraction",
+                "match_quality": "exact",
+            }
+        ],
+        "summary": "Implements Kelly criterion with proper edge case handling.",
+        "recommendation": "USE",
+        "key_files": ["kelly.py", "tests/test_kelly.py"],
+        "dependencies": ["numpy", "scipy"],
+    }
+
+
+@pytest.fixture
+def github_paper_db(initialized_db, sample_paper_row):
+    """DB with a paper + formula seeded for GitHub search tests."""
+    from services.discovery.main import upsert_paper
+    from services.analyzer.main import migrate_db
+
+    row = dict(sample_paper_row)
+    row["stage"] = "extracted"
+    upsert_paper(str(initialized_db), row)
+    migrate_db(str(initialized_db))
+
+    from shared.db import transaction
+
+    with transaction(str(initialized_db)) as conn:
+        conn.execute(
+            "INSERT INTO formulas (paper_id, latex, latex_hash, description, "
+            "formula_type, stage) VALUES (?, ?, ?, ?, ?, ?)",
+            (
+                1,
+                r"f^* = \frac{p}{a} - \frac{q}{b}",
+                "gh_test_hash",
+                "Kelly criterion optimal fraction",
+                "equation",
+                "extracted",
+            ),
+        )
+    return initialized_db
+
+
 @pytest.fixture
 def sample_markdown_with_formulas():
     """Realistic markdown text with various LaTeX formula types."""

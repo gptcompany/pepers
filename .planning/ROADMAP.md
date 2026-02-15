@@ -17,7 +17,7 @@ None
 - [✅ v5.0 Validator Service](milestones/v5.0-ROADMAP.md) (Phases 14-16) — SHIPPED 2026-02-14
 - [✅ v6.0 Codegen Service](milestones/v6.0-ROADMAP.md) (Phases 17-19) — SHIPPED 2026-02-14
 - [✅ v7.0 Orchestrator + Deploy](milestones/v7.0-ROADMAP.md) (Phases 20-22) — SHIPPED 2026-02-14
-- 🚧 **v8.0 GitHub Discovery + Gemini Analysis** — Phases 25-27 (in progress)
+- [✅ v8.0 GitHub Discovery + Gemini Analysis](milestones/v8.0-ROADMAP.md) (Phases 25-27) — SHIPPED 2026-02-15
 
 ## Phases
 
@@ -131,7 +131,7 @@ Plans:
 Plans:
 - [x] 24-01: GET endpoints + skill alignment + E2E re-test (11 new integration tests, 0 bugs)
 
-### 🚧 v8.0 GitHub Discovery + Gemini Analysis (In Progress)
+### ✅ v8.0 GitHub Discovery + Gemini Analysis (SHIPPED 2026-02-15)
 
 **Milestone Goal:** Add GitHub repository search and deep analysis using Gemini CLI (1M context) with dynamic prompts generated from paper context (title, abstract, formulas). Enables the /research skill to find existing implementations of academic papers on GitHub.
 
@@ -160,10 +160,10 @@ Plans:
 **Goal**: Unit tests for github_search module, integration tests for /search-github endpoint, E2E test with real GitHub repos and Gemini CLI analysis
 **Depends on**: Phase 26
 **Research**: Unlikely (established testing patterns)
-**Plans**: TBD
+**Plans**: 1/1 complete
 
 Plans:
-- [ ] 27-01: TBD
+- [x] 27-01: GitHub Discovery tests (79 tests: 44 unit, 26 integration, 9 E2E with real APIs)
 
 ## Progress
 
@@ -195,4 +195,4 @@ Plans:
 | 24. Skill Alignment + GET Endpoints | post-v7.0 | 1/1 | Complete | 2026-02-15 |
 | 25. GitHub Discovery Research & Design | v8.0 | 1/1 | Complete | 2026-02-15 |
 | 26. GitHub Discovery Implementation | v8.0 | 1/1 | Complete | 2026-02-15 |
-| 27. GitHub Discovery Testing | v8.0 | 0/? | Not started | - |
+| 27. GitHub Discovery Testing | v8.0 | 1/1 | Complete | 2026-02-15 |
