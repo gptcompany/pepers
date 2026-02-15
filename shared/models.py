@@ -234,3 +234,73 @@ class ErrorResponse(BaseModel):
     error: str
     code: str
     details: dict | None = None
+
+
+class GitHubRepo(BaseModel):
+    """Discovered GitHub repository for a paper."""
+
+    model_config = ConfigDict(from_attributes=True)
+
+    id: int | None = None
+    paper_id: int
+    full_name: str
+    url: str
+    clone_url: str
+    description: str | None = None
+    stars: int = 0
+    language: str | None = None
+    updated_at: str | None = None
+    topics: list[str] = []
+    search_query: str | None = None
+    created_at: datetime | None = None
+
+    @field_validator("topics", mode="before")
+    @classmethod
+    def parse_topics(cls, v: object) -> list:
+        return _parse_json_list(v)
+
+
+class GitHubAnalysis(BaseModel):
+    """Gemini analysis result for a GitHub repository."""
+
+    model_config = ConfigDict(from_attributes=True)
+
+    id: int | None = None
+    repo_id: int
+    relevance_score: int | None = None
+    quality_score: int | None = None
+    formula_matches: list[dict] = []
+    summary: str | None = None
+    recommendation: str | None = None
+    key_files: list[str] = []
+    dependencies: list[str] = []
+    model_used: str | None = None
+    analysis_time_ms: int | None = None
+    error: str | None = None
+    created_at: datetime | None = None
+
+    @field_validator("formula_matches", "key_files", "dependencies", mode="before")
+    @classmethod
+    def parse_json_lists(cls, v: object) -> list:
+        return _parse_json_list(v)
+
+
+class SearchGitHubRequest(BaseModel):
+    """Request body for POST /search-github."""
+
+    paper_id: int
+    max_repos: int = 3
+    languages: list[str] = ["python", "rust", "cpp"]
+    min_stars: int = 5
+    query_override: str | None = None
+    force: bool = False
+
+
+class SearchGitHubResponse(BaseModel):
+    """Response for POST /search-github."""
+
+    paper_id: int
+    repos_found: int
+    repos_analyzed: int
+    results: list[dict] = []
+    errors: list[str] = []

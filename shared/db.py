@@ -100,6 +100,40 @@ CREATE TABLE IF NOT EXISTS generated_code (
     error TEXT,
     created_at TEXT NOT NULL DEFAULT (datetime('now'))
 );
+
+-- github_repos: discovered GitHub repositories (GitHub Discovery module)
+CREATE TABLE IF NOT EXISTS github_repos (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    paper_id INTEGER NOT NULL REFERENCES papers(id),
+    full_name TEXT NOT NULL,
+    url TEXT NOT NULL,
+    clone_url TEXT NOT NULL,
+    description TEXT,
+    stars INTEGER DEFAULT 0,
+    language TEXT,
+    updated_at TEXT,
+    topics TEXT,
+    search_query TEXT,
+    created_at TEXT NOT NULL DEFAULT (datetime('now')),
+    UNIQUE(paper_id, full_name)
+);
+
+-- github_analyses: Gemini analysis results per repo
+CREATE TABLE IF NOT EXISTS github_analyses (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    repo_id INTEGER NOT NULL REFERENCES github_repos(id),
+    relevance_score INTEGER,
+    quality_score INTEGER,
+    formula_matches TEXT,
+    summary TEXT,
+    recommendation TEXT,
+    key_files TEXT,
+    dependencies TEXT,
+    model_used TEXT,
+    analysis_time_ms INTEGER,
+    error TEXT,
+    created_at TEXT NOT NULL DEFAULT (datetime('now'))
+);
 """
 
 INDEXES = """
@@ -109,6 +143,10 @@ CREATE INDEX IF NOT EXISTS idx_formulas_paper_id ON formulas(paper_id);
 CREATE INDEX IF NOT EXISTS idx_formulas_latex_hash ON formulas(latex_hash);
 CREATE INDEX IF NOT EXISTS idx_validations_formula_id ON validations(formula_id);
 CREATE INDEX IF NOT EXISTS idx_generated_code_formula_id ON generated_code(formula_id);
+CREATE INDEX IF NOT EXISTS idx_github_repos_paper_id ON github_repos(paper_id);
+CREATE INDEX IF NOT EXISTS idx_github_repos_full_name ON github_repos(full_name);
+CREATE INDEX IF NOT EXISTS idx_github_analyses_repo_id ON github_analyses(repo_id);
+CREATE INDEX IF NOT EXISTS idx_github_analyses_recommendation ON github_analyses(recommendation);
 """
 
 
@@ -166,6 +204,7 @@ def init_db(db_path: str | Path) -> None:
         conn.executescript(SCHEMA)
         conn.executescript(INDEXES)
         conn.execute("INSERT OR IGNORE INTO schema_version (version) VALUES (1)")
+        conn.execute("INSERT OR IGNORE INTO schema_version (version) VALUES (2)")
         conn.commit()
     finally:
         conn.close()

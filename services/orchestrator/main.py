@@ -31,9 +31,10 @@ from urllib.parse import parse_qs
 
 from shared.config import load_config
 from shared.db import init_db, transaction
-from shared.models import Formula, Paper
+from shared.models import Formula, GitHubAnalysis, GitHubRepo, Paper
 from shared.server import BaseHandler, BaseService, route
 
+from services.orchestrator.github_search import search_and_analyze
 from services.orchestrator.pipeline import PipelineRunner
 from services.orchestrator.scheduler import create_scheduler
 
@@ -179,6 +180,127 @@ class OrchestratorHandler(BaseHandler):
                 [*bind, limit],
             ).fetchall()
         return [Formula(**dict(r)).model_dump(mode="json") for r in rows]
+
+    # -- GitHub Discovery endpoints --
+
+    @route("POST", "/search-github")
+    def handle_search_github(self, data: dict) -> dict | None:
+        """Search GitHub for implementations of a paper.
+
+        Request body:
+            {
+                "paper_id": 42,
+                "max_repos": 3,
+                "languages": ["python", "rust", "cpp"],
+                "min_stars": 5,
+                "query_override": null,
+                "force": false
+            }
+
+        Only paper_id is required.
+        """
+        paper_id = data.get("paper_id")
+        if paper_id is None or not isinstance(paper_id, int):
+            self.send_error_json(
+                "paper_id is required and must be an integer",
+                "VALIDATION_ERROR", 400,
+            )
+            return None
+
+        logger.info("GitHub search: paper_id=%d", paper_id)
+
+        result = search_and_analyze(
+            paper_id=paper_id,
+            db_path=self.db_path,
+            max_repos=data.get("max_repos"),
+            languages=data.get("languages"),
+            min_stars=data.get("min_stars"),
+            query_override=data.get("query_override"),
+            force=data.get("force", False),
+        )
+
+        return result
+
+    @route("GET", "/github-repos")
+    def handle_github_repos(self) -> list | None:
+        """Query GitHub repos and their analyses.
+
+        GET /github-repos?paper_id=42&recommendation=USE&limit=50
+        """
+        params = self._query_params()
+        paper_id = params.get("paper_id")
+
+        if paper_id is None:
+            self.send_error_json(
+                "paper_id query parameter is required",
+                "VALIDATION_ERROR", 400,
+            )
+            return None
+
+        recommendation = params.get("recommendation")
+        limit = min(int(params.get("limit", "50")), 200)
+
+        clauses = ["r.paper_id = ?"]
+        bind: list = [int(paper_id)]
+
+        if recommendation:
+            clauses.append("a.recommendation = ?")
+            bind.append(recommendation.upper())
+
+        where = "WHERE " + " AND ".join(clauses)
+
+        with transaction(self.db_path) as conn:
+            rows = conn.execute(
+                f"SELECT r.*, a.relevance_score, a.quality_score, "  # noqa: S608
+                f"a.formula_matches, a.summary, a.recommendation, "
+                f"a.key_files, a.dependencies, a.model_used, "
+                f"a.analysis_time_ms, a.error as analysis_error, "
+                f"a.id as analysis_id "
+                f"FROM github_repos r "
+                f"LEFT JOIN github_analyses a ON a.repo_id = r.id "
+                f"{where} ORDER BY r.stars DESC LIMIT ?",
+                [*bind, limit],
+            ).fetchall()
+
+        results = []
+        for row in rows:
+            d = dict(row)
+            repo = GitHubRepo(
+                id=d["id"],
+                paper_id=d["paper_id"],
+                full_name=d["full_name"],
+                url=d["url"],
+                clone_url=d["clone_url"],
+                description=d.get("description"),
+                stars=d.get("stars", 0),
+                language=d.get("language"),
+                updated_at=d.get("updated_at"),
+                topics=d.get("topics", "[]"),
+                search_query=d.get("search_query"),
+                created_at=d.get("created_at"),
+            )
+            analysis = None
+            if d.get("analysis_id"):
+                analysis = GitHubAnalysis(
+                    id=d["analysis_id"],
+                    repo_id=d["id"],
+                    relevance_score=d.get("relevance_score"),
+                    quality_score=d.get("quality_score"),
+                    formula_matches=d.get("formula_matches", "[]"),
+                    summary=d.get("summary"),
+                    recommendation=d.get("recommendation"),
+                    key_files=d.get("key_files", "[]"),
+                    dependencies=d.get("dependencies", "[]"),
+                    model_used=d.get("model_used"),
+                    analysis_time_ms=d.get("analysis_time_ms"),
+                    error=d.get("analysis_error"),
+                )
+            results.append({
+                "repo": repo.model_dump(mode="json"),
+                "analysis": analysis.model_dump(mode="json") if analysis else None,
+            })
+
+        return results
 
     # -- Helpers for paper queries --
 

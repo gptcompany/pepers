@@ -140,7 +140,7 @@ class TestInitDb:
         conn = get_connection(tmp_db_path)
         versions = conn.execute("SELECT COUNT(*) FROM schema_version").fetchone()[0]
         conn.close()
-        assert versions == 1
+        assert versions == 2  # v1 (original) + v2 (github_repos/analyses)
 
     def test_foreign_keys_enforced(self, tmp_db_path):
         init_db(tmp_db_path)
