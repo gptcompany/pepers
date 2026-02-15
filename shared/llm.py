@@ -128,7 +128,7 @@ def call_gemini_sdk(
         config=types.GenerateContentConfig(
             system_instruction=system,
             temperature=0.3,
-            max_output_tokens=500,
+            max_output_tokens=4096,
             response_mime_type="application/json",
         ),
     )
