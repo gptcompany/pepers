@@ -360,6 +360,36 @@ def github_paper_db(initialized_db, sample_paper_row):
 
 
 @pytest.fixture
+def multi_formula_db(initialized_db, sample_paper_row):
+    """DB with one paper + 75 extracted formulas for batch overflow testing."""
+    from services.discovery.main import upsert_paper
+    from services.analyzer.main import migrate_db
+
+    row = dict(sample_paper_row)
+    row["stage"] = "extracted"
+    upsert_paper(str(initialized_db), row)
+    migrate_db(str(initialized_db))
+
+    from shared.db import transaction
+
+    with transaction(str(initialized_db)) as conn:
+        for i in range(75):
+            conn.execute(
+                "INSERT INTO formulas (paper_id, latex, latex_hash, description, "
+                "formula_type, stage) VALUES (?, ?, ?, ?, ?, ?)",
+                (
+                    1,
+                    rf"x^{{{i+2}}} + {i+1}\cdot y = z",
+                    f"batch_hash_{i:03d}",
+                    f"Test formula {i}",
+                    "equation",
+                    "extracted",
+                ),
+            )
+    return initialized_db
+
+
+@pytest.fixture
 def sample_markdown_with_formulas():
     """Realistic markdown text with various LaTeX formula types."""
     return r"""# Kelly Criterion for Portfolio Optimization

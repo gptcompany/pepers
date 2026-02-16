@@ -9,12 +9,12 @@ See: .planning/PROJECT.md (updated 2026-02-15)
 
 ## Current Position
 
-Phase: 29 of 30 (LaTeX Filtering + Cleanup)
+Phase: 30 of 30 (Test E2E Hardening)
 Plan: 1/1 complete
 Status: Complete
-Last activity: 2026-02-16 — Phase 29 shipped
+Last activity: 2026-02-16 — Phase 30 shipped, v9.0 milestone complete
 
-Progress: 8/8 milestones shipped, v9.0 in progress (2/3 phases)
+Progress: 9/9 milestones shipped (v1.0-v9.0)
 
 ## Shipped Milestones
 
@@ -101,12 +101,32 @@ E2E pipeline test on paper 15 (1806.05293, Kelly criterion stock markets, 6 page
 - `tests/unit/test_codegen.py`: +20 tests (clean_latex + parse_formula integration)
 - 582 non-e2e tests pass, 0 type errors, 333 LOC added
 
+## Phase 30 Deliverables
+
+- `tests/integration/test_hardening.py`: 567 LOC — 18 integration tests
+  - TestStageTransitions (5): validator→validated, codegen→codegen, all-fail-no-advance, full progression
+  - TestBatchIteration (6): batch processing 75 formulas, merge counters, safety cap at 100, partial failure, clean_latex
+  - TestResolveStages (4): rejected/failed/codegen→empty, extracted→validator
+  - TestFilteredFormulasNoInfiniteLoop (3): trivial filtered, nontrivial pass, zero-eligible terminates
+- `tests/e2e/test_pipeline_e2e.py`: 362 LOC — 4 E2E tests
+  - Full stage flow extracted→validated→codegen, multi-paper independence, all-fail negative path, batch overflow 60 formulas
+- `tests/conftest.py`: +25 LOC — `multi_formula_db` fixture (75 formulas)
+- 600 non-e2e + 47 e2e tests pass, 932 LOC added
+
+## Final Stats
+
+- **Total tests**: 600 non-e2e + 47 e2e = 647 total (all passing)
+- **Total LOC**: ~11,500+ across 6 services + shared library + Docker + GitHub Discovery
+- **Services**: 6 microservices (ports 8770-8775) + Docker Compose
+- **Duration**: 7 days (2026-02-10 to 2026-02-16)
+- **CAS engines**: MATLAB + SymPy + Maxima with fallback consensus
+
 ## Blockers/Concerns
 
-None — Phase 30 (regression tests) is next.
+None — v9.0 milestone complete. All 30 phases shipped.
 
 ## Session Continuity
 
 Last session: 2026-02-16
-Stopped at: Phase 29 complete
+Stopped at: Phase 30 complete, v9.0 shipped
 Resume file: None
