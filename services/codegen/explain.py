@@ -69,7 +69,7 @@ def explain_formula(
             prompt=user_prompt,
             system=EXPLANATION_SYSTEM_PROMPT,
             format=FormulaExplanation.model_json_schema(),
-            options={"temperature": 0.2, "num_predict": 500, "num_ctx": 4096},
+            options={"temperature": 0.2, "num_predict": 4096, "num_ctx": 4096},
         )
         return FormulaExplanation.model_validate_json(result).model_dump()
     except Exception as e:

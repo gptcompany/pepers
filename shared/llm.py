@@ -168,7 +168,7 @@ def call_openrouter(
             {"role": "user", "content": prompt},
         ],
         "temperature": 0.3,
-        "max_tokens": 500,
+        "max_tokens": 4096,
     }).encode()
 
     req = urllib.request.Request(
@@ -208,7 +208,7 @@ def call_ollama(
         format: Output format — "json" for free-form JSON, or a
             dict (e.g. model_json_schema()) for structured output.
         options: Ollama generation options (temperature, num_predict,
-            num_ctx, etc.). Defaults to temperature=0.3, num_predict=500.
+            num_ctx, etc.). Defaults to temperature=0.3, num_predict=4096.
 
     Returns:
         Raw response text from Ollama.
@@ -217,7 +217,7 @@ def call_ollama(
         RuntimeError: On connection error, timeout, or non-200 response.
     """
     if options is None:
-        options = {"temperature": 0.3, "num_predict": 500}
+        options = {"temperature": 0.3, "num_predict": 4096}
 
     payload = json.dumps({
         "model": model,

@@ -155,6 +155,12 @@ class ValidatorHandler(BaseHandler):
         elapsed_ms = int((time.time() - start) * 1000)
         processed = sum(counts.values())
 
+        # Update papers.stage for processed papers
+        if processed > counts["failed"]:
+            paper_ids = {f["paper_id"] for f in formulas if f.get("paper_id")}
+            for pid in paper_ids:
+                _update_paper_stage(db_path, pid, "validated")
+
         logger.info(
             "Validation complete: processed=%d valid=%d invalid=%d "
             "partial=%d unparseable=%d failed=%d errors=%d time=%dms",
@@ -259,6 +265,15 @@ def _update_formula_stage(
         conn.execute(
             "UPDATE formulas SET stage = 'validated' WHERE id = ?",
             (formula_id,),
+        )
+
+
+def _update_paper_stage(db_path: str, paper_id: int, stage: str) -> None:
+    """Update paper stage after processing its formulas."""
+    with transaction(db_path) as conn:
+        conn.execute(
+            "UPDATE papers SET stage = ?, updated_at = datetime('now') WHERE id = ?",
+            (stage, paper_id),
         )
 
 

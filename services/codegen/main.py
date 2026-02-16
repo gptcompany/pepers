@@ -153,6 +153,13 @@ class CodegenHandler(BaseHandler):
 
         elapsed_ms = int((time.time() - start) * 1000)
 
+        # Update papers.stage if any code was successfully generated
+        any_code = sum(code_counts.values()) > 0
+        if any_code:
+            paper_ids = {f["paper_id"] for f in formulas if f.get("paper_id")}
+            for pid in paper_ids:
+                _update_paper_stage(db_path, pid, "codegen")
+
         logger.info(
             "Codegen complete: processed=%d c99=%d rust=%d python=%d "
             "explanations=%d errors=%d time=%dms",
@@ -264,6 +271,15 @@ def _update_formula_stage(db_path: str, formula_id: int) -> None:
         conn.execute(
             "UPDATE formulas SET stage = 'codegen' WHERE id = ?",
             (formula_id,),
+        )
+
+
+def _update_paper_stage(db_path: str, paper_id: int, stage: str) -> None:
+    """Update paper stage after processing its formulas."""
+    with transaction(db_path) as conn:
+        conn.execute(
+            "UPDATE papers SET stage = ?, updated_at = datetime('now') WHERE id = ?",
+            (stage, paper_id),
         )
 
 

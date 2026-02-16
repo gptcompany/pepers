@@ -175,16 +175,16 @@ Plans:
 **Goal**: Fix paper stage not advancing after validator/codegen, add batch iteration loop in orchestrator, fix OpenRouter max_tokens truncation
 **Depends on**: v8.0 complete
 **Research**: Unlikely (bug fixes on existing internal patterns)
-**Plans**: TBD
+**Plans**: 1/1 complete
 
 Bugs addressed:
-- CRITICAL: validator/main.py does not UPDATE papers.stage after validation — paper stays at "extracted" forever
-- CRITICAL: codegen/main.py does not UPDATE papers.stage after code generation
-- HIGH: orchestrator/pipeline.py calls validator/codegen once — remaining formulas beyond batch_size=50 are never processed
-- MEDIUM: shared/llm.py OpenRouter max_tokens=500 truncates responses (should be 4096)
+- ✅ CRITICAL: validator/main.py does not UPDATE papers.stage after validation — FIXED
+- ✅ CRITICAL: codegen/main.py does not UPDATE papers.stage after code generation — FIXED
+- ✅ HIGH: orchestrator/pipeline.py calls validator/codegen once — FIXED (batch iteration loop)
+- ✅ MEDIUM: shared/llm.py OpenRouter max_tokens=500 truncates responses — FIXED (→ 4096)
 
 Plans:
-- [ ] 28-01: TBD (run /gsd:plan-phase 28 to break down)
+- [x] 28-01: Fix stage transitions + batch overflow + max_tokens (5 files, ~100 LOC, 543 tests pass)
 
 #### Phase 29: LaTeX Filtering + Cleanup
 
@@ -248,6 +248,6 @@ Plans:
 | 25. GitHub Discovery Research & Design | v8.0 | 1/1 | Complete | 2026-02-15 |
 | 26. GitHub Discovery Implementation | v8.0 | 1/1 | Complete | 2026-02-15 |
 | 27. GitHub Discovery Testing | v8.0 | 1/1 | Complete | 2026-02-15 |
-| 28. Fix Stage Transitions + Batch Overflow | v9.0 | 0/? | Not started | - |
+| 28. Fix Stage Transitions + Batch Overflow | v9.0 | 1/1 | Complete | 2026-02-16 |
 | 29. LaTeX Filtering + Cleanup | v9.0 | 0/? | Not started | - |
 | 30. Test E2E Hardening | v9.0 | 0/? | Not started | - |

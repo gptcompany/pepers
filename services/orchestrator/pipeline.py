@@ -113,6 +113,10 @@ class PipelineRunner:
         stages_completed = 0
         has_failure = False
 
+        # Stages that process formulas in batches need iteration
+        BATCH_STAGES = {"validator", "codegen"}
+        MAX_BATCH_ITERATIONS = 100
+
         for stage_name, port in stage_list:
             stage_params = self._build_stage_params(stage_name, params)
 
@@ -125,9 +129,28 @@ class PipelineRunner:
             stage_start = time.time()
 
             try:
-                result = self._call_service_with_retry(
-                    f"http://localhost:{port}/process", stage_params
-                )
+                if stage_name in BATCH_STAGES:
+                    # Iterate until all formulas are processed
+                    batch_results: list[dict] = []
+                    for iteration in range(1, MAX_BATCH_ITERATIONS + 1):
+                        result = self._call_service_with_retry(
+                            f"http://localhost:{port}/process", stage_params
+                        )
+                        batch_results.append(result)
+                        processed = result.get("formulas_processed", 0)
+                        if processed == 0:
+                            break
+                        logger.info(
+                            "Stage %s iteration %d: %d formulas processed",
+                            stage_name, iteration, processed,
+                        )
+                    # Merge batch results
+                    result = self._merge_batch_results(batch_results, stage_name)
+                else:
+                    result = self._call_service_with_retry(
+                        f"http://localhost:{port}/process", stage_params
+                    )
+
                 stage_ms = int((time.time() - stage_start) * 1000)
                 result["time_ms"] = stage_ms
                 results[stage_name] = result
@@ -196,6 +219,45 @@ class PipelineRunner:
 
         # Batch mode: run all stages
         return STAGE_ORDER[:stages]
+
+    @staticmethod
+    def _merge_batch_results(
+        batch_results: list[dict], stage_name: str
+    ) -> dict:
+        """Merge multiple batch iteration results into a single result.
+
+        Sums numeric counters and concatenates error lists.
+        """
+        if not batch_results:
+            return {"success": True, "service": stage_name, "formulas_processed": 0}
+
+        merged = dict(batch_results[0])
+        merged["batch_iterations"] = len(batch_results)
+
+        if len(batch_results) == 1:
+            return merged
+
+        for r in batch_results[1:]:
+            merged["formulas_processed"] = (
+                merged.get("formulas_processed", 0)
+                + r.get("formulas_processed", 0)
+            )
+            # Merge stage-specific counters
+            for key in ("formulas_valid", "formulas_invalid", "formulas_partial",
+                        "formulas_unparseable", "formulas_failed",
+                        "explanations_generated"):
+                if key in r:
+                    merged[key] = merged.get(key, 0) + r[key]
+            # Merge code_generated dict (codegen stage)
+            if "code_generated" in r and "code_generated" in merged:
+                for lang, count in r["code_generated"].items():
+                    merged["code_generated"][lang] = (
+                        merged["code_generated"].get(lang, 0) + count
+                    )
+            # Merge errors
+            merged.setdefault("errors", []).extend(r.get("errors", []))
+
+        return merged
 
     def _build_stage_params(
         self, stage_name: str, params: dict
