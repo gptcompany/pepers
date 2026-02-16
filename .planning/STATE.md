@@ -9,12 +9,12 @@ See: .planning/PROJECT.md (updated 2026-02-15)
 
 ## Current Position
 
-Phase: 28 of 30 (Fix Stage Transitions + Batch Overflow)
-Plan: Not started
-Status: Ready to plan
-Last activity: 2026-02-16 — Milestone v9.0 created
+Phase: 29 of 30 (LaTeX Filtering + Cleanup)
+Plan: 1/1 complete
+Status: Complete
+Last activity: 2026-02-16 — Phase 29 shipped
 
-Progress: 8/8 milestones shipped, v9.0 in progress (0/3 phases)
+Progress: 8/8 milestones shipped, v9.0 in progress (2/3 phases)
 
 ## Shipped Milestones
 
@@ -37,8 +37,8 @@ Progress: 8/8 milestones shipped, v9.0 in progress (0/3 phases)
 
 ## Final Stats
 
-- **Total tests**: 586 (543 non-e2e + 43 e2e, all passing)
-- **Total LOC**: ~10,300+ across 6 services + shared library + Docker + GitHub Discovery
+- **Total tests**: 582 non-e2e + 43 e2e = 625 total (all passing)
+- **Total LOC**: ~10,600+ across 6 services + shared library + Docker + GitHub Discovery
 - **Services**: 6 microservices (ports 8770-8775) + Docker Compose
 - **Duration**: 6 days (2026-02-10 to 2026-02-15)
 - **CAS engines**: MATLAB + SymPy + Maxima with fallback consensus
@@ -73,8 +73,8 @@ Progress: 8/8 milestones shipped, v9.0 in progress (0/3 phases)
 
 | Phase | Goal | Status |
 |-------|------|--------|
-| 28. Fix Stage Transitions + Batch Overflow | Paper stage updates, batch iteration, OpenRouter max_tokens | Not started |
-| 29. LaTeX Filtering + Cleanup | Complexity filter, macro cleanup before parse_latex | Not started |
+| 28. Fix Stage Transitions + Batch Overflow | Paper stage updates, batch iteration, OpenRouter max_tokens | Complete |
+| 29. LaTeX Filtering + Cleanup | Complexity filter, macro cleanup before parse_latex | Complete |
 | 30. Test E2E Hardening | Regression tests for all fixes | Not started |
 
 ### Origin
@@ -86,16 +86,27 @@ E2E pipeline test on paper 15 (1806.05293, Kelly criterion stock markets, 6 page
 - Codegen treats \tag{13} as variable
 - ~35% parse_latex failure rate on complex notations
 
+## Phase 28 Deliverables
+
+- Stage transitions: validator + codegen now UPDATE papers.stage
+- Batch iteration: orchestrator loops until all formulas processed (safety cap 5000)
+- max_tokens: 500 → 4096 for OpenRouter/Ollama
+- 543 tests pass, 0 type errors, ~100 LOC added
+
+## Phase 29 Deliverables
+
+- `services/extractor/latex.py`: +79 LOC — `is_nontrivial()` complexity heuristic, MIN_FORMULA_LENGTH 3→10
+- `services/codegen/generators.py`: +43 LOC — `clean_latex()` strips 9 categories of unsupported macros
+- `tests/unit/test_extractor.py`: +14 tests (is_nontrivial + filter_formulas)
+- `tests/unit/test_codegen.py`: +20 tests (clean_latex + parse_formula integration)
+- 582 non-e2e tests pass, 0 type errors, 333 LOC added
+
 ## Blockers/Concerns
 
-None — planning phase.
-
-### Roadmap Evolution
-
-- Milestone v9.0 created: Pipeline hardening post-E2E, 3 phases (Phase 28-30)
+None — Phase 30 (regression tests) is next.
 
 ## Session Continuity
 
 Last session: 2026-02-16
-Stopped at: Milestone v9.0 initialization
+Stopped at: Phase 29 complete
 Resume file: None

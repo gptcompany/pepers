@@ -191,15 +191,15 @@ Plans:
 **Goal**: Add complexity filter to reject trivial LaTeX fragments, clean up LaTeX macros before parse_latex() to prevent codegen misinterpretation
 **Depends on**: Phase 28
 **Research**: Unlikely (regex + SymPy patterns already in codebase)
-**Plans**: TBD
+**Plans**: 1/1 complete
 
 Bugs addressed:
-- MEDIUM: extractor/latex.py MIN_FORMULA_LENGTH=3 allows fragments like ^{1}, \mu, \sigma as "formulas"
-- MEDIUM: codegen/generators.py does not strip \tag{N}, \label{}, \text{}, \pmb{}, \dots, \equiv before parse_latex()
-- MEDIUM: ~35% parse failure rate from unsupported LaTeX macros — need pre-validation
+- ✅ MEDIUM: extractor/latex.py MIN_FORMULA_LENGTH=3 allows fragments like ^{1}, \mu, \sigma — FIXED (is_nontrivial() heuristic)
+- ✅ MEDIUM: codegen/generators.py does not strip \tag{N}, \label{}, \text{}, \pmb{}, \dots, \equiv — FIXED (clean_latex())
+- ✅ MEDIUM: ~35% parse failure rate from unsupported LaTeX macros — MITIGATED (filter + cleanup)
 
 Plans:
-- [ ] 29-01: TBD (run /gsd:plan-phase 29 to break down)
+- [x] 29-01: LaTeX filtering + cleanup (4 files, 333 LOC, 582 tests pass, 34 new tests)
 
 #### Phase 30: Test E2E Hardening
 
@@ -249,5 +249,5 @@ Plans:
 | 26. GitHub Discovery Implementation | v8.0 | 1/1 | Complete | 2026-02-15 |
 | 27. GitHub Discovery Testing | v8.0 | 1/1 | Complete | 2026-02-15 |
 | 28. Fix Stage Transitions + Batch Overflow | v9.0 | 1/1 | Complete | 2026-02-16 |
-| 29. LaTeX Filtering + Cleanup | v9.0 | 0/? | Not started | - |
+| 29. LaTeX Filtering + Cleanup | v9.0 | 1/1 | Complete | 2026-02-16 |
 | 30. Test E2E Hardening | v9.0 | 0/? | Not started | - |

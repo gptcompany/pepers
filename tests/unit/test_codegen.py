@@ -9,6 +9,7 @@ import pytest
 import sympy
 
 from services.codegen.generators import (
+    clean_latex,
     generate_all,
     generate_c99,
     generate_python,
@@ -20,7 +21,97 @@ from shared.models import FormulaExplanation
 
 
 # ===========================================================================
-# parse_formula() Tests
+# clean_latex() Tests
+# ===========================================================================
+
+
+class TestCleanLatex:
+    """Tests for clean_latex() — macro stripping before parse_latex."""
+
+    def test_strips_tag(self):
+        assert r"\tag" not in clean_latex(r"x^2 \tag{13}")
+
+    def test_strips_label(self):
+        assert r"\label" not in clean_latex(r"x^2 \label{eq:kelly}")
+
+    def test_unwraps_text(self):
+        result = clean_latex(r"\text{for all}")
+        assert "for all" in result
+        assert r"\text" not in result
+
+    def test_unwraps_mathrm(self):
+        result = clean_latex(r"\mathrm{E}[X]")
+        assert "E" in result
+        assert r"\mathrm" not in result
+
+    def test_unwraps_pmb(self):
+        result = clean_latex(r"\pmb{x}")
+        assert "x" in result
+        assert r"\pmb" not in result
+
+    def test_unwraps_operatorname(self):
+        result = clean_latex(r"\operatorname{argmax}")
+        assert "argmax" in result
+        assert r"\operatorname" not in result
+
+    def test_strips_spacing(self):
+        result = clean_latex(r"a \, b \; c \quad d")
+        assert r"\," not in result
+        assert r"\;" not in result
+        assert r"\quad" not in result
+
+    def test_strips_left_right(self):
+        result = clean_latex(r"\left( x \right)")
+        assert r"\left" not in result
+        assert r"\right" not in result
+        assert "x" in result
+
+    def test_replaces_equiv(self):
+        result = clean_latex(r"f(x) \equiv g(x)")
+        assert "=" in result
+        assert r"\equiv" not in result
+
+    def test_replaces_triangleq(self):
+        result = clean_latex(r"f \triangleq g")
+        assert "=" in result
+        assert r"\triangleq" not in result
+
+    def test_strips_dots(self):
+        result = clean_latex(r"a_1 + \dots + a_n")
+        assert r"\dots" not in result
+
+    def test_strips_cdots(self):
+        result = clean_latex(r"x_1 \cdots x_n")
+        assert r"\cdots" not in result
+
+    def test_strips_displaystyle(self):
+        result = clean_latex(r"\displaystyle \frac{a}{b}")
+        assert r"\displaystyle" not in result
+        assert r"\frac" in result
+
+    def test_strips_alignment(self):
+        result = clean_latex(r"a &= b \\ c &= d")
+        assert "&" not in result
+        assert r"\\" not in result
+
+    def test_strips_nonumber(self):
+        result = clean_latex(r"x^2 \nonumber")
+        assert r"\nonumber" not in result
+
+    def test_preserves_math_content(self):
+        """Core math content should survive cleanup."""
+        result = clean_latex(r"\frac{a}{b} + \sum_{i=1}^{n} x_i")
+        assert r"\frac" in result
+        assert r"\sum" in result
+
+    def test_collapses_whitespace(self):
+        result = clean_latex(r"a  \,  b   c")
+        # No double spaces
+        assert "  " not in result
+
+
+# ===========================================================================
+# parse_formula() Tests (with clean_latex integration)
 # ===========================================================================
 
 
@@ -79,6 +170,29 @@ class TestParseFormula:
         expr = parse_formula(r"\sqrt{4}")
         # parse_latex returns sqrt(4) unevaluated; verify numerically
         assert float(expr) == pytest.approx(2.0)
+
+    def test_parse_with_tag(self):
+        """\\tag{N} should be stripped, not interpreted as function."""
+        expr = parse_formula(r"x^2 + 1 \tag{1}")
+        x = sympy.Symbol("x")
+        assert expr.subs(x, 0) == 1
+
+    def test_parse_with_displaystyle(self):
+        """\\displaystyle should be stripped."""
+        expr = parse_formula(r"\displaystyle \frac{1}{2}")
+        assert float(expr) == pytest.approx(0.5)
+
+    def test_parse_with_equiv(self):
+        """\\equiv should become =, parse_latex may interpret as Eq or rel."""
+        # After replacement, 'x = y' should parse without error
+        expr = parse_formula(r"x \equiv y")
+        assert expr is not None
+
+    def test_parse_with_left_right(self):
+        """\\left( and \\right) should be stripped."""
+        expr = parse_formula(r"\left( x + 1 \right)")
+        x = sympy.Symbol("x")
+        assert expr.subs(x, 0) == 1
 
 
 # ===========================================================================

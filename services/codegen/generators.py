@@ -22,11 +22,50 @@ from sympy.utilities.codegen import codegen
 logger = logging.getLogger(__name__)
 
 
+def clean_latex(latex: str) -> str:
+    r"""Strip LaTeX macros unsupported by SymPy's parse_latex.
+
+    Handles: annotations (\tag, \label), text/formatting commands,
+    spacing, delimiters (\left/\right), equivalence symbols, dots,
+    style commands, and alignment markers.
+    """
+    s = latex
+    # 1. Remove \tag{...}, \label{...} (non-math annotations)
+    s = re.sub(r'\\tag\{[^}]*\}', '', s)
+    s = re.sub(r'\\label\{[^}]*\}', '', s)
+    # 2. Unwrap text/formatting commands: \text{foo} → foo
+    for cmd in ('text', 'textit', 'textbf', 'textrm', 'mathrm', 'mathbf',
+                'mathbb', 'mathcal', 'mathfrak', 'boldsymbol', 'pmb',
+                'operatorname', 'bm'):
+        s = re.sub(r'\\' + cmd + r'\{([^{}]*(?:\{[^{}]*\}[^{}]*)*)\}',
+                   r'\1', s)
+    # 3. Remove spacing commands
+    s = re.sub(r'\\[,;:!]', '', s)
+    s = re.sub(r'\\(?:quad|qquad|hspace\{[^}]*\}|vspace\{[^}]*\})', '', s)
+    # 4. Remove \left, \right (SymPy handles parens natively)
+    s = re.sub(r'\\(?:left|right)\s*[.|\[\](){}\\|]?', '', s)
+    # 5. Replace equivalence symbols with =
+    for equiv in (r'\equiv', r'\triangleq', r'\coloneqq', r'\defeq'):
+        s = s.replace(equiv, '=')
+    # 6. Remove dots
+    s = re.sub(r'\\[lcvd]?dots', '', s)
+    s = s.replace(r'\cdots', '')
+    # 7. Remove style commands
+    s = re.sub(r'\\(?:display|text|script|scriptscript)style', '', s)
+    # 8. Remove \nonumber, \notag, line breaks, alignment
+    s = s.replace(r'\nonumber', '').replace(r'\notag', '')
+    s = re.sub(r'\\\\', ' ', s)
+    s = s.replace('&', ' ')
+    # 9. Collapse whitespace
+    s = re.sub(r'\s+', ' ', s).strip()
+    return s
+
+
 def parse_formula(latex: str) -> sympy.Expr:
     """Parse LaTeX to SymPy expression.
 
     Uses ANTLR backend (default, more lenient).
-    Strips environment wrappers (\\begin{equation}...\\end{equation}).
+    Strips environment wrappers, math delimiters, and unsupported macros.
 
     Args:
         latex: LaTeX formula string.
@@ -41,6 +80,8 @@ def parse_formula(latex: str) -> sympy.Expr:
     cleaned = re.sub(r'\\begin\{[^}]+\}|\\end\{[^}]+\}', '', latex).strip()
     # Strip display math delimiters
     cleaned = re.sub(r'^\$\$|^\$|\$\$$|\$$', '', cleaned).strip()
+    # Strip unsupported macros
+    cleaned = clean_latex(cleaned)
     if not cleaned:
         raise ValueError("Empty LaTeX after cleanup")
     return parse_latex(cleaned)  # type: ignore[return-value]

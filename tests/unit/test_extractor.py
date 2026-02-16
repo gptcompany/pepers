@@ -26,10 +26,12 @@ from services.extractor.rag_client import (
 )
 from services.extractor.latex import (
     CONTEXT_WINDOW,
+    MIN_FORMULA_LENGTH,
     extract_context,
     extract_formulas,
     filter_formulas,
     formulas_to_models,
+    is_nontrivial,
 )
 from shared.models import Formula, Paper
 
@@ -536,6 +538,99 @@ class TestFilterFormulas:
         ]
         result = filter_formulas(formulas)
         assert len(result) == 2
+
+    def test_rejects_single_greek_letter(self):
+        formulas = [
+            {"latex": r"\mu", "formula_type": "inline", "start": 0, "end": 5},
+            {"latex": r"\sigma", "formula_type": "inline", "start": 10, "end": 18},
+            {"latex": r"\alpha_t", "formula_type": "inline", "start": 20, "end": 30},
+            {"latex": r"\beta_{0}", "formula_type": "inline", "start": 35, "end": 45},
+        ]
+        result = filter_formulas(formulas)
+        assert len(result) == 0
+
+    def test_rejects_pure_superscript(self):
+        formulas = [
+            {"latex": "^{1}", "formula_type": "inline", "start": 0, "end": 5},
+            {"latex": "_{i}", "formula_type": "inline", "start": 10, "end": 15},
+            {"latex": "^{n+1}", "formula_type": "inline", "start": 20, "end": 28},
+        ]
+        result = filter_formulas(formulas)
+        assert len(result) == 0
+
+    def test_accepts_equation_with_operator(self):
+        formulas = [
+            {"latex": r"\frac{a}{b} + c", "formula_type": "display",
+             "start": 0, "end": 20},
+        ]
+        result = filter_formulas(formulas)
+        assert len(result) == 1
+
+    def test_accepts_sum_expression(self):
+        formulas = [
+            {"latex": r"\sum_{i=1}^{n} x_i", "formula_type": "display",
+             "start": 0, "end": 25},
+        ]
+        result = filter_formulas(formulas)
+        assert len(result) == 1
+
+    def test_accepts_short_formula_with_operator(self):
+        """Short formula with = operator should pass despite < MIN_FORMULA_LENGTH."""
+        formulas = [
+            {"latex": r"a+b=c", "formula_type": "inline", "start": 0, "end": 8},
+        ]
+        result = filter_formulas(formulas)
+        assert len(result) == 1
+
+    def test_min_formula_length_is_10(self):
+        assert MIN_FORMULA_LENGTH == 10
+
+
+# ---------------------------------------------------------------------------
+# TestIsNontrivial
+# ---------------------------------------------------------------------------
+
+
+class TestIsNontrivial:
+    """Tests for is_nontrivial() — complexity heuristic."""
+
+    def test_arithmetic_operator(self):
+        assert is_nontrivial(r"a + b") is True
+
+    def test_equals_sign(self):
+        assert is_nontrivial(r"x = 1") is True
+
+    def test_frac_operator(self):
+        assert is_nontrivial(r"\frac{a}{b}") is True
+
+    def test_sum_operator(self):
+        assert is_nontrivial(r"\sum_{i=1}^{n}") is True
+
+    def test_integral_operator(self):
+        assert is_nontrivial(r"\int_0^1 f(x) dx") is True
+
+    def test_single_greek_trivial(self):
+        assert is_nontrivial(r"\mu") is False
+
+    def test_greek_with_subscript_trivial(self):
+        assert is_nontrivial(r"\sigma_{t}") is False
+
+    def test_greek_with_superscript_trivial(self):
+        assert is_nontrivial(r"\beta^{2}") is False
+
+    def test_pure_superscript_trivial(self):
+        assert is_nontrivial("^{1}") is False
+
+    def test_pure_subscript_trivial(self):
+        assert is_nontrivial("_{i}") is False
+
+    def test_multiple_commands_nontrivial(self):
+        """Two+ meaningful commands → nontrivial."""
+        assert is_nontrivial(r"\sqrt{\alpha}") is True
+
+    def test_formatting_only_trivial(self):
+        """Only formatting commands don't count as nontrivial."""
+        assert is_nontrivial(r"\mathbf{x}") is False
 
 
 # ---------------------------------------------------------------------------
