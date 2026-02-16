@@ -22,7 +22,6 @@ Reliable, N8N-free academic paper processing pipeline that discovers Kelly crite
 - ✓ Codegen service: LLM plain-language explanation + C99/Rust/Python codegen via SymPy — v6.0
 
 ### Active
-- [ ] GitHub Discovery: search GitHub repos for paper implementations, analyze with Gemini CLI — v8.0
 - [ ] Monitoring integration: process-exporter config, Prometheus alert rules, Grafana dashboard
 - [ ] Production deployment: `docker compose up` on Workstation
 
@@ -38,6 +37,8 @@ Reliable, N8N-free academic paper processing pipeline that discovers Kelly crite
 - ✓ Codegen service: LLM plain-language explanation + C99/Rust/Python codegen via SymPy — v6.0
 - ✓ Orchestrator service (port 8775): HTTP trigger (POST /run) + configurable cron scheduling (APScheduler) — v7.0
 - ✓ Docker Compose deployment: all 6 services, shared SQLite volume, health checks, startup ordering — v7.0
+- ✓ GitHub Discovery: search GitHub repos for paper implementations, analyze with Gemini CLI — v8.0
+- ✓ Pipeline hardening: stage transitions, batch overflow, LaTeX filtering, regression tests — v9.0
 
 ### Out of Scope
 
@@ -50,20 +51,22 @@ Reliable, N8N-free academic paper processing pipeline that discovers Kelly crite
 
 ## Context
 
-**Current state (v7.0 SHIPPED — all milestones complete):**
+**Current state (v9.0 SHIPPED — 9 milestones complete, 30 phases):**
 - Shared library: 1,055 LOC Python across 5 modules (db.py, models.py, server.py, config.py, llm.py)
 - Discovery service: 448 LOC (arXiv + S2 + CrossRef)
 - Analyzer service: 600 LOC (LLM triple fallback + 5-criteria scoring)
-- Extractor service: 644 LOC (PDF download + RAGAnything client + LaTeX regex engine)
-- Validator service: 492 LOC (CAS client + fallback consensus + handler, engines: matlab/sympy/maxima)
-- Codegen service: 567 LOC (SymPy C99/Rust/Python codegen + LLM explanation)
+- Extractor service: 644 LOC (PDF download + RAGAnything client + LaTeX regex + is_nontrivial filter)
+- Validator service: 492 LOC (CAS client + fallback consensus + handler + stage update)
+- Codegen service: 567 LOC (SymPy C99/Rust/Python codegen + LLM explanation + clean_latex)
+- GitHub Discovery: 621 LOC (GitHub API search + Gemini CLI/SDK analysis + schema v2)
 - CAS microservice: 698 LOC (standalone at /media/sam/1TB/cas-service/, SymPy + Maxima + MATLAB)
-- SQLite schema: 5 tables, 6 indexes, WAL mode + prompt_version migration + validations table
-- Orchestrator service: 850 LOC (pipeline dispatch, retry logic, cron scheduler)
-- 9 Pydantic models with JSON field validators + FormulaExplanation validation-only model
+- SQLite schema: 7 tables (papers, formulas, validations, generated_code, github_repos, github_analyses, schema_version)
+- Orchestrator service: 850 LOC (pipeline dispatch, batch iteration loop, retry logic, cron scheduler)
+- 13 Pydantic models with JSON field validators
 - Base HTTP server with @route decorator, JSON logging, SIGTERM handling
 - Dockerfile (multi-stage) + docker-compose.yml (6 services, network_mode:host)
-- 463 non-e2e + 34 e2e = 497 total tests, 0 type errors
+- 600 non-e2e + 47 e2e = 647 total tests
+- ~16,000 LOC Python total
 - Tech stack: Python stdlib (http.server, sqlite3, logging, json) + Pydantic + google-genai + requests + SymPy
 
 **Origin**: N8N crashed in Jan 2026, external team restored 88 workflows but lost all data. The W1-W5 pipeline (17 N8N workflows) never successfully processed a paper end-to-end — all tables empty, 0 executions. Rather than fix N8N, rebuilding as standalone microservices eliminates the single point of failure.
@@ -147,4 +150,4 @@ Reliable, N8N-free academic paper processing pipeline that discovers Kelly crite
 | MATLAB first engine + fallback | MATLAB available, graceful degradation if down (>=2 agree → consensus) | — Pending |
 
 ---
-*Last updated: 2026-02-14 after v7.0 milestone archived*
+*Last updated: 2026-02-16 after v9.0 milestone archived*

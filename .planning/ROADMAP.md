@@ -132,84 +132,23 @@ Plans:
 Plans:
 - [x] 24-01: GET endpoints + skill alignment + E2E re-test (11 new integration tests, 0 bugs)
 
-### ✅ v8.0 GitHub Discovery + Gemini Analysis (SHIPPED 2026-02-15)
+<details>
+<summary>✅ v8.0 GitHub Discovery + Gemini Analysis (Phases 25-27) — SHIPPED 2026-02-15</summary>
 
-**Milestone Goal:** Add GitHub repository search and deep analysis using Gemini CLI (1M context) with dynamic prompts generated from paper context (title, abstract, formulas). Enables the /research skill to find existing implementations of academic papers on GitHub.
+- [x] **Phase 25: GitHub Discovery Research & Design** (1/1 plans) — completed 2026-02-15
+- [x] **Phase 26: GitHub Discovery Implementation** (1/1 plans) — completed 2026-02-15
+- [x] **Phase 27: GitHub Discovery Testing** (1/1 plans) — completed 2026-02-15
 
-#### Phase 25: GitHub Discovery Research & Design
+</details>
 
-**Goal**: Research Gemini CLI capabilities, GitHub REST API patterns, prompt engineering for code analysis → produce DESIGN.md
-**Depends on**: Phase 24 (orchestrator GET endpoints available)
-**Research**: Done (Gemini CLI verified, GitHub API verified, no existing OSS tool found)
-**Plans**: 1/1 complete
+<details>
+<summary>✅ v9.0 Pipeline Hardening — Post-E2E Fixes (Phases 28-30) — SHIPPED 2026-02-16</summary>
 
-Plans:
-- [x] 25-01: Design GitHub Discovery architecture (DESIGN.md + CONTEXT.md + PROJECT.md)
+- [x] **Phase 28: Fix Stage Transitions + Batch Overflow** (1/1 plans) — completed 2026-02-16
+- [x] **Phase 29: LaTeX Filtering + Cleanup** (1/1 plans) — completed 2026-02-16
+- [x] **Phase 30: Test E2E Hardening** (1/1 plans) — completed 2026-02-16
 
-#### Phase 26: GitHub Discovery Implementation
-
-**Goal**: Implement github_search.py module (search, clone, analyze via Gemini CLI with SDK fallback), POST /search-github endpoint, update /research skill with dynamic prompt generation
-**Depends on**: Phase 25
-**Research**: Unlikely (follows design from Phase 25)
-**Plans**: 1/1 complete
-
-Plans:
-- [x] 26-01: GitHub Discovery implementation (621 LOC github_search.py, schema v2, 4 models, 2 endpoints)
-
-#### Phase 27: GitHub Discovery Testing
-
-**Goal**: Unit tests for github_search module, integration tests for /search-github endpoint, E2E test with real GitHub repos and Gemini CLI analysis
-**Depends on**: Phase 26
-**Research**: Unlikely (established testing patterns)
-**Plans**: 1/1 complete
-
-Plans:
-- [x] 27-01: GitHub Discovery tests (79 tests: 44 unit, 26 integration, 9 E2E with real APIs)
-
-### ✅ v9.0 Pipeline Hardening — Post-E2E Fixes (SHIPPED 2026-02-16)
-
-**Milestone Goal:** Fix 6 bugs found during E2E pipeline test on paper 15 (1806.05293, Kelly criterion stock markets). Stage transitions broken, batch overflow not handled, LaTeX fragments pass as formulas, codegen misinterprets LaTeX tags as variables.
-
-#### Phase 28: Fix Stage Transitions + Batch Overflow
-
-**Goal**: Fix paper stage not advancing after validator/codegen, add batch iteration loop in orchestrator, fix OpenRouter max_tokens truncation
-**Depends on**: v8.0 complete
-**Research**: Unlikely (bug fixes on existing internal patterns)
-**Plans**: 1/1 complete
-
-Bugs addressed:
-- ✅ CRITICAL: validator/main.py does not UPDATE papers.stage after validation — FIXED
-- ✅ CRITICAL: codegen/main.py does not UPDATE papers.stage after code generation — FIXED
-- ✅ HIGH: orchestrator/pipeline.py calls validator/codegen once — FIXED (batch iteration loop)
-- ✅ MEDIUM: shared/llm.py OpenRouter max_tokens=500 truncates responses — FIXED (→ 4096)
-
-Plans:
-- [x] 28-01: Fix stage transitions + batch overflow + max_tokens (5 files, ~100 LOC, 543 tests pass)
-
-#### Phase 29: LaTeX Filtering + Cleanup
-
-**Goal**: Add complexity filter to reject trivial LaTeX fragments, clean up LaTeX macros before parse_latex() to prevent codegen misinterpretation
-**Depends on**: Phase 28
-**Research**: Unlikely (regex + SymPy patterns already in codebase)
-**Plans**: 1/1 complete
-
-Bugs addressed:
-- ✅ MEDIUM: extractor/latex.py MIN_FORMULA_LENGTH=3 allows fragments like ^{1}, \mu, \sigma — FIXED (is_nontrivial() heuristic)
-- ✅ MEDIUM: codegen/generators.py does not strip \tag{N}, \label{}, \text{}, \pmb{}, \dots, \equiv — FIXED (clean_latex())
-- ✅ MEDIUM: ~35% parse failure rate from unsupported LaTeX macros — MITIGATED (filter + cleanup)
-
-Plans:
-- [x] 29-01: LaTeX filtering + cleanup (4 files, 333 LOC, 582 tests pass, 34 new tests)
-
-#### Phase 30: Test E2E Hardening
-
-**Goal**: Regression tests covering stage transitions, batch overflow, and formula filtering — ensure all fixes from Phase 28-29 are verified with real data
-**Depends on**: Phase 29
-**Research**: Unlikely (established testing patterns from 8 milestones)
-**Plans**: 1/1 complete
-
-Plans:
-- [x] 30-01: E2E Hardening tests (22 tests: 18 integration + 4 E2E, 932 LOC)
+</details>
 
 ## Progress
 

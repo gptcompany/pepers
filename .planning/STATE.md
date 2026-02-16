@@ -5,7 +5,7 @@
 See: .planning/PROJECT.md (updated 2026-02-15)
 
 **Core value:** Reliable, N8N-free academic paper processing pipeline
-**Current focus:** v9.0 Pipeline Hardening — Post-E2E Fixes
+**Current focus:** All milestones complete — ready for production deployment or new features
 
 ## Current Position
 

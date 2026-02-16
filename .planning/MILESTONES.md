@@ -1,5 +1,60 @@
 # Project Milestones: Research Pipeline
 
+## v9.0 Pipeline Hardening (Shipped: 2026-02-16)
+
+**Delivered:** Fixed 6 bugs found during E2E pipeline test — stage transitions, batch overflow, LaTeX filtering, macro cleanup — plus 22 regression tests verifying all fixes.
+
+**Phases completed:** 28-30 (3 plans total)
+
+**Key accomplishments:**
+
+- Stage transition fixes: validator and codegen now UPDATE papers.stage after processing
+- Batch iteration loop in orchestrator: processes >50 formulas via repeated calls (safety cap 100)
+- is_nontrivial() heuristic: rejects trivial LaTeX fragments (\alpha, ^{1}, \mu)
+- clean_latex(): strips 9 categories of unsupported macros before parse_latex()
+- 22 regression tests (18 integration + 4 E2E) covering all fixes with failure scenarios
+- OpenRouter/Ollama max_tokens fixed (500 → 4096)
+
+**Stats:**
+
+- 21 files changed, 2,142 insertions
+- ~1,365 LOC added (433 production + 932 test)
+- 3 phases, 3 plans
+- 1 day (2026-02-16)
+
+**Git range:** `8911b73` → `4c40a1f`
+
+**What's next:** Production deployment, monitoring integration, or new research features
+
+---
+
+## v8.0 GitHub Discovery + Gemini Analysis (Shipped: 2026-02-15)
+
+**Delivered:** GitHub repository search and deep analysis using Gemini CLI (1M context) with dynamic prompts from paper context. Enables /research skill to find existing implementations of academic papers on GitHub.
+
+**Phases completed:** 25-27 (3 plans total)
+
+**Key accomplishments:**
+
+- github_search.py module (621 LOC): GitHub REST API search, git clone, Gemini CLI/SDK analysis
+- Schema v2: github_repos + github_analyses tables with 4 Pydantic models
+- POST /search-github + GET /github-repos endpoints on orchestrator
+- Dynamic prompt generation from paper title, abstract, and formulas
+- 79 tests (44 unit + 26 integration + 9 E2E with real GitHub + Gemini APIs)
+- Gemini CLI in Docker fallback to SDK with max_output_tokens
+
+**Stats:**
+
+- 621 LOC production + 1,307 LOC tests
+- 3 phases, 3 plans
+- 1 day (2026-02-15)
+
+**Git range:** `7dccf86` → `391df79`
+
+**What's next:** v9.0 — Pipeline Hardening (fix E2E bugs found during testing)
+
+---
+
 ## v7.0 Orchestrator + Deploy (Shipped: 2026-02-14)
 
 **Delivered:** End-to-end pipeline orchestration with HTTP trigger (POST /run), optional APScheduler cron (disabled by default), exponential backoff retry, and Docker Compose deployment for all 6 microservices.
