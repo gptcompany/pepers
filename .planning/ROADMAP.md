@@ -18,6 +18,7 @@ None
 - [✅ v6.0 Codegen Service](milestones/v6.0-ROADMAP.md) (Phases 17-19) — SHIPPED 2026-02-14
 - [✅ v7.0 Orchestrator + Deploy](milestones/v7.0-ROADMAP.md) (Phases 20-22) — SHIPPED 2026-02-14
 - [✅ v8.0 GitHub Discovery + Gemini Analysis](milestones/v8.0-ROADMAP.md) (Phases 25-27) — SHIPPED 2026-02-15
+- 🚧 **v9.0 Pipeline Hardening — Post-E2E Fixes** - Phases 28-30 (in progress)
 
 ## Phases
 
@@ -165,6 +166,57 @@ Plans:
 Plans:
 - [x] 27-01: GitHub Discovery tests (79 tests: 44 unit, 26 integration, 9 E2E with real APIs)
 
+### 🚧 v9.0 Pipeline Hardening — Post-E2E Fixes (In Progress)
+
+**Milestone Goal:** Fix 6 bugs found during E2E pipeline test on paper 15 (1806.05293, Kelly criterion stock markets). Stage transitions broken, batch overflow not handled, LaTeX fragments pass as formulas, codegen misinterprets LaTeX tags as variables.
+
+#### Phase 28: Fix Stage Transitions + Batch Overflow
+
+**Goal**: Fix paper stage not advancing after validator/codegen, add batch iteration loop in orchestrator, fix OpenRouter max_tokens truncation
+**Depends on**: v8.0 complete
+**Research**: Unlikely (bug fixes on existing internal patterns)
+**Plans**: TBD
+
+Bugs addressed:
+- CRITICAL: validator/main.py does not UPDATE papers.stage after validation — paper stays at "extracted" forever
+- CRITICAL: codegen/main.py does not UPDATE papers.stage after code generation
+- HIGH: orchestrator/pipeline.py calls validator/codegen once — remaining formulas beyond batch_size=50 are never processed
+- MEDIUM: shared/llm.py OpenRouter max_tokens=500 truncates responses (should be 4096)
+
+Plans:
+- [ ] 28-01: TBD (run /gsd:plan-phase 28 to break down)
+
+#### Phase 29: LaTeX Filtering + Cleanup
+
+**Goal**: Add complexity filter to reject trivial LaTeX fragments, clean up LaTeX macros before parse_latex() to prevent codegen misinterpretation
+**Depends on**: Phase 28
+**Research**: Unlikely (regex + SymPy patterns already in codebase)
+**Plans**: TBD
+
+Bugs addressed:
+- MEDIUM: extractor/latex.py MIN_FORMULA_LENGTH=3 allows fragments like ^{1}, \mu, \sigma as "formulas"
+- MEDIUM: codegen/generators.py does not strip \tag{N}, \label{}, \text{}, \pmb{}, \dots, \equiv before parse_latex()
+- MEDIUM: ~35% parse failure rate from unsupported LaTeX macros — need pre-validation
+
+Plans:
+- [ ] 29-01: TBD (run /gsd:plan-phase 29 to break down)
+
+#### Phase 30: Test E2E Hardening
+
+**Goal**: Regression tests covering stage transitions, batch overflow, and formula filtering — ensure all fixes from Phase 28-29 are verified with real data
+**Depends on**: Phase 29
+**Research**: Unlikely (established testing patterns from 8 milestones)
+**Plans**: TBD
+
+Test coverage targets:
+- Stage transitions: paper goes extracted → validated → codegen → complete (integration test)
+- Batch overflow: >50 formulas processed in multiple iterations (integration test)
+- Formula filter: fragments rejected, real formulas accepted (unit test)
+- LaTeX cleanup: \tag{N} stripped before codegen, not treated as variable (unit test)
+
+Plans:
+- [ ] 30-01: TBD (run /gsd:plan-phase 30 to break down)
+
 ## Progress
 
 | Phase | Milestone | Plans Complete | Status | Completed |
@@ -196,3 +248,6 @@ Plans:
 | 25. GitHub Discovery Research & Design | v8.0 | 1/1 | Complete | 2026-02-15 |
 | 26. GitHub Discovery Implementation | v8.0 | 1/1 | Complete | 2026-02-15 |
 | 27. GitHub Discovery Testing | v8.0 | 1/1 | Complete | 2026-02-15 |
+| 28. Fix Stage Transitions + Batch Overflow | v9.0 | 0/? | Not started | - |
+| 29. LaTeX Filtering + Cleanup | v9.0 | 0/? | Not started | - |
+| 30. Test E2E Hardening | v9.0 | 0/? | Not started | - |

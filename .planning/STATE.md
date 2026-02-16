@@ -5,16 +5,16 @@
 See: .planning/PROJECT.md (updated 2026-02-15)
 
 **Core value:** Reliable, N8N-free academic paper processing pipeline
-**Current focus:** v8.0 GitHub Discovery + Gemini Analysis — COMPLETE
+**Current focus:** v9.0 Pipeline Hardening — Post-E2E Fixes
 
 ## Current Position
 
-Phase: 27 (GitHub Discovery Testing)
-Plan: 27-01 complete
-Status: **v8.0 milestone complete**
-Last activity: 2026-02-15 — Phase 27 testing completed
+Phase: 28 of 30 (Fix Stage Transitions + Batch Overflow)
+Plan: Not started
+Status: Ready to plan
+Last activity: 2026-02-16 — Milestone v9.0 created
 
-Progress: 7/7 milestones shipped + Phase 23-27 complete, v8.0 complete
+Progress: 8/8 milestones shipped, v9.0 in progress (0/3 phases)
 
 ## Shipped Milestones
 
@@ -67,12 +67,35 @@ Progress: 7/7 milestones shipped + Phase 23-27 complete, v8.0 complete
   - Real HTTP endpoints POST /search-github + GET /github-repos
 - `tests/conftest.py`: +69 LOC — 3 new fixtures
 
+## v9.0 Pipeline Hardening — Post-E2E Fixes
+
+### Phases
+
+| Phase | Goal | Status |
+|-------|------|--------|
+| 28. Fix Stage Transitions + Batch Overflow | Paper stage updates, batch iteration, OpenRouter max_tokens | Not started |
+| 29. LaTeX Filtering + Cleanup | Complexity filter, macro cleanup before parse_latex | Not started |
+| 30. Test E2E Hardening | Regression tests for all fixes | Not started |
+
+### Origin
+
+E2E pipeline test on paper 15 (1806.05293, Kelly criterion stock markets, 6 pages):
+- 104 formulas extracted, many spurious fragments
+- Paper stage stuck at "extracted" after codegen
+- 54 formulas never processed (batch limit 50)
+- Codegen treats \tag{13} as variable
+- ~35% parse_latex failure rate on complex notations
+
 ## Blockers/Concerns
 
-None — v8.0 milestone complete.
+None — planning phase.
+
+### Roadmap Evolution
+
+- Milestone v9.0 created: Pipeline hardening post-E2E, 3 phases (Phase 28-30)
 
 ## Session Continuity
 
-Last session: 2026-02-15
-Stopped at: Phase 27 complete, v8.0 milestone complete
-Resume file: .planning/phases/27-github-discovery-testing/27-01-PLAN.md
+Last session: 2026-02-16
+Stopped at: Milestone v9.0 initialization
+Resume file: None
