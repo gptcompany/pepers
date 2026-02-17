@@ -11,6 +11,7 @@ from __future__ import annotations
 
 import logging
 
+from shared.config import LLM_SEED, LLM_TEMPERATURE
 from shared.llm import call_ollama, fallback_chain
 from shared.models import FormulaExplanation
 
@@ -69,7 +70,7 @@ def explain_formula(
             prompt=user_prompt,
             system=EXPLANATION_SYSTEM_PROMPT,
             format=FormulaExplanation.model_json_schema(),
-            options={"temperature": 0.2, "num_predict": 4096, "num_ctx": 4096},
+            options={"temperature": LLM_TEMPERATURE, "seed": LLM_SEED, "num_predict": 4096, "num_ctx": 4096},
         )
         return FormulaExplanation.model_validate_json(result).model_dump()
     except Exception as e:

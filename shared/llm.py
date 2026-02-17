@@ -19,6 +19,8 @@ import re
 import subprocess
 import urllib.request
 
+from shared.config import LLM_SEED, LLM_TEMPERATURE
+
 logger = logging.getLogger(__name__)
 
 DEFAULT_FALLBACK_ORDER = ["gemini_cli", "openrouter", "ollama"]
@@ -100,6 +102,7 @@ def call_gemini_sdk(
     system: str,
     model: str = "gemini-2.5-flash",
     timeout: float = float(os.environ.get("RP_LLM_TIMEOUT_GEMINI_SDK", "60")),
+    temperature: float = LLM_TEMPERATURE,
 ) -> str:
     """Call Gemini via Python SDK.
 
@@ -108,6 +111,7 @@ def call_gemini_sdk(
         system: System instruction text.
         model: Gemini model name.
         timeout: HTTP timeout in seconds.
+        temperature: Sampling temperature (0 = deterministic).
 
     Returns:
         Raw response text from Gemini SDK.
@@ -127,9 +131,10 @@ def call_gemini_sdk(
         contents=prompt,
         config=types.GenerateContentConfig(
             system_instruction=system,
-            temperature=0.3,
+            temperature=temperature,
             max_output_tokens=4096,
             response_mime_type="application/json",
+            seed=LLM_SEED,
         ),
     )
     if response.text is None:
@@ -142,6 +147,7 @@ def call_openrouter(
     system: str,
     model: str = "google/gemini-2.5-flash",
     timeout: int = int(os.environ.get("RP_LLM_TIMEOUT_OPENROUTER", "60")),
+    temperature: float = LLM_TEMPERATURE,
 ) -> str:
     """Call OpenRouter API (OpenAI-compatible).
 
@@ -150,6 +156,7 @@ def call_openrouter(
         system: System instruction text.
         model: Model identifier on OpenRouter.
         timeout: HTTP timeout in seconds.
+        temperature: Sampling temperature (0 = deterministic).
 
     Returns:
         Raw response text.
@@ -167,8 +174,9 @@ def call_openrouter(
             {"role": "system", "content": system},
             {"role": "user", "content": prompt},
         ],
-        "temperature": 0.3,
+        "temperature": temperature,
         "max_tokens": 4096,
+        "seed": LLM_SEED,
     }).encode()
 
     req = urllib.request.Request(
@@ -196,6 +204,7 @@ def call_ollama(
     base_url: str = "http://localhost:11434",
     format: str | dict = "json",
     options: dict | None = None,
+    temperature: float = LLM_TEMPERATURE,
 ) -> str:
     """Call Ollama local LLM.
 
@@ -208,7 +217,9 @@ def call_ollama(
         format: Output format — "json" for free-form JSON, or a
             dict (e.g. model_json_schema()) for structured output.
         options: Ollama generation options (temperature, num_predict,
-            num_ctx, etc.). Defaults to temperature=0.3, num_predict=4096.
+            num_ctx, etc.). If provided, overrides temperature param.
+        temperature: Sampling temperature (0 = deterministic).
+            Ignored if options is provided.
 
     Returns:
         Raw response text from Ollama.
@@ -217,7 +228,7 @@ def call_ollama(
         RuntimeError: On connection error, timeout, or non-200 response.
     """
     if options is None:
-        options = {"temperature": 0.3, "num_predict": 4096}
+        options = {"temperature": temperature, "seed": LLM_SEED, "num_predict": 4096}
 
     payload = json.dumps({
         "model": model,
@@ -249,6 +260,7 @@ def fallback_chain(
     prompt: str,
     system: str,
     order: list[str] | None = None,
+    temperature: float | None = None,
 ) -> tuple[str, str]:
     """Try LLM providers in specified order.
 
@@ -258,6 +270,9 @@ def fallback_chain(
         order: Provider order. Default None uses
             ["gemini_cli", "gemini_sdk", "ollama"] (Analyzer default).
             Codegen uses ["ollama", "gemini_sdk", "gemini_cli"].
+        temperature: Override temperature for all providers.
+            None uses each provider's default (LLM_TEMPERATURE).
+            Note: gemini_cli does not support temperature control.
 
     Returns:
         Tuple of (response_text, provider_name).
@@ -275,6 +290,9 @@ def fallback_chain(
         "ollama": call_ollama,
     }
 
+    # Providers that accept temperature kwarg
+    _temp_providers = {"gemini_sdk", "openrouter", "ollama"}
+
     errors: list[str] = []
     for name in order:
         func = provider_funcs.get(name)
@@ -282,7 +300,10 @@ def fallback_chain(
             errors.append(f"{name}: unknown provider")
             continue
         try:
-            result = func(prompt, system)
+            kwargs: dict = {}
+            if temperature is not None and name in _temp_providers:
+                kwargs["temperature"] = temperature
+            result = func(prompt, system, **kwargs)
             return (result, name)
         except Exception as e:
             logger.warning("LLM fallback: %s failed: %s", name, e)

@@ -164,7 +164,7 @@ Plans:
 <summary>🔲 v10.0 Production Hardening (Phases 32-34)</summary>
 
 - [x] **Phase 32: Resilience — systemd Hardening** (2/2 plans) — completed 2026-02-17
-- [ ] **Phase 33: Reproducibility & Calibration** (0/1 plans)
+- [x] **Phase 33: Reproducibility & Calibration** (1/1 plans) — completed 2026-02-17
 - [ ] **Phase 34: Orchestrator Smoke Test & Documentation** (0/1 plans)
 
 </details>
@@ -205,5 +205,5 @@ Plans:
 | 30. Test E2E Hardening | v9.0 | 1/1 | Complete | 2026-02-16 |
 | 31. E2E Smoke Test CLI (Real Data) | post-v9.0 | 1/1 | Complete | 2026-02-16 |
 | 32. Resilience — systemd Hardening | v10.0 | 2/2 | Complete | 2026-02-17 |
-| 33. Reproducibility & Calibration | v10.0 | 0/1 | Pending | — |
+| 33. Reproducibility & Calibration | v10.0 | 1/1 | Complete | 2026-02-17 |
 | 34. Orchestrator Smoke Test & Documentation | v10.0 | 0/1 | Pending | — |

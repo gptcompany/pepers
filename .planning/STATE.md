@@ -9,12 +9,12 @@ See: .planning/PROJECT.md (updated 2026-02-15)
 
 ## Current Position
 
-Phase: 32 of 34 (Resilience — systemd Hardening)
-Plan: 2/2 complete
+Phase: 33 of 34 (Reproducibility & Calibration)
+Plan: 1/1 complete
 Status: Complete
-Last activity: 2026-02-17 — Phase 32 shipped (schema v3 UNIQUE, systemd units, /health, consistency checks)
+Last activity: 2026-02-17 — Phase 33 shipped (LLM temperature=0 configurable, seed=42, ARCHITECTURE.md refresh)
 
-Progress: 9/9 milestones shipped (v1.0-v9.0), v10.0 in progress (1/3 phases)
+Progress: 9/9 milestones shipped (v1.0-v9.0), v10.0 in progress (2/3 phases)
 
 ## Shipped Milestones
 
@@ -124,21 +124,32 @@ E2E pipeline test on paper 15 (1806.05293, Kelly criterion stock markets, 6 page
 - `tests/unit/test_db.py`: +80 LOC — 5 migration tests
 - `tests/integration/test_resilience.py`: 190 LOC — 9 resilience tests
 
+## Phase 33 Deliverables
+
+- `shared/config.py`: +14 LOC — `_parse_float_env()`, `LLM_TEMPERATURE` (default 0.0)
+- `shared/llm.py`: +31 LOC — temperature param on all providers, `seed=42`, `fallback_chain` threading
+- `services/codegen/explain.py`: +2 LOC — use `LLM_TEMPERATURE` instead of hardcoded 0.2
+- `ARCHITECTURE.md`: full rewrite — services, tests, schema v3, config, milestones v1.0-v10.0
+- `tests/unit/test_llm.py`: 120 LOC — 9 temperature/seed unit tests
+- `tests/e2e/test_determinism.py`: 70 LOC — 3x analyzer determinism calibration test
+- `pyproject.toml`: +1 marker (`slow`)
+
 ## Current Stats
 
-- **Total tests**: 614 non-e2e + 47 e2e = 661 total (all passing)
-- **Total LOC**: ~11,800+ across 6 services + shared library + Docker + GitHub Discovery + deploy
+- **Total tests**: 623 non-e2e + 48 e2e = 671 total (all passing)
+- **Total LOC**: ~12,000+ across 6 services + shared library + Docker + GitHub Discovery + deploy
 - **Services**: 6 microservices (ports 8770-8775) + Docker Compose + systemd units
 - **Duration**: 8 days (2026-02-10 to 2026-02-17)
 - **CAS engines**: MATLAB + SymPy + Maxima with fallback consensus
 - **Schema version**: v3 (UNIQUE constraint on formulas)
+- **LLM determinism**: temperature=0, seed=42 on all configurable providers
 
 ## Blockers/Concerns
 
-None — v10.0 Phase 32 complete. Phase 33-34 remain.
+None — v10.0 Phase 33 complete. Phase 34 remains.
 
 ## Session Continuity
 
 Last session: 2026-02-17
-Stopped at: Phase 32 complete
+Stopped at: Phase 33 complete
 Resume file: None

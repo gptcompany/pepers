@@ -30,4 +30,5 @@ markers = [
     "unit: Unit tests (fast, no I/O)",
     "integration: Integration tests (DB, HTTP)",
     "e2e: End-to-end tests (real APIs, network required)",
+    "slow: Slow calibration tests (manual/nightly only)",
 ]

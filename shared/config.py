@@ -47,6 +47,23 @@ SERVICE_PORTS: dict[str, int] = {
 }
 
 
+def _parse_float_env(name: str, default: str) -> float:
+    """Parse float from environment variable with fallback on invalid values."""
+    raw = os.environ.get(name, default)
+    try:
+        return float(raw)
+    except ValueError:
+        logger.warning("%s invalid value '%s', using default %s", name, raw, default)
+        return float(default)
+
+
+# LLM temperature — 0 for deterministic output, configurable via env var
+LLM_TEMPERATURE: float = _parse_float_env("RP_LLM_TEMPERATURE", "0")
+
+# LLM seed — fixed seed for reproducibility, configurable via env var
+LLM_SEED: int = int(os.environ.get("RP_LLM_SEED", "42"))
+
+
 @dataclass
 class Config:
     """Service configuration.
