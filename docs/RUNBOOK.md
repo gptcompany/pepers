@@ -1,0 +1,452 @@
+# Research Pipeline -- Operational Runbook
+
+Production operations guide for the 6-service research paper processing pipeline.
+
+## 1. Service Overview
+
+| Service | Port | Description | External Dependencies |
+|---------|------|-------------|-----------------------|
+| discovery | 8770 | arXiv/Semantic Scholar/CrossRef paper search | arXiv API, S2 API, CrossRef API |
+| analyzer | 8771 | LLM-based relevance scoring (5 criteria, 0-50 scale) | Ollama / OpenRouter / Gemini |
+| extractor | 8772 | PDF to LaTeX formula extraction | RAGAnything (:8767) |
+| validator | 8773 | CAS mathematical validation (multi-engine consensus) | CAS engine (:8769), SymPy |
+| codegen | 8774 | Formula to code generation (Python/Rust) | Ollama / OpenRouter |
+| orchestrator | 8775 | Pipeline coordination, batch iteration, status API | All above services |
+
+**Database**: SQLite (WAL mode), schema v3, shared across all services.
+
+**Pipeline flow**: discovery -> analyzer -> extractor -> validator -> codegen
+
+## 2. Prerequisites
+
+- Python 3.11+
+- SQLite 3.35+ (WAL mode, RETURNING clause)
+- RAGAnything server on port 8767 (PDF processing)
+- CAS validation server on port 8769 (SymPy, Maxima, MATLAB engines)
+- At least one LLM provider:
+  - **Ollama** (recommended for local): default fallback
+  - **OpenRouter**: requires `OPENROUTER_API_KEY`
+  - **Gemini**: requires `GEMINI_API_KEY` or Gemini CLI installed
+- dotenvx for secret management (`.env` encrypted)
+
+## 3. Startup Order
+
+Services must start in dependency order. The orchestrator depends on all 5 downstream services.
+
+### External Dependencies (start first)
+
+```bash
+# RAGAnything (PDF extraction backend)
+# Ensure running on port 8767
+
+# CAS validation engine
+# Ensure running on port 8769
+
+# Ollama (if using local LLM)
+ollama serve
+```
+
+### Pipeline Services
+
+**Option A: systemd (recommended for production)**
+
+```bash
+# Start all services in dependency order via target
+sudo systemctl start rp-pipeline.target
+
+# Or start individually
+sudo systemctl start rp-discovery
+sudo systemctl start rp-analyzer
+sudo systemctl start rp-extractor
+sudo systemctl start rp-validator
+sudo systemctl start rp-codegen
+sudo systemctl start rp-orchestrator
+```
+
+**Option B: Docker Compose**
+
+```bash
+cd /media/sam/1TB/research-pipeline
+docker compose up -d
+```
+
+**Option C: Manual (development)**
+
+```bash
+cd /media/sam/1TB/research-pipeline
+python -m services.discovery.main &
+python -m services.analyzer.main &
+python -m services.extractor.main &
+python -m services.validator.main &
+python -m services.codegen.main &
+python -m services.orchestrator.main &
+```
+
+### Shutdown Order
+
+Reverse of startup: orchestrator first, then downstream services.
+
+```bash
+sudo systemctl stop rp-pipeline.target
+# or
+docker compose down
+```
+
+## 4. Health Check URLs
+
+All services expose `GET /health` returning JSON:
+
+```json
+{
+  "status": "ok",
+  "service": "<name>",
+  "uptime_seconds": 3600,
+  "db_ok": true,
+  "schema_version": 3,
+  "last_request_seconds_ago": 120
+}
+```
+
+**Quick check all services:**
+
+```bash
+for port in 8770 8771 8772 8773 8774 8775; do
+  echo -n "Port $port: "
+  curl -sf http://localhost:$port/health | python3 -c "import sys,json; d=json.load(sys.stdin); print(d['service'], d['status'])" 2>/dev/null || echo "DOWN"
+done
+```
+
+**Orchestrator aggregate check:**
+
+```bash
+# Check all downstream services via orchestrator
+curl -s http://localhost:8775/status/services | python3 -m json.tool
+```
+
+Response includes `all_healthy: true/false` and per-service status.
+
+**Pipeline status (papers/formulas by stage):**
+
+```bash
+curl -s http://localhost:8775/status | python3 -m json.tool
+```
+
+## 5. Common Failure Modes
+
+### 5.1 Service Crash During Batch Processing
+
+**Symptom**: Service PID disappears, formulas stuck at intermediate stage.
+
+**Cause**: OOM, uncaught exception, external kill.
+
+**Impact**: Paper stage may be inconsistent with formula stages.
+
+**Mitigation**: systemd `Restart=always` with `RestartSec=5` auto-restarts the service. Each service runs a consistency check at startup (`_check_consistency()`) that detects and resolves inconsistent states.
+
+**Resolution**: Automatic. If the paper is stuck, see Recovery 6.1.
+
+### 5.2 SQLite WAL Contention ("database is locked")
+
+**Symptom**: HTTP 500 with "database is locked" in logs.
+
+**Cause**: Multiple services writing simultaneously under heavy load. SQLite WAL allows concurrent reads but serializes writes.
+
+**Impact**: Transient — requests fail but retry succeeds.
+
+**Resolution**:
+1. Usually self-resolving (WAL lock timeout is 5s default).
+2. If persistent: stop all services, verify no stale WAL lock:
+   ```bash
+   ls -la data/research.db*
+   # If .db-wal or .db-shm exist with stale locks:
+   # Stop all services first, then restart.
+   ```
+3. Long-term: consider PostgreSQL migration for concurrent write loads.
+
+### 5.3 External API Rate Limits
+
+**arXiv API**: Max 3 requests/second. Discovery service inserts 1s delay between requests.
+
+**Semantic Scholar**: 100 requests per 5 minutes (unauthenticated). Discovery retries with exponential backoff.
+
+**CrossRef**: Generous limits (50 req/s with polite pool). Rarely an issue.
+
+**Symptom**: Discovery service returns HTTP 429 or connection timeouts.
+
+**Resolution**: Wait and retry. Reduce `max_papers` parameter. For heavy usage, consider S2 API key for higher limits.
+
+### 5.4 CAS Engine Timeout
+
+**Symptom**: Validator takes >17s/formula average, or times out entirely.
+
+**Cause**: Complex LaTeX with nested expressions, or CAS engine (Maxima/MATLAB) hanging on edge cases.
+
+**Impact**: Individual formulas marked as `failed`, pipeline continues with remaining formulas.
+
+**Resolution**: Formula-level — no action needed (failed formulas are skipped). If CAS server itself is down, restart it on port 8769.
+
+### 5.5 LLM Provider Unreachable
+
+**Symptom**: Analyzer or codegen return connection errors or timeouts.
+
+**Cause**: Ollama not running, OpenRouter API key expired, Gemini quota exhausted.
+
+**Impact**: `fallback_chain()` automatically tries next provider in order. If all providers fail, the stage fails for that paper.
+
+**Resolution**:
+1. Check Ollama: `curl http://localhost:11434/api/tags`
+2. Check OpenRouter: verify `OPENROUTER_API_KEY` in `.env`
+3. Check Gemini: `gemini -p "test"` or verify `GEMINI_API_KEY`
+4. Restart the failed provider and retry the pipeline run.
+
+### 5.6 Extractor PDF Processing Failure
+
+**Symptom**: Extractor timeout (>3600s on CPU) or crash.
+
+**Cause**: Corrupted PDF, extremely large document (>100 pages), GPU OOM, or RAGAnything server unavailable.
+
+**Impact**: Paper marked as `failed` at `extracted` stage.
+
+**Resolution**:
+1. Verify RAGAnything server: `curl http://localhost:8767/health`
+2. Check logs: `journalctl -u rp-extractor -n 50`
+3. For specific paper: reset and retry (see Recovery 6.1)
+4. For persistent failures: increase `RP_EXTRACTOR_TIMEOUT` or use GPU
+
+## 6. Recovery Procedures
+
+### 6.1 Paper Stuck in Intermediate Stage
+
+**Diagnosis:**
+
+```bash
+sqlite3 data/research.db "SELECT id, arxiv_id, stage, error FROM papers WHERE stage NOT IN ('codegen', 'rejected', 'failed');"
+```
+
+**Recovery:**
+
+```bash
+# Reset a specific paper to 'discovered' for full reprocessing
+sqlite3 data/research.db "UPDATE papers SET stage = 'discovered', error = NULL WHERE id = <PAPER_ID>;"
+
+# Trigger reprocessing via orchestrator
+curl -X POST http://localhost:8775/run \
+  -H "Content-Type: application/json" \
+  -d '{"paper_id": <PAPER_ID>, "stages": 5}'
+```
+
+### 6.2 Duplicate Formula Detection
+
+Schema v3 enforces `UNIQUE(paper_id, latex_hash)` on the formulas table, preventing duplicates. If duplicates exist from a pre-v3 database:
+
+```bash
+# Find duplicates
+sqlite3 data/research.db "SELECT paper_id, latex_hash, COUNT(*) as cnt FROM formulas GROUP BY paper_id, latex_hash HAVING cnt > 1;"
+
+# Remove duplicates (keep lowest ID)
+sqlite3 data/research.db "DELETE FROM formulas WHERE id NOT IN (SELECT MIN(id) FROM formulas GROUP BY paper_id, latex_hash);"
+```
+
+### 6.3 Batch Iteration Safety Cap Hit
+
+The orchestrator caps batch iterations at 100 (safety limit). If this cap is hit, formulas may remain unprocessed.
+
+**Diagnosis:**
+
+```bash
+# Check formula stage distribution for a paper
+sqlite3 data/research.db "SELECT stage, COUNT(*) FROM formulas WHERE paper_id = <PAPER_ID> GROUP BY stage;"
+```
+
+**Resolution**: Usually indicates a bug where formulas cycle between stages. Check service logs for the affected paper:
+
+```bash
+journalctl -u rp-validator --since "1 hour ago" | grep <PAPER_ID>
+```
+
+### 6.4 Full Pipeline Re-run
+
+To reprocess a paper through all stages (with `force` to reprocess even if already completed):
+
+```bash
+curl -X POST http://localhost:8775/run \
+  -H "Content-Type: application/json" \
+  -d '{"query": "id:<ARXIV_ID>", "stages": 5, "force": true}'
+```
+
+### 6.5 Database Backup and Restore
+
+```bash
+# Backup
+cp data/research.db data/research.db.bak-$(date +%Y%m%d-%H%M%S)
+
+# Restore (stop all services first!)
+sudo systemctl stop rp-pipeline.target
+cp data/research.db.bak-YYYYMMDD-HHMMSS data/research.db
+sudo systemctl start rp-pipeline.target
+```
+
+## 7. Configuration Reference
+
+All configuration via environment variables with `RP_` prefix. Set in `.env` (dotenvx encrypted).
+
+### Service Ports
+
+| Variable | Default | Description |
+|----------|---------|-------------|
+| `RP_DISCOVERY_PORT` | 8770 | Discovery service port |
+| `RP_ANALYZER_PORT` | 8771 | Analyzer service port |
+| `RP_EXTRACTOR_PORT` | 8772 | Extractor service port |
+| `RP_VALIDATOR_PORT` | 8773 | Validator service port |
+| `RP_CODEGEN_PORT` | 8774 | Codegen service port |
+| `RP_ORCHESTRATOR_PORT` | 8775 | Orchestrator service port |
+
+### Database
+
+| Variable | Default | Description |
+|----------|---------|-------------|
+| `RP_DB_PATH` | `data/research.db` | SQLite database path |
+| `RP_DATA_DIR` | `data/` | Data directory for PDFs and cache |
+
+### Orchestrator
+
+| Variable | Default | Description |
+|----------|---------|-------------|
+| `RP_ORCHESTRATOR_TIMEOUT` | 300 | Per-service HTTP call timeout (seconds) |
+| `RP_ORCHESTRATOR_RETRY_MAX` | 3 | Max retries per service call |
+| `RP_ORCHESTRATOR_RETRY_BACKOFF` | 4.0 | Exponential backoff base (seconds) |
+
+### LLM
+
+| Variable | Default | Description |
+|----------|---------|-------------|
+| `RP_LLM_TEMPERATURE` | 0.0 | LLM temperature (0 = deterministic) |
+| `RP_LLM_SEED` | 42 | LLM seed for reproducibility |
+
+### Batch Processing
+
+| Variable | Default | Description |
+|----------|---------|-------------|
+| `RP_MAX_FORMULAS` | 50 | Max formulas per validator/codegen batch |
+
+### Logging
+
+| Variable | Default | Description |
+|----------|---------|-------------|
+| `RP_LOG_LEVEL` | INFO | Log level (DEBUG, INFO, WARNING, ERROR) |
+| `RP_HOST` | 0.0.0.0 | Service bind address |
+
+## 8. Extractor Performance Notes
+
+The extractor service uses RAGAnything (built on MinerU) for PDF processing. Performance varies significantly based on hardware.
+
+### Expected Processing Times
+
+| Hardware | Time per Page | 10-page Paper | 50-page Paper |
+|----------|--------------|---------------|---------------|
+| CPU (Intel i7) | ~10 min | ~100 min | ~500 min |
+| GPU (NVIDIA RTX) | ~1 min | ~10 min | ~50 min |
+
+### Recommended Timeout Values
+
+| Environment | `RP_EXTRACTOR_TIMEOUT` |
+|-------------|----------------------|
+| GPU (production) | 600 |
+| CPU (development) | 3600 |
+| CPU (large papers) | 7200 |
+
+### First-Run Model Download
+
+RAGAnything downloads ML models (~2GB) on first execution. Subsequent runs use the cached models. Ensure adequate disk space in the data directory.
+
+### Memory Requirements
+
+- **Minimum**: 4GB RAM for PDF processing
+- **Recommended**: 8GB+ RAM for large papers (>50 pages)
+- **GPU**: 4GB+ VRAM (NVIDIA CUDA required)
+
+### Pre-caching
+
+For production deployments, run the extractor once on a small paper to trigger model downloads before processing real workloads:
+
+```bash
+curl -X POST http://localhost:8772/process \
+  -H "Content-Type: application/json" \
+  -d '{"paper_id": 1, "max_papers": 1}'
+```
+
+## 9. Monitoring
+
+### Log Locations
+
+**systemd services:**
+
+```bash
+# Follow all pipeline logs
+journalctl -u "rp-*" -f
+
+# Specific service
+journalctl -u rp-validator -n 100 --no-pager
+
+# Since specific time
+journalctl -u rp-orchestrator --since "2 hours ago"
+```
+
+**Docker Compose:**
+
+```bash
+docker compose logs -f orchestrator
+docker compose logs --tail=100 validator
+```
+
+### Key Metrics
+
+**Pipeline throughput:**
+
+```bash
+# Papers processed in last 24h
+sqlite3 data/research.db "SELECT COUNT(*) FROM papers WHERE updated_at > datetime('now', '-1 day');"
+
+# Formulas processed in last 24h
+sqlite3 data/research.db "SELECT stage, COUNT(*) FROM formulas WHERE updated_at > datetime('now', '-1 day') GROUP BY stage;"
+```
+
+**Error rate:**
+
+```bash
+# Recent errors
+sqlite3 data/research.db "SELECT id, arxiv_id, stage, error FROM papers WHERE error IS NOT NULL ORDER BY updated_at DESC LIMIT 10;"
+
+# Formula failure rate
+sqlite3 data/research.db "SELECT ROUND(100.0 * SUM(CASE WHEN stage = 'failed' THEN 1 ELSE 0 END) / COUNT(*), 1) AS failure_pct FROM formulas;"
+```
+
+**Service uptime:**
+
+```bash
+curl -s http://localhost:8775/status/services | python3 -c "
+import json, sys
+d = json.load(sys.stdin)
+for name, info in d['services'].items():
+    status = info.get('status', 'unknown')
+    uptime = info.get('uptime_seconds', 0)
+    print(f'{name:15s} {status:5s} uptime={uptime:.0f}s')
+"
+```
+
+### Smoke Test
+
+Run the full pipeline smoke test to verify end-to-end health:
+
+```bash
+# Direct mode (calls each service individually)
+python scripts/smoke_test.py
+
+# Via orchestrator (single POST /run)
+python scripts/smoke_test.py --via-orchestrator
+
+# Quick test with fewer formulas
+python scripts/smoke_test.py --via-orchestrator --max-formulas 5
+```
+
+Exit code 0 = all stages passed, final stage = codegen.

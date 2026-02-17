@@ -6,6 +6,11 @@ extractor -> validator -> codegen) and verifies stage progression in
 the database.  Uses only stdlib so it can run without installing
 project dependencies.
 
+Two modes:
+  - Direct (default): calls each service's /process endpoint sequentially.
+  - Orchestrator (--via-orchestrator): sends a single POST /run to the
+    orchestrator, which handles sequencing, retry, and batch iteration.
+
 Exit code 0 if final stage reaches 'codegen', 1 otherwise.
 """
 
@@ -44,6 +49,8 @@ SERVICE_TIMEOUTS: dict[str, int] = {
     "validator": 1800,  # CAS validation ~17s/formula, 50/batch → ~15min
     "codegen": 5400,   # LLM codegen ~90s/formula under load, 50/batch → ~75min
 }
+
+ORCHESTRATOR_PORT = 8775
 
 HOST = "localhost"
 
@@ -365,6 +372,197 @@ def _run_step(
 
 
 # ---------------------------------------------------------------------------
+# Orchestrator mode
+# ---------------------------------------------------------------------------
+
+
+def _orchestrator_url(path: str = "/run") -> str:
+    return f"http://{HOST}:{ORCHESTRATOR_PORT}{path}"
+
+
+def run_smoke_test_via_orchestrator(
+    arxiv_id: str = DEFAULT_ARXIV_ID,
+    db_path: Path = DEFAULT_DB_PATH,
+    max_formulas: int = 50,
+    timeout: int = 0,
+) -> SmokeReport:
+    """Execute the pipeline via orchestrator /run endpoint.
+
+    Instead of calling each service directly, sends a single POST /run
+    to the orchestrator and lets it handle sequencing, retry, and batching.
+    """
+    report = SmokeReport(arxiv_id=arxiv_id)
+    t0 = time.monotonic()
+
+    # If no timeout specified, use sum of per-service timeouts + buffer
+    if timeout <= 0:
+        timeout = sum(SERVICE_TIMEOUTS.values()) + 300
+
+    # -- Health check: orchestrator + downstream services ------------------
+    try:
+        orch_health = _get(_orchestrator_url("/health"), timeout=10)
+        if orch_health.get("status") != "ok":
+            report.steps.append(
+                StepResult(
+                    service="orchestrator",
+                    success=False,
+                    stage_before=None,
+                    stage_after=None,
+                    error="Orchestrator health check failed",
+                )
+            )
+            report.total_elapsed_s = time.monotonic() - t0
+            return report
+    except Exception as exc:
+        report.steps.append(
+            StepResult(
+                service="orchestrator",
+                success=False,
+                stage_before=None,
+                stage_after=None,
+                error=f"Orchestrator unreachable: {exc}",
+            )
+        )
+        report.total_elapsed_s = time.monotonic() - t0
+        return report
+
+    try:
+        svc_status = _get(_orchestrator_url("/status/services"), timeout=30)
+        if not svc_status.get("all_healthy"):
+            down = [
+                name
+                for name, info in svc_status.get("services", {}).items()
+                if info.get("status") != "ok"
+            ]
+            report.steps.append(
+                StepResult(
+                    service="health",
+                    success=False,
+                    stage_before=None,
+                    stage_after=None,
+                    error=f"Downstream services unhealthy: {', '.join(down)}",
+                )
+            )
+            report.total_elapsed_s = time.monotonic() - t0
+            return report
+    except Exception as exc:
+        report.steps.append(
+            StepResult(
+                service="health",
+                success=False,
+                stage_before=None,
+                stage_after=None,
+                error=f"Service status check failed: {exc}",
+            )
+        )
+        report.total_elapsed_s = time.monotonic() - t0
+        return report
+
+    # -- Clean stale state -------------------------------------------------
+    _existing_id, _existing_stage = _get_paper(db_path, arxiv_id)
+    if _existing_stage in ("rejected", "failed"):
+        _reset_paper(db_path, _existing_id)
+
+    stage_before = _get_paper(db_path, arxiv_id)[1]
+
+    # -- POST /run to orchestrator -----------------------------------------
+    run_payload = {
+        "query": f"id:{arxiv_id}",
+        "stages": 5,
+        "max_papers": 1,
+        "max_formulas": max_formulas,
+    }
+
+    step_t0 = time.monotonic()
+    try:
+        result = _post(_orchestrator_url("/run"), run_payload, timeout=timeout)
+    except urllib.error.HTTPError as exc:
+        elapsed = time.monotonic() - step_t0
+        try:
+            body = exc.read().decode()
+        except Exception:
+            body = str(exc)
+        report.steps.append(
+            StepResult(
+                service="orchestrator",
+                success=False,
+                stage_before=stage_before,
+                stage_after=None,
+                elapsed_s=elapsed,
+                error=f"HTTP {exc.code}: {body}",
+            )
+        )
+        report.total_elapsed_s = time.monotonic() - t0
+        return report
+    except Exception as exc:
+        elapsed = time.monotonic() - step_t0
+        report.steps.append(
+            StepResult(
+                service="orchestrator",
+                success=False,
+                stage_before=stage_before,
+                stage_after=None,
+                elapsed_s=elapsed,
+                error=str(exc),
+            )
+        )
+        report.total_elapsed_s = time.monotonic() - t0
+        return report
+
+    run_elapsed = time.monotonic() - step_t0
+
+    # -- Map orchestrator response to StepResults --------------------------
+    stage_results = result.get("results", {})
+    for stage_name in ("discovery", "analyzer", "extractor", "validator", "codegen"):
+        if stage_name not in stage_results:
+            continue
+        sr = stage_results[stage_name]
+        errors = sr.get("errors", [])
+        report.steps.append(
+            StepResult(
+                service=stage_name,
+                success="error" not in sr,
+                stage_before=None,
+                stage_after=None,
+                response=sr,
+                elapsed_s=sr.get("time_ms", 0) / 1000.0,
+                error=sr.get("error") or ("; ".join(errors) if errors else None),
+            )
+        )
+
+    # Add overall orchestrator step
+    report.steps.append(
+        StepResult(
+            service="orchestrator",
+            success=result.get("status") == "completed",
+            stage_before=stage_before,
+            stage_after=None,
+            response=result,
+            elapsed_s=run_elapsed,
+            error="; ".join(result.get("errors", [])) or None,
+        )
+    )
+
+    # -- Verify DB state and collect stats ---------------------------------
+    paper_id, final_stage = _get_paper(db_path, arxiv_id)
+    report.paper_id = paper_id
+    report.final_stage = final_stage
+
+    if paper_id is not None:
+        counts = _formula_counts(db_path, paper_id)
+        report.formulas_extracted = counts["extracted"]
+        report.formulas_validated = counts["validated"]
+        report.formulas_valid = counts["valid"]
+        report.codegen_count = counts["codegen"]
+        if counts["extracted"] > 0:
+            report.parse_failure_rate = counts["unparseable"] / counts["extracted"]
+
+    report.passed = final_stage == "codegen"
+    report.total_elapsed_s = time.monotonic() - t0
+    return report
+
+
+# ---------------------------------------------------------------------------
 # Report printer
 # ---------------------------------------------------------------------------
 
@@ -433,6 +631,17 @@ def main(argv: list[str] | None = None) -> int:
         default=50,
         help="Max formulas per validator/codegen batch (default: 50)",
     )
+    parser.add_argument(
+        "--via-orchestrator",
+        action="store_true",
+        help="Route pipeline through orchestrator /run instead of direct service calls",
+    )
+    parser.add_argument(
+        "--timeout",
+        type=int,
+        default=0,
+        help="HTTP timeout in seconds for orchestrator mode (default: auto)",
+    )
     args = parser.parse_args(argv)
 
     global HOST
@@ -443,7 +652,12 @@ def main(argv: list[str] | None = None) -> int:
         print(f"ERROR: database not found at {db_path}", file=sys.stderr)
         return 1
 
-    report = run_smoke_test(args.arxiv_id, db_path, args.max_formulas)
+    if args.via_orchestrator:
+        report = run_smoke_test_via_orchestrator(
+            args.arxiv_id, db_path, args.max_formulas, args.timeout
+        )
+    else:
+        report = run_smoke_test(args.arxiv_id, db_path, args.max_formulas)
     print_report(report)
     return 0 if report.passed else 1
 

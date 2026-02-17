@@ -19,7 +19,7 @@ None
 - [✅ v7.0 Orchestrator + Deploy](milestones/v7.0-ROADMAP.md) (Phases 20-22) — SHIPPED 2026-02-14
 - [✅ v8.0 GitHub Discovery + Gemini Analysis](milestones/v8.0-ROADMAP.md) (Phases 25-27) — SHIPPED 2026-02-15
 - [✅ v9.0 Pipeline Hardening — Post-E2E Fixes](milestones/v9.0-ROADMAP.md) (Phases 28-30) — SHIPPED 2026-02-16
-- [🔲 v10.0 Production Hardening](milestones/v10.0-ROADMAP.md) (Phases 32-34)
+- [✅ v10.0 Production Hardening](milestones/v10.0-ROADMAP.md) (Phases 32-34) — SHIPPED 2026-02-17
 
 ## Phases
 
@@ -161,11 +161,11 @@ Plans:
 - [x] 31-01: Smoke test CLI + pytest wrapper (scripts/smoke_test.py 452 LOC, tests/e2e/test_smoke_real.py 90 LOC) — PASS on paper 2003.02743 (133 formulas, 107 codegen, 399 generated_code rows)
 
 <details>
-<summary>🔲 v10.0 Production Hardening (Phases 32-34)</summary>
+<summary>✅ v10.0 Production Hardening (Phases 32-34) — SHIPPED 2026-02-17</summary>
 
 - [x] **Phase 32: Resilience — systemd Hardening** (2/2 plans) — completed 2026-02-17
 - [x] **Phase 33: Reproducibility & Calibration** (1/1 plans) — completed 2026-02-17
-- [ ] **Phase 34: Orchestrator Smoke Test & Documentation** (0/1 plans)
+- [x] **Phase 34: Orchestrator Smoke Test & Documentation** (1/1 plans) — completed 2026-02-17
 
 </details>
 
@@ -206,4 +206,4 @@ Plans:
 | 31. E2E Smoke Test CLI (Real Data) | post-v9.0 | 1/1 | Complete | 2026-02-16 |
 | 32. Resilience — systemd Hardening | v10.0 | 2/2 | Complete | 2026-02-17 |
 | 33. Reproducibility & Calibration | v10.0 | 1/1 | Complete | 2026-02-17 |
-| 34. Orchestrator Smoke Test & Documentation | v10.0 | 0/1 | Pending | — |
+| 34. Orchestrator Smoke Test & Documentation | v10.0 | 1/1 | Complete | 2026-02-17 |

@@ -5,16 +5,16 @@
 See: .planning/PROJECT.md (updated 2026-02-15)
 
 **Core value:** Reliable, N8N-free academic paper processing pipeline
-**Current focus:** All milestones complete — ready for production deployment or new features
+**Current focus:** All 10 milestones shipped — production-ready with operational documentation
 
 ## Current Position
 
-Phase: 33 of 34 (Reproducibility & Calibration)
+Phase: 34 of 34 (Orchestrator Smoke Test & Documentation)
 Plan: 1/1 complete
 Status: Complete
-Last activity: 2026-02-17 — Phase 33 shipped (LLM temperature=0 configurable, seed=42, ARCHITECTURE.md refresh)
+Last activity: 2026-02-17 — Phase 34 shipped (--via-orchestrator smoke test, E2E tests, operational runbook)
 
-Progress: 9/9 milestones shipped (v1.0-v9.0), v10.0 in progress (2/3 phases)
+Progress: 10/10 milestones shipped (v1.0-v10.0)
 
 ## Shipped Milestones
 
@@ -134,9 +134,15 @@ E2E pipeline test on paper 15 (1806.05293, Kelly criterion stock markets, 6 page
 - `tests/e2e/test_determinism.py`: 70 LOC — 3x analyzer determinism calibration test
 - `pyproject.toml`: +1 marker (`slow`)
 
+## Phase 34 Deliverables
+
+- `scripts/smoke_test.py`: +214 LOC — `--via-orchestrator` flag, `run_smoke_test_via_orchestrator()`, `--timeout` flag
+- `tests/e2e/test_smoke_orchestrator.py`: 244 LOC — 11 test methods, 2 classes (Category A: 5 unit-style, Category B: 6 full E2E)
+- `docs/RUNBOOK.md`: 452 LOC — 9-section operational runbook (services, startup, health, failures, recovery, config, performance, monitoring)
+
 ## Current Stats
 
-- **Total tests**: 623 non-e2e + 48 e2e = 671 total (all passing)
+- **Total tests**: 623 non-e2e + 48 e2e + 11 new e2e = 682 total (628 passing, 54 deselected/conditional)
 - **Total LOC**: ~12,000+ across 6 services + shared library + Docker + GitHub Discovery + deploy
 - **Services**: 6 microservices (ports 8770-8775) + Docker Compose + systemd units
 - **Duration**: 8 days (2026-02-10 to 2026-02-17)
@@ -146,10 +152,10 @@ E2E pipeline test on paper 15 (1806.05293, Kelly criterion stock markets, 6 page
 
 ## Blockers/Concerns
 
-None — v10.0 Phase 33 complete. Phase 34 remains.
+None — v10.0 complete. All 34 phases shipped.
 
 ## Session Continuity
 
 Last session: 2026-02-17
-Stopped at: Phase 33 complete
+Stopped at: Phase 34 complete — v10.0 milestone shipped
 Resume file: None
