@@ -26,6 +26,8 @@ SAMPLE_PAPER = {
         "We show that the Kelly fraction generalizes to the multivariate "
         "case via quadratic programming."
     ),
+    "authors": ["J. Doe", "R. Smith"],
+    "categories": ["q-fin.PM", "math.OC"],
     "arxiv_id": "determinism-test-001",
 }
 
@@ -39,11 +41,13 @@ def _ollama_available() -> bool:
         return False
 
 
-def _score_paper(title: str, abstract: str) -> dict:
+def _score_paper(
+    title: str, abstract: str, authors: list[str], categories: list[str]
+) -> dict:
     """Call Ollama directly with analyzer scoring prompt, return parsed scores."""
     from services.analyzer.prompt import SCORING_SYSTEM_PROMPT, format_scoring_prompt
 
-    prompt = format_scoring_prompt(title, abstract)
+    prompt = format_scoring_prompt(title, abstract, authors, categories)
 
     from shared.llm import call_ollama
 
@@ -60,7 +64,12 @@ def test_analyzer_determinism_3_runs():
     """Run analyzer 3x on same paper, assert identical scores."""
     scores = []
     for i in range(3):
-        result = _score_paper(SAMPLE_PAPER["title"], SAMPLE_PAPER["abstract"])
+        result = _score_paper(
+            SAMPLE_PAPER["title"],
+            SAMPLE_PAPER["abstract"],
+            SAMPLE_PAPER["authors"],
+            SAMPLE_PAPER["categories"],
+        )
         scores.append(result)
 
     # All three runs should produce identical output
