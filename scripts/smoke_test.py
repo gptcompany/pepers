@@ -463,15 +463,19 @@ def run_smoke_test_via_orchestrator(
     if _existing_stage in ("rejected", "failed"):
         _reset_paper(db_path, _existing_id)
 
-    stage_before = _get_paper(db_path, arxiv_id)[1]
+    paper_id_for_run, stage_before = _get_paper(db_path, arxiv_id)
 
     # -- POST /run to orchestrator -----------------------------------------
+    # Include paper_id so stages after discovery target this specific paper
+    # instead of running in untargeted batch mode.
     run_payload = {
         "query": f"id:{arxiv_id}",
         "stages": 5,
         "max_papers": 1,
         "max_formulas": max_formulas,
     }
+    if paper_id_for_run is not None:
+        run_payload["paper_id"] = paper_id_for_run
 
     step_t0 = time.monotonic()
     try:
