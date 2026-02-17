@@ -23,10 +23,13 @@ Design decisions:
 
 from __future__ import annotations
 
+import logging
 import sqlite3
 from contextlib import contextmanager
 from pathlib import Path
 from typing import Generator
+
+logger = logging.getLogger(__name__)
 
 
 SCHEMA = """
@@ -74,7 +77,8 @@ CREATE TABLE IF NOT EXISTS formulas (
     context TEXT,
     stage TEXT NOT NULL DEFAULT 'extracted',
     error TEXT,
-    created_at TEXT NOT NULL DEFAULT (datetime('now'))
+    created_at TEXT NOT NULL DEFAULT (datetime('now')),
+    UNIQUE(paper_id, latex_hash)
 );
 
 -- validations: CAS validation results (Validator service)
@@ -191,8 +195,54 @@ def transaction(db_path: str | Path) -> Generator[sqlite3.Connection, None, None
         conn.close()
 
 
+MIGRATIONS: dict[int, str] = {
+    3: """
+    -- v3: Add UNIQUE constraint on (paper_id, latex_hash) to formulas table.
+    -- SQLite cannot ALTER TABLE ADD CONSTRAINT, so recreate the table.
+    CREATE TABLE IF NOT EXISTS formulas_v3 (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        paper_id INTEGER NOT NULL REFERENCES papers(id),
+        latex TEXT NOT NULL,
+        latex_hash TEXT NOT NULL,
+        description TEXT,
+        formula_type TEXT,
+        context TEXT,
+        stage TEXT NOT NULL DEFAULT 'extracted',
+        error TEXT,
+        created_at TEXT NOT NULL DEFAULT (datetime('now')),
+        UNIQUE(paper_id, latex_hash)
+    );
+    INSERT OR IGNORE INTO formulas_v3 (id, paper_id, latex, latex_hash, description, formula_type, context, stage, error, created_at)
+        SELECT id, paper_id, latex, latex_hash, description, formula_type, context, stage, error, created_at
+        FROM formulas
+        GROUP BY paper_id, latex_hash
+        HAVING id = MIN(id);
+    DROP TABLE formulas;
+    ALTER TABLE formulas_v3 RENAME TO formulas;
+    -- Recreate indexes lost after table drop
+    CREATE INDEX IF NOT EXISTS idx_formulas_paper_id ON formulas(paper_id);
+    CREATE INDEX IF NOT EXISTS idx_formulas_latex_hash ON formulas(latex_hash);
+    """,
+}
+
+
+def _run_migrations(conn: sqlite3.Connection) -> None:
+    """Apply pending schema migrations in order."""
+    current = conn.execute("SELECT MAX(version) FROM schema_version").fetchone()[0] or 0
+    for version in sorted(MIGRATIONS):
+        if version > current:
+            logger.info("Applying migration v%d", version)
+            conn.executescript(MIGRATIONS[version])
+            conn.execute(
+                "INSERT OR IGNORE INTO schema_version (version) VALUES (?)",
+                (version,),
+            )
+            conn.commit()
+            logger.info("Migration v%d applied", version)
+
+
 def init_db(db_path: str | Path) -> None:
-    """Initialize the database schema.
+    """Initialize the database schema and apply pending migrations.
 
     Creates all tables if they don't exist. Idempotent.
 
@@ -206,5 +256,6 @@ def init_db(db_path: str | Path) -> None:
         conn.execute("INSERT OR IGNORE INTO schema_version (version) VALUES (1)")
         conn.execute("INSERT OR IGNORE INTO schema_version (version) VALUES (2)")
         conn.commit()
+        _run_migrations(conn)
     finally:
         conn.close()

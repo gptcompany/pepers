@@ -23,13 +23,37 @@ import os
 import time
 
 from shared.config import load_config
-from shared.db import init_db, transaction
+from shared.db import get_connection, init_db, transaction
 from shared.server import BaseHandler, BaseService, route
 
 from services.codegen.explain import explain_formula
 from services.codegen.generators import generate_all
 
 logger = logging.getLogger(__name__)
+
+
+def _check_consistency(db_path: str) -> None:
+    """Detect validated formulas with partial codegen."""
+    try:
+        conn = get_connection(db_path)
+        try:
+            partial = conn.execute(
+                "SELECT f.id, f.latex_hash, COUNT(g.id) as code_count "
+                "FROM formulas f "
+                "LEFT JOIN generated_code g ON g.formula_id = f.id "
+                "WHERE f.stage = 'validated' "
+                "AND g.id IS NOT NULL "
+                "GROUP BY f.id"
+            ).fetchall()
+            if partial:
+                logger.warning(
+                    "Consistency: %d validated formulas have partial codegen: %s",
+                    len(partial), [(row[0], row[2]) for row in partial[:10]],
+                )
+        finally:
+            conn.close()
+    except Exception:
+        logger.exception("Consistency check failed")
 
 
 class CodegenHandler(BaseHandler):
@@ -296,6 +320,7 @@ def main() -> None:
     """Start the Codegen service."""
     config = load_config("codegen")
     init_db(config.db_path)
+    _check_consistency(str(config.db_path))
 
     CodegenHandler.ollama_url = os.environ.get(
         "RP_CODEGEN_OLLAMA_URL", "http://localhost:11434"

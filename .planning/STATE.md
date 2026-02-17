@@ -9,12 +9,12 @@ See: .planning/PROJECT.md (updated 2026-02-15)
 
 ## Current Position
 
-Phase: 30 of 30 (Test E2E Hardening)
-Plan: 1/1 complete
+Phase: 32 of 34 (Resilience — systemd Hardening)
+Plan: 2/2 complete
 Status: Complete
-Last activity: 2026-02-16 — Phase 30 shipped, v9.0 milestone complete
+Last activity: 2026-02-17 — Phase 32 shipped (schema v3 UNIQUE, systemd units, /health, consistency checks)
 
-Progress: 9/9 milestones shipped (v1.0-v9.0)
+Progress: 9/9 milestones shipped (v1.0-v9.0), v10.0 in progress (1/3 phases)
 
 ## Shipped Milestones
 
@@ -113,20 +113,32 @@ E2E pipeline test on paper 15 (1806.05293, Kelly criterion stock markets, 6 page
 - `tests/conftest.py`: +25 LOC — `multi_formula_db` fixture (75 formulas)
 - 600 non-e2e + 47 e2e tests pass, 932 LOC added
 
-## Final Stats
+## Phase 32 Deliverables
 
-- **Total tests**: 600 non-e2e + 47 e2e = 647 total (all passing)
-- **Total LOC**: ~11,500+ across 6 services + shared library + Docker + GitHub Discovery
-- **Services**: 6 microservices (ports 8770-8775) + Docker Compose
-- **Duration**: 7 days (2026-02-10 to 2026-02-16)
+- `shared/db.py`: +45 LOC — MIGRATIONS dict, `_run_migrations()`, UNIQUE(paper_id, latex_hash) on formulas
+- `shared/server.py`: +25 LOC — enhanced /health (DB check, schema_version, last_request_seconds_ago)
+- `services/extractor/main.py`: +20 LOC — `_check_consistency()` startup check
+- `services/validator/main.py`: +22 LOC — `_check_consistency()` startup check
+- `services/codegen/main.py`: +20 LOC — `_check_consistency()` startup check
+- `deploy/`: 7 new files — 6 systemd .service + 1 .target
+- `tests/unit/test_db.py`: +80 LOC — 5 migration tests
+- `tests/integration/test_resilience.py`: 190 LOC — 9 resilience tests
+
+## Current Stats
+
+- **Total tests**: 614 non-e2e + 47 e2e = 661 total (all passing)
+- **Total LOC**: ~11,800+ across 6 services + shared library + Docker + GitHub Discovery + deploy
+- **Services**: 6 microservices (ports 8770-8775) + Docker Compose + systemd units
+- **Duration**: 8 days (2026-02-10 to 2026-02-17)
 - **CAS engines**: MATLAB + SymPy + Maxima with fallback consensus
+- **Schema version**: v3 (UNIQUE constraint on formulas)
 
 ## Blockers/Concerns
 
-None — v9.0 milestone complete. All 30 phases shipped.
+None — v10.0 Phase 32 complete. Phase 33-34 remain.
 
 ## Session Continuity
 
-Last session: 2026-02-16
-Stopped at: Phase 30 complete, v9.0 shipped
+Last session: 2026-02-17
+Stopped at: Phase 32 complete
 Resume file: None

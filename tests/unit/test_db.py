@@ -1,4 +1,4 @@
-"""Unit tests for shared/db.py — SQLite connection management."""
+"""Unit tests for shared/db.py — SQLite connection management + migrations."""
 
 from __future__ import annotations
 
@@ -6,7 +6,7 @@ import sqlite3
 
 import pytest
 
-from shared.db import get_connection, init_db, transaction
+from shared.db import MIGRATIONS, _run_migrations, get_connection, init_db, transaction
 
 
 class TestGetConnection:
@@ -140,7 +140,7 @@ class TestInitDb:
         conn = get_connection(tmp_db_path)
         versions = conn.execute("SELECT COUNT(*) FROM schema_version").fetchone()[0]
         conn.close()
-        assert versions == 2  # v1 (original) + v2 (github_repos/analyses)
+        assert versions == 3  # v1 (original) + v2 (github_repos/analyses) + v3 (UNIQUE constraint)
 
     def test_foreign_keys_enforced(self, tmp_db_path):
         init_db(tmp_db_path)
@@ -165,5 +165,131 @@ class TestInitDb:
             conn.execute(
                 "INSERT INTO papers (arxiv_id, title, stage) VALUES (?, ?, ?)",
                 ("2401.00001", "Duplicate", "discovered"),
+            )
+        conn.close()
+
+
+class TestSchemaMigration:
+    """Tests for schema migration v2→v3 (UNIQUE constraint on formulas)."""
+
+    def test_fresh_db_has_unique_constraint(self, tmp_db_path):
+        """New database should have UNIQUE(paper_id, latex_hash) on formulas."""
+        init_db(tmp_db_path)
+        conn = get_connection(tmp_db_path)
+        schema = conn.execute(
+            "SELECT sql FROM sqlite_master WHERE name='formulas'"
+        ).fetchone()[0]
+        conn.close()
+        assert "UNIQUE(paper_id, latex_hash)" in schema
+
+    def test_fresh_db_schema_version_3(self, tmp_db_path):
+        """New database should be at schema version 3."""
+        init_db(tmp_db_path)
+        conn = get_connection(tmp_db_path)
+        v = conn.execute("SELECT MAX(version) FROM schema_version").fetchone()[0]
+        conn.close()
+        assert v == 3
+
+    def test_migration_v2_to_v3(self, tmp_db_path):
+        """Existing v2 database should migrate to v3 with UNIQUE constraint."""
+        # Create v2-style DB without UNIQUE on formulas
+        conn = get_connection(tmp_db_path)
+        conn.execute(
+            "CREATE TABLE schema_version "
+            "(version INTEGER PRIMARY KEY, applied_at TEXT NOT NULL DEFAULT (datetime('now')))"
+        )
+        conn.execute("INSERT INTO schema_version (version) VALUES (1)")
+        conn.execute("INSERT INTO schema_version (version) VALUES (2)")
+        conn.execute(
+            "CREATE TABLE papers (id INTEGER PRIMARY KEY AUTOINCREMENT, "
+            "arxiv_id TEXT UNIQUE NOT NULL, title TEXT NOT NULL, "
+            "stage TEXT NOT NULL DEFAULT 'discovered', "
+            "created_at TEXT NOT NULL DEFAULT (datetime('now')), "
+            "updated_at TEXT NOT NULL DEFAULT (datetime('now')))"
+        )
+        conn.execute(
+            "CREATE TABLE formulas (id INTEGER PRIMARY KEY AUTOINCREMENT, "
+            "paper_id INTEGER NOT NULL REFERENCES papers(id), "
+            "latex TEXT NOT NULL, latex_hash TEXT NOT NULL, "
+            "description TEXT, formula_type TEXT, context TEXT, "
+            "stage TEXT NOT NULL DEFAULT 'extracted', error TEXT, "
+            "created_at TEXT NOT NULL DEFAULT (datetime('now')))"
+        )
+        conn.commit()
+        conn.close()
+
+        # Run init_db (triggers migration)
+        init_db(tmp_db_path)
+
+        conn = get_connection(tmp_db_path)
+        schema = conn.execute(
+            "SELECT sql FROM sqlite_master WHERE name='formulas'"
+        ).fetchone()[0]
+        v = conn.execute("SELECT MAX(version) FROM schema_version").fetchone()[0]
+        conn.close()
+        assert "UNIQUE" in schema
+        assert v == 3
+
+    def test_migration_deduplicates(self, tmp_db_path):
+        """Migration should remove duplicate (paper_id, latex_hash) rows."""
+        conn = get_connection(tmp_db_path)
+        conn.execute(
+            "CREATE TABLE schema_version "
+            "(version INTEGER PRIMARY KEY, applied_at TEXT NOT NULL DEFAULT (datetime('now')))"
+        )
+        conn.execute("INSERT INTO schema_version (version) VALUES (1)")
+        conn.execute("INSERT INTO schema_version (version) VALUES (2)")
+        conn.execute(
+            "CREATE TABLE papers (id INTEGER PRIMARY KEY AUTOINCREMENT, "
+            "arxiv_id TEXT UNIQUE NOT NULL, title TEXT NOT NULL, "
+            "stage TEXT NOT NULL DEFAULT 'discovered', "
+            "created_at TEXT NOT NULL DEFAULT (datetime('now')), "
+            "updated_at TEXT NOT NULL DEFAULT (datetime('now')))"
+        )
+        conn.execute(
+            "CREATE TABLE formulas (id INTEGER PRIMARY KEY AUTOINCREMENT, "
+            "paper_id INTEGER NOT NULL, latex TEXT NOT NULL, "
+            "latex_hash TEXT NOT NULL, description TEXT, formula_type TEXT, "
+            "context TEXT, stage TEXT NOT NULL DEFAULT 'extracted', error TEXT, "
+            "created_at TEXT NOT NULL DEFAULT (datetime('now')))"
+        )
+        conn.execute(
+            "INSERT INTO papers (arxiv_id, title, stage) VALUES ('test', 'Test', 'discovered')"
+        )
+        # Insert duplicates
+        conn.execute(
+            "INSERT INTO formulas (paper_id, latex, latex_hash, stage) VALUES (1, 'x^2', 'abc', 'extracted')"
+        )
+        conn.execute(
+            "INSERT INTO formulas (paper_id, latex, latex_hash, stage) VALUES (1, 'x^2', 'abc', 'extracted')"
+        )
+        conn.execute(
+            "INSERT INTO formulas (paper_id, latex, latex_hash, stage) VALUES (1, 'y^2', 'def', 'extracted')"
+        )
+        conn.commit()
+        assert conn.execute("SELECT COUNT(*) FROM formulas").fetchone()[0] == 3
+        conn.close()
+
+        init_db(tmp_db_path)
+
+        conn = get_connection(tmp_db_path)
+        count = conn.execute("SELECT COUNT(*) FROM formulas").fetchone()[0]
+        conn.close()
+        assert count == 2  # one duplicate removed
+
+    def test_duplicate_formula_rejected(self, tmp_db_path):
+        """After migration, duplicate (paper_id, latex_hash) INSERT raises IntegrityError."""
+        init_db(tmp_db_path)
+        conn = get_connection(tmp_db_path)
+        conn.execute(
+            "INSERT INTO papers (arxiv_id, title, stage) VALUES ('test', 'Test', 'discovered')"
+        )
+        conn.execute(
+            "INSERT INTO formulas (paper_id, latex, latex_hash, stage) VALUES (1, 'x^2', 'abc', 'extracted')"
+        )
+        conn.commit()
+        with pytest.raises(sqlite3.IntegrityError):
+            conn.execute(
+                "INSERT INTO formulas (paper_id, latex, latex_hash, stage) VALUES (1, 'x^2', 'abc', 'extracted')"
             )
         conn.close()

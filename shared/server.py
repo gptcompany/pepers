@@ -89,6 +89,7 @@ class BaseHandler(BaseHTTPRequestHandler):
     service_version: str = "0.1.0"
     service_start_time: float = 0.0
     db_path: str | None = None
+    last_request_time: float | None = None
 
     # Route registry, built lazily on first request
     _routes: dict[tuple[str, str], str] | None = None
@@ -114,6 +115,8 @@ class BaseHandler(BaseHTTPRequestHandler):
         handler_name = routes.get(key)
 
         if handler_name:
+            if path_no_query != "/health":
+                self.__class__.last_request_time = time.time()
             handler = getattr(self, handler_name)
             try:
                 if http_method == "POST":
@@ -234,13 +237,36 @@ class BaseService:
 
         @route("GET", "/health")
         def handle_health(self_handler: BaseHandler) -> dict:
-            return {
+            import sqlite3 as _sqlite3
+
+            result: dict[str, Any] = {
                 "status": "ok",
                 "service": handler.service_name,
                 "uptime_seconds": round(
                     time.time() - handler.service_start_time, 1
                 ),
             }
+            if handler.db_path:
+                try:
+                    conn = _sqlite3.connect(handler.db_path)
+                    conn.execute("SELECT 1")
+                    result["db"] = "ok"
+                    try:
+                        v = conn.execute(
+                            "SELECT MAX(version) FROM schema_version"
+                        ).fetchone()[0]
+                        result["schema_version"] = v
+                    except Exception:
+                        pass
+                    conn.close()
+                except Exception as e:
+                    result["db"] = f"error: {e}"
+                    result["status"] = "degraded"
+            lrt = handler.last_request_time
+            result["last_request_seconds_ago"] = (
+                round(time.time() - lrt, 1) if lrt else None
+            )
+            return result
 
         @route("GET", "/status")
         def handle_status(self_handler: BaseHandler) -> dict:

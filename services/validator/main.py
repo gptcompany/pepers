@@ -23,7 +23,7 @@ import os
 import time
 
 from shared.config import load_config
-from shared.db import init_db, transaction
+from shared.db import get_connection, init_db, transaction
 from shared.server import BaseHandler, BaseService, route
 
 from services.validator.cas_client import CASClient, CASServiceError
@@ -34,6 +34,31 @@ from services.validator.consensus import (
 )
 
 logger = logging.getLogger(__name__)
+
+
+def _check_consistency(db_path: str) -> None:
+    """Detect formulas with partial validations (stage still 'extracted')."""
+    try:
+        conn = get_connection(db_path)
+        try:
+            partial = conn.execute(
+                "SELECT f.id, f.latex_hash, COUNT(v.id) as validation_count "
+                "FROM formulas f "
+                "LEFT JOIN validations v ON v.formula_id = f.id "
+                "WHERE f.stage = 'extracted' "
+                "AND v.id IS NOT NULL "
+                "GROUP BY f.id"
+            ).fetchall()
+            if partial:
+                logger.warning(
+                    "Consistency: %d formulas have partial validations "
+                    "(stage still 'extracted'): %s",
+                    len(partial), [(row[0], row[2]) for row in partial[:10]],
+                )
+        finally:
+            conn.close()
+    except Exception:
+        logger.exception("Consistency check failed")
 
 
 class ValidatorHandler(BaseHandler):
@@ -290,6 +315,7 @@ def main() -> None:
     """Start the Validator service."""
     config = load_config("validator")
     init_db(config.db_path)
+    _check_consistency(str(config.db_path))
 
     ValidatorHandler.cas_url = os.environ.get(
         "RP_VALIDATOR_CAS_URL", "http://localhost:8769"

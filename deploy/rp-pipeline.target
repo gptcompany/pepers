@@ -1,0 +1,6 @@
+[Unit]
+Description=Research Pipeline - All Services
+Wants=rp-discovery.service rp-analyzer.service rp-extractor.service rp-validator.service rp-codegen.service rp-orchestrator.service
+
+[Install]
+WantedBy=default.target

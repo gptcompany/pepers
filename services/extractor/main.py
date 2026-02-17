@@ -25,13 +25,34 @@ import time
 from pathlib import Path
 
 from shared.config import load_config
-from shared.db import init_db, transaction
+from shared.db import get_connection, init_db, transaction
 from shared.models import Formula, Paper
 from shared.server import BaseHandler, BaseService, route
 
 from services.extractor import latex, pdf, rag_client
 
 logger = logging.getLogger(__name__)
+
+
+def _check_consistency(db_path: str) -> None:
+    """Detect papers at stage 'extracted' with 0 formulas (possible failed extraction)."""
+    try:
+        conn = get_connection(db_path)
+        try:
+            stuck = conn.execute(
+                "SELECT p.id, p.arxiv_id FROM papers p "
+                "WHERE p.stage = 'extracted' "
+                "AND NOT EXISTS (SELECT 1 FROM formulas f WHERE f.paper_id = p.id)"
+            ).fetchall()
+            if stuck:
+                logger.warning(
+                    "Consistency: %d papers at stage 'extracted' with 0 formulas: %s",
+                    len(stuck), [row[1] for row in stuck],
+                )
+        finally:
+            conn.close()
+    except Exception:
+        logger.exception("Consistency check failed")
 
 
 class ExtractorHandler(BaseHandler):
@@ -221,6 +242,7 @@ def main() -> None:
     """Start the Extractor service."""
     config = load_config("extractor")
     init_db(config.db_path)
+    _check_consistency(str(config.db_path))
 
     ExtractorHandler.max_papers_default = int(
         os.environ.get("RP_EXTRACTOR_MAX_PAPERS", "10")

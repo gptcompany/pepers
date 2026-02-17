@@ -163,7 +163,7 @@ Plans:
 <details>
 <summary>🔲 v10.0 Production Hardening (Phases 32-34)</summary>
 
-- [ ] **Phase 32: Resilience — systemd Hardening** (0/2 plans)
+- [x] **Phase 32: Resilience — systemd Hardening** (2/2 plans) — completed 2026-02-17
 - [ ] **Phase 33: Reproducibility & Calibration** (0/1 plans)
 - [ ] **Phase 34: Orchestrator Smoke Test & Documentation** (0/1 plans)
 
@@ -204,6 +204,6 @@ Plans:
 | 29. LaTeX Filtering + Cleanup | v9.0 | 1/1 | Complete | 2026-02-16 |
 | 30. Test E2E Hardening | v9.0 | 1/1 | Complete | 2026-02-16 |
 | 31. E2E Smoke Test CLI (Real Data) | post-v9.0 | 1/1 | Complete | 2026-02-16 |
-| 32. Resilience — systemd Hardening | v10.0 | 0/2 | Pending | — |
+| 32. Resilience — systemd Hardening | v10.0 | 2/2 | Complete | 2026-02-17 |
 | 33. Reproducibility & Calibration | v10.0 | 0/1 | Pending | — |
 | 34. Orchestrator Smoke Test & Documentation | v10.0 | 0/1 | Pending | — |
