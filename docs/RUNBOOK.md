@@ -7,10 +7,10 @@ Production operations guide for the 6-service research paper processing pipeline
 | Service | Port | Description | External Dependencies |
 |---------|------|-------------|-----------------------|
 | discovery | 8770 | arXiv/Semantic Scholar/CrossRef paper search | arXiv API, S2 API, CrossRef API |
-| analyzer | 8771 | LLM-based relevance scoring (5 criteria, 0-50 scale) | Ollama / OpenRouter / Gemini |
+| analyzer | 8771 | Topic-agnostic LLM scoring (5 criteria, 0-1.0 scale) | LLM fallback chain |
 | extractor | 8772 | PDF to LaTeX formula extraction | RAGAnything (:8767) |
 | validator | 8773 | CAS mathematical validation (multi-engine consensus) | CAS engine (:8769), SymPy |
-| codegen | 8774 | Formula to code generation (Python/Rust) | Ollama / OpenRouter |
+| codegen | 8774 | 5-layer LaTeX→code (C99/Rust/Python) + batch LLM explain | LLM fallback chain, SymPy |
 | orchestrator | 8775 | Pipeline coordination, batch iteration, status API | All above services |
 
 **Database**: SQLite (WAL mode), schema v4, shared across all services.
@@ -213,6 +213,32 @@ curl -s http://localhost:8775/status | python3 -m json.tool
 3. For specific paper: reset and retry (see Recovery 6.1)
 4. For persistent failures: increase `RP_EXTRACTOR_TIMEOUT` or use GPU
 
+### 5.7 Codegen OOM Kill (Exit Code 137)
+
+**Symptom**: Codegen service killed by OOM killer after processing many formulas. `journalctl` shows exit code 137.
+
+**Cause**: Python's pymalloc doesn't return freed memory to the OS. SymPy expression trees and codegen ASTs accumulate heap fragmentation across formulas.
+
+**Prevention**: Built-in `gc.collect()` + `malloc_trim(0)` runs after each formula. This forces Python to release freed heap back to the OS.
+
+**Resolution**: If still OOM:
+1. Reduce `RP_CODEGEN_MAX_FORMULAS` (e.g., 20 instead of 50)
+2. Reduce `RP_CODEGEN_BATCH_SIZE` (e.g., 5 instead of 10)
+3. Add systemd `MemoryMax=2G` to the codegen unit
+
+### 5.8 Batch Explain Circuit Breaker
+
+**Symptom**: Codegen produces code but with 0 explanations.
+
+**Cause**: `explain_formulas_batch()` failed (LLM providers all timed out or returned errors). The circuit breaker skips all per-formula explain and proceeds directly to SymPy codegen.
+
+**Impact**: Code is generated correctly. Only the `formulas.description` field is NULL for affected formulas.
+
+**Resolution**: This is by design — no per-formula LLM fallback to avoid token waste and timeout cascading. To retry explanations:
+1. Reset formula stage: `sqlite3 data/research.db "UPDATE formulas SET stage='validated' WHERE paper_id=<ID>;"`
+2. Ensure LLM providers are available (check Ollama, OpenRouter, Gemini)
+3. Re-run codegen via orchestrator
+
 ## 6. Recovery Procedures
 
 ### 6.1 Paper Stuck in Intermediate Stage
@@ -342,7 +368,7 @@ All configuration via environment variables with `RP_` prefix. Set in `.env` (do
 
 | Variable | Default | Description |
 |----------|---------|-------------|
-| `RP_ORCHESTRATOR_TIMEOUT` | 300 | Per-service HTTP call timeout (seconds) |
+| `RP_ORCHESTRATOR_TIMEOUT` | 300 | Per-service HTTP call timeout (seconds; codegen uses 900 via `RP_ORCHESTRATOR_CODEGEN_TIMEOUT`) |
 | `RP_ORCHESTRATOR_RETRY_MAX` | 3 | Max retries per service call |
 | `RP_ORCHESTRATOR_RETRY_BACKOFF` | 4.0 | Exponential backoff base (seconds) |
 
@@ -382,7 +408,22 @@ RP_LLM_TIMEOUT_CLAUDE_CLI=180
 | Variable | Default | Description |
 |----------|---------|-------------|
 | `RP_MAX_FORMULAS` | 50 | Max formulas per validator/codegen batch |
-| `RP_CODEGEN_BATCH_SIZE` | 50 | Formulas per batch explain LLM call |
+| `RP_CODEGEN_BATCH_SIZE` | 10 | Formulas per batch explain LLM call (clamped 5-25) |
+
+### Analyzer
+
+| Variable | Default | Description |
+|----------|---------|-------------|
+| `RP_ANALYZER_TOPIC` | `Kelly criterion, optimal bet sizing, fractional Kelly, portfolio optimization` | Scoring topic (topic-agnostic) |
+| `RP_ANALYZER_THRESHOLD` | 0.7 | Min avg_score to pass analysis (0.0-1.0) |
+
+### Codegen
+
+| Variable | Default | Description |
+|----------|---------|-------------|
+| `RP_CODEGEN_OLLAMA_URL` | `http://localhost:11434` | Ollama base URL for codegen |
+| `RP_CODEGEN_MAX_FORMULAS` | 50 | Max formulas per codegen run |
+| `RP_ORCHESTRATOR_CODEGEN_TIMEOUT` | 900 | Codegen stage timeout in seconds (vs 300 for other stages) |
 
 ### Logging
 
