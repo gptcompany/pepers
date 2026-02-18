@@ -38,7 +38,10 @@ Respond ONLY with valid JSON matching this schema:
   "domain": "<mathematical finance | probability | optimization | statistics>"
 }"""
 
-CODEGEN_FALLBACK_ORDER = ["ollama", "openrouter", "gemini_cli"]
+CODEGEN_FALLBACK_ORDER = os.environ.get(
+    "RP_CODEGEN_FALLBACK_ORDER",
+    os.environ.get("RP_LLM_FALLBACK_ORDER", "gemini_cli,codex_cli,claude_cli,openrouter,ollama"),
+).split(",")
 DEFAULT_BATCH_SIZE = int(os.environ.get("RP_CODEGEN_BATCH_SIZE", "50"))
 
 

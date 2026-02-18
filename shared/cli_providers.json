@@ -10,7 +10,7 @@
     "default_timeout": 120
   },
   "codex_cli": {
-    "cmd": ["npx", "@openai/codex", "exec"],
+    "cmd": ["codex", "exec"],
     "system_flag": null,
     "model_flag": null,
     "default_model": "o4-mini",
@@ -20,7 +20,8 @@
     "default_timeout": 120
   },
   "gemini_cli": {
-    "cmd": ["gemini", "-p"],
+    "cmd": ["gemini"],
+    "prompt_flag": "-p",
     "system_flag": null,
     "model_flag": "-m",
     "default_model": null,
@@ -28,6 +29,6 @@
     "output_format": "json",
     "timeout_env": "RP_LLM_TIMEOUT_GEMINI_CLI",
     "default_timeout": 120,
-    "extra_args": ["--output-format", "json", "-e", "none"]
+    "extra_args": ["-o", "json", "-e", "none"]
   }
 }

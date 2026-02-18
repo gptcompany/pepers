@@ -352,7 +352,8 @@ All configuration via environment variables with `RP_` prefix. Set in `.env` (do
 |----------|---------|-------------|
 | `RP_LLM_TEMPERATURE` | 0.0 | LLM temperature (0 = deterministic) |
 | `RP_LLM_SEED` | 42 | LLM seed for reproducibility |
-| `RP_LLM_FALLBACK_ORDER` | `gemini_cli,openrouter,ollama` | Comma-separated provider fallback order |
+| `RP_LLM_FALLBACK_ORDER` | `gemini_cli,codex_cli,claude_cli,openrouter,ollama` | Comma-separated provider fallback order |
+| `RP_CODEGEN_FALLBACK_ORDER` | (same as above) | Codegen-specific override; falls back to `RP_LLM_FALLBACK_ORDER` |
 
 ### CLI Providers
 

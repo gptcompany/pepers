@@ -29,7 +29,7 @@ from shared.config import LLM_SEED, LLM_TEMPERATURE
 logger = logging.getLogger(__name__)
 
 DEFAULT_FALLBACK_ORDER = os.environ.get(
-    "RP_LLM_FALLBACK_ORDER", "gemini_cli,openrouter,ollama"
+    "RP_LLM_FALLBACK_ORDER", "gemini_cli,codex_cli,claude_cli,openrouter,ollama"
 ).split(",")
 
 
@@ -96,10 +96,14 @@ def call_cli(
     input_text = None
     if cfg["input_mode"] == "arg":
         # For gemini_cli, system is prepended to prompt (no system flag)
+        full_prompt = prompt
         if not cfg.get("system_flag") and system:
-            cmd.append(f"{system}\n\n---\n\n{prompt}")
+            full_prompt = f"{system}\n\n---\n\n{prompt}"
+        # If prompt_flag defined (e.g. "-p"), add it before the prompt text
+        if cfg.get("prompt_flag"):
+            cmd.extend([cfg["prompt_flag"], full_prompt])
         else:
-            cmd.append(prompt)
+            cmd.append(full_prompt)
     else:
         input_text = prompt
 
@@ -369,9 +373,9 @@ def fallback_chain(
     Args:
         prompt: User prompt text.
         system: System instruction text.
-        order: Provider order. Default None uses
-            ["gemini_cli", "gemini_sdk", "ollama"] (Analyzer default).
-            Codegen uses ["ollama", "gemini_sdk", "gemini_cli"].
+        order: Provider order. Default from RP_LLM_FALLBACK_ORDER env var
+            (default: gemini_cli,codex_cli,claude_cli,openrouter,ollama).
+            Codegen uses RP_CODEGEN_FALLBACK_ORDER or RP_LLM_FALLBACK_ORDER.
         temperature: Override temperature for all providers.
             None uses each provider's default (LLM_TEMPERATURE).
             Note: gemini_cli does not support temperature control.

@@ -129,14 +129,14 @@ The pipeline uses `fallback_chain()` which tries providers in order until one su
 | Provider | Method | Temperature | Seed | Timeout Default |
 |----------|--------|-------------|------|-----------------|
 | Claude CLI | subprocess (`claude --print`) via data-driven registry | Not supported | Not supported | 120s |
-| Codex CLI | subprocess (`npx @openai/codex exec`) via data-driven registry | Not supported | Not supported | 120s |
+| Codex CLI | subprocess (`codex exec`) via data-driven registry | Not supported | Not supported | 120s |
 | Gemini CLI | subprocess (`gemini -p`) via data-driven registry | Not supported | Not supported | 120s |
 | Gemini SDK | Python SDK (`google-genai`) | Configurable (default: 0) | Configurable (default: 42) | 60s |
 | OpenRouter | OpenAI-compatible API | Configurable (default: 0) | Configurable (default: 42) | 60s |
 | Ollama | Local LLM (qwen3:8b default) | Configurable (default: 0) | Configurable (default: 42) | 600s |
 
-**Default fallback order**: `gemini_cli -> openrouter -> ollama` (configurable via `RP_LLM_FALLBACK_ORDER`)
-**Codegen fallback order**: `ollama -> openrouter -> gemini_cli`
+**Default fallback order**: `gemini_cli -> codex_cli -> claude_cli -> openrouter -> ollama` (configurable via `RP_LLM_FALLBACK_ORDER`)
+**Codegen fallback order**: same as default (configurable via `RP_CODEGEN_FALLBACK_ORDER`, falls back to `RP_LLM_FALLBACK_ORDER`)
 
 CLI providers are **data-driven**: `shared/cli_providers.json` defines command, flags, input mode, and timeout for each CLI tool. Adding a new CLI provider requires only a JSON entry, no Python changes. The generic `call_cli(provider_name, prompt)` function reads the config and executes the correct subprocess.
 
@@ -244,7 +244,8 @@ Daily 8AM timer triggers Orchestrator (:8775)
 | `RP_LOG_LEVEL` | Logging level | `INFO` |
 | `RP_DATA_DIR` | Directory for data files | `./data/` |
 | `RP_LLM_TEMPERATURE` | LLM sampling temperature | `0` (deterministic) |
-| `RP_LLM_FALLBACK_ORDER` | LLM provider fallback order | `gemini_cli,openrouter,ollama` |
+| `RP_LLM_FALLBACK_ORDER` | LLM provider fallback order | `gemini_cli,codex_cli,claude_cli,openrouter,ollama` |
+| `RP_CODEGEN_FALLBACK_ORDER` | Codegen-specific fallback (overrides above) | same as `RP_LLM_FALLBACK_ORDER` |
 | `RP_LLM_TIMEOUT_CLAUDE_CLI` | Claude CLI timeout | `120s` |
 | `RP_LLM_TIMEOUT_CODEX_CLI` | Codex CLI timeout | `120s` |
 | `RP_LLM_TIMEOUT_GEMINI_CLI` | Gemini CLI timeout | `120s` |
