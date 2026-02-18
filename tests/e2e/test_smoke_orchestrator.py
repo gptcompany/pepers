@@ -143,8 +143,8 @@ class TestOrchestratorSmokeUnit:
         assert data["papers_by_stage"]["discovered"] == 1
         assert data["papers_by_stage"]["analyzed"] == 1
 
-    def test_run_returns_valid_response(self, orchestrator_server):
-        """POST /run returns a well-formed response regardless of service availability."""
+    def test_run_returns_async_202(self, orchestrator_server):
+        """POST /run returns HTTP 202 with run_id and status=running."""
         port = orchestrator_server["port"]
         data = _http_post(
             f"http://localhost:{port}/run",
@@ -152,12 +152,10 @@ class TestOrchestratorSmokeUnit:
         )
 
         assert data["run_id"].startswith("run-")
-        assert data["status"] in ("completed", "partial", "failed")
-        assert "time_ms" in data
-        assert isinstance(data["stages_completed"], int)
+        assert data["status"] == "running"
 
-    def test_run_with_paper_id_resolves_stages(self, orchestrator_server):
-        """POST /run with paper_id of a 'discovered' paper should try analyzer next."""
+    def test_run_with_paper_id_async(self, orchestrator_server):
+        """POST /run with paper_id returns 202, poll for result."""
         port = orchestrator_server["port"]
         db_path = orchestrator_server["db_path"]
 
@@ -175,9 +173,27 @@ class TestOrchestratorSmokeUnit:
             {"paper_id": paper_id, "stages": 1},
         )
 
-        # Will fail because analyzer is not running, but should attempt it
         assert data["run_id"].startswith("run-")
-        assert "analyzer" in data.get("results", {}) or len(data["errors"]) > 0
+        assert data["status"] == "running"
+
+        # Poll for completion (analyzer not running, expect partial/failed)
+        run_id = data["run_id"]
+        deadline = time.time() + 30
+        result = None
+        while time.time() < deadline:
+            try:
+                result = _http_get(
+                    f"http://localhost:{port}/runs?id={run_id}", timeout=5
+                )
+                if result.get("status") != "running":
+                    break
+            except urllib.error.HTTPError as e:
+                if e.code != 404:
+                    raise
+            time.sleep(0.5)
+
+        assert result is not None
+        assert result["status"] in ("completed", "partial", "failed")
 
 
 # ---------------------------------------------------------------------------
