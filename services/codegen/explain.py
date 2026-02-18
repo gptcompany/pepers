@@ -42,7 +42,10 @@ CODEGEN_FALLBACK_ORDER = os.environ.get(
     "RP_CODEGEN_FALLBACK_ORDER",
     os.environ.get("RP_LLM_FALLBACK_ORDER", "gemini_cli,codex_cli,claude_cli,openrouter,ollama"),
 ).split(",")
-DEFAULT_BATCH_SIZE = int(os.environ.get("RP_CODEGEN_BATCH_SIZE", "50"))
+_BATCH_MIN, _BATCH_MAX = 5, 25
+DEFAULT_BATCH_SIZE = max(_BATCH_MIN, min(_BATCH_MAX, int(
+    os.environ.get("RP_CODEGEN_BATCH_SIZE", "10")
+)))
 
 
 def explain_formula(
@@ -161,8 +164,8 @@ def explain_formulas_batch(
 
     Returns:
         Dict mapping formula_id to FormulaExplanation dict.
-        Formulas that failed batch processing are omitted (caller should
-        fall back to per-formula explain_formula).
+        Formulas that failed batch processing are omitted (caller proceeds
+        with codegen only — no per-formula fallback).
     """
     if not formulas:
         return {}

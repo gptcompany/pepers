@@ -28,7 +28,7 @@ from shared.config import load_config
 from shared.db import get_connection, init_db, transaction
 from shared.server import BaseHandler, BaseService, route
 
-from services.codegen.explain import explain_formula, explain_formulas_batch
+from services.codegen.explain import explain_formulas_batch
 from services.codegen.generators import generate_all
 
 logger = logging.getLogger(__name__)
@@ -122,36 +122,27 @@ class CodegenHandler(BaseHandler):
         explanations_count = 0
         processed = 0
 
-        # Batch explain: one LLM call per ~10 formulas instead of per-formula
+        # Batch explain: one LLM call per chunk (~10 formulas).
+        # No per-formula fallback — batch-only to control token usage.
         batch_results = explain_formulas_batch(formulas)
-        # If batch returned nothing, all LLM providers are likely down —
-        # skip per-formula explain to avoid N×provider timeout cascades.
-        skip_explain = len(formulas) > 1 and not batch_results
-        if skip_explain:
+        if not batch_results:
             logger.warning(
                 "Batch explain returned 0 results for %d formulas — "
-                "skipping per-formula explain (LLM providers likely down)",
+                "proceeding with codegen only",
                 len(formulas),
             )
 
         for formula_row in formulas:
             fid = formula_row["id"]
             latex = formula_row["latex"]
-            context = formula_row["context"]
-            paper_title = formula_row["paper_title"]
 
             if not latex or not latex.strip():
                 logger.warning("Formula %d has empty LaTeX, skipping", fid)
                 continue
 
             try:
-                # Step 1: LLM explanation — use batch result or fall back to per-formula
-                if skip_explain:
-                    explanation = None
-                else:
-                    explanation = batch_results.get(fid) or explain_formula(
-                        latex, context, paper_title
-                    )
+                # Step 1: LLM explanation — batch only, no per-formula calls
+                explanation = batch_results.get(fid)
                 if explanation:
                     _update_formula_description(
                         db_path, fid, json.dumps(explanation)
