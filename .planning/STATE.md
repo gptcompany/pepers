@@ -9,12 +9,12 @@ See: .planning/PROJECT.md (updated 2026-02-15)
 
 ## Current Position
 
-Phase: 34 of 34 (Orchestrator Smoke Test & Documentation)
-Plan: 1/1 complete
-Status: Complete
-Last activity: 2026-02-17 — Phase 34 shipped (--via-orchestrator smoke test, E2E tests, operational runbook)
+Phase: 35 of 37 (CLI Providers + Batch Explain)
+Plan: 35-01 in progress (Tasks 1-2 committed, Tasks 3-4 pending)
+Status: In Progress
+Last activity: 2026-02-18 — v11.0 started, Phase 35 Tasks 1-2 committed (0031cbd)
 
-Progress: 10/10 milestones shipped (v1.0-v10.0)
+Progress: 10/11 milestones shipped (v1.0-v10.0), v11.0 in progress
 
 ## Shipped Milestones
 
@@ -150,12 +150,34 @@ E2E pipeline test on paper 15 (1806.05293, Kelly criterion stock markets, 6 page
 - **Schema version**: v3 (UNIQUE constraint on formulas)
 - **LLM determinism**: temperature=0, seed=42 on all configurable providers
 
+## v11.0 CLI Providers + Batch Explain + API + Async
+
+### Phases
+
+| Phase | Goal | Status |
+|-------|------|--------|
+| 35. CLI Providers + Batch Explain | Data-driven CLI registry, batch explain | In Progress |
+| 36. GET /generated-code + Async /run | New endpoints, async pipeline runs | Pending |
+| 37. E2E Testing + Documentation | Cross-feature E2E, docs update | Pending |
+
+### Phase 35 Deliverables (partial)
+
+- `shared/cli_providers.json`: 30 LOC — claude_cli, codex_cli, gemini_cli configs
+- `shared/llm.py`: +130 LOC — `_load_cli_configs()`, `call_cli()`, `call_claude_cli()`, `call_codex_cli()`, refactored `call_gemini_cli()`, `RP_LLM_FALLBACK_ORDER` env var
+
+### Remaining
+
+- `services/codegen/explain.py`: `explain_formulas_batch()` (~80 LOC)
+- `services/codegen/main.py`: batch-first in loop (~15 LOC)
+- `tests/unit/test_llm.py`: ~14 new tests for CLI providers
+- `tests/unit/test_codegen.py`: ~8 new tests for batch explain
+
 ## Blockers/Concerns
 
-None — v10.0 complete. All 34 phases shipped.
+None — v11.0 Phase 35 in progress.
 
 ## Session Continuity
 
-Last session: 2026-02-17
-Stopped at: Phase 34 complete — v10.0 milestone shipped
+Last session: 2026-02-18
+Stopped at: Phase 35 Tasks 1-2 committed (0031cbd), GSD structure created
 Resume file: None
