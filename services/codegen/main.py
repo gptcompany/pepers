@@ -124,6 +124,15 @@ class CodegenHandler(BaseHandler):
 
         # Batch explain: one LLM call per ~10 formulas instead of per-formula
         batch_results = explain_formulas_batch(formulas)
+        # If batch returned nothing, all LLM providers are likely down —
+        # skip per-formula explain to avoid N×provider timeout cascades.
+        skip_explain = len(formulas) > 1 and not batch_results
+        if skip_explain:
+            logger.warning(
+                "Batch explain returned 0 results for %d formulas — "
+                "skipping per-formula explain (LLM providers likely down)",
+                len(formulas),
+            )
 
         for formula_row in formulas:
             fid = formula_row["id"]
@@ -137,9 +146,12 @@ class CodegenHandler(BaseHandler):
 
             try:
                 # Step 1: LLM explanation — use batch result or fall back to per-formula
-                explanation = batch_results.get(fid) or explain_formula(
-                    latex, context, paper_title
-                )
+                if skip_explain:
+                    explanation = None
+                else:
+                    explanation = batch_results.get(fid) or explain_formula(
+                        latex, context, paper_title
+                    )
                 if explanation:
                     _update_formula_description(
                         db_path, fid, json.dumps(explanation)
