@@ -15,7 +15,7 @@ Research Pipeline is a set of 5 standalone Python microservices plus 1 orchestra
 | HTTP Server | `http.server` (stdlib) | Microservice endpoints (no framework) |
 | Database | SQLite (WAL mode) | Shared data storage (`data/research.db`) |
 | Models | Pydantic v2 | Data validation, serialization, type safety |
-| LLM | Multi-provider (Gemini CLI/SDK, OpenRouter, Ollama) | Paper analysis, relevance scoring, codegen with fallback chain |
+| LLM | Multi-provider (Gemini CLI/SDK, OpenRouter, Ollama, Claude CLI, Codex CLI) | Paper analysis, relevance scoring, codegen with fallback chain |
 | CAS Engines | SymPy + Maxima + Wolfram | Multi-engine formula validation (consensus) |
 | PDF Processing | RAGAnything | Text extraction from paper PDFs |
 | Secrets | dotenvx (ECIES) | Encrypted env var management |
@@ -29,11 +29,12 @@ Research Pipeline is a set of 5 standalone Python microservices plus 1 orchestra
 research-pipeline/
 ├── shared/                     # Shared library (all services import from here)
 │   ├── __init__.py             # Package metadata (0.1.0)
-│   ├── db.py                   # SQLite + WAL + migrations (261 LOC)
+│   ├── db.py                   # SQLite + WAL + migrations v4 (279 LOC)
 │   ├── models.py               # Pydantic v2 models (306 LOC)
 │   ├── server.py               # Base HTTP server + route dispatch (328 LOC)
 │   ├── config.py               # Config from RP_* env vars (131 LOC)
-│   └── llm.py                  # LLM client: Gemini CLI/SDK, OpenRouter, Ollama + fallback chain (312 LOC)
+│   ├── llm.py                  # LLM client: data-driven CLI registry + fallback chain (442 LOC)
+│   └── cli_providers.json      # CLI provider configs (claude_cli, codex_cli, gemini_cli)
 ├── services/                   # 6 microservice implementations
 │   ├── discovery/main.py       # arXiv + Semantic Scholar + CrossRef (448 LOC)
 │   ├── analyzer/main.py        # LLM 5-criteria relevance scoring (321 LOC)
@@ -42,13 +43,15 @@ research-pipeline/
 │   ├── codegen/                # Code generation
 │   │   ├── main.py             # Service entry + endpoints (339 LOC)
 │   │   ├── generators.py       # SymPy-based Python/Rust codegen (222 LOC)
-│   │   └── explain.py          # LLM formula explanations (89 LOC)
-│   └── orchestrator/main.py    # Pipeline coordination + retry + Discord (437 LOC)
-├── tests/                      # 671+ tests
+│   │   └── explain.py          # LLM formula explanations + batch explain (206 LOC)
+│   └── orchestrator/           # Pipeline coordination
+│       ├── main.py             # HTTP endpoints + async /run (534 LOC)
+│       └── pipeline.py         # Stage dispatch + retry + run persistence (533 LOC)
+├── tests/                      # 700+ tests
 │   ├── conftest.py             # Shared fixtures
-│   ├── unit/                   # 445 unit tests
-│   ├── integration/            # 169 integration tests
-│   ├── e2e/                    # 54 E2E tests
+│   ├── unit/                   # 460+ unit tests
+│   ├── integration/            # 185+ integration tests
+│   ├── e2e/                    # 60+ E2E tests
 │   └── smoke/                  # Smoke test templates (.j2)
 ├── scripts/                    # CLI tools
 │   └── smoke_test.py           # E2E smoke test CLI (452 LOC)
@@ -74,11 +77,12 @@ research-pipeline/
 
 | Module | LOC | Purpose |
 |--------|-----|---------|
-| `db.py` | 261 | SQLite connection (WAL mode, FK ON), `transaction()` context manager, `init_db()`, schema migrations (v1-v3) |
+| `db.py` | 279 | SQLite connection (WAL mode, FK ON), `transaction()` context manager, `init_db()`, schema migrations (v1-v4) |
 | `models.py` | 306 | Pydantic v2 data models + `PipelineStage` enum, JSON field auto-parsing |
 | `server.py` | 328 | `BaseHandler` + `BaseService` + `@route` decorator + `JsonFormatter` + `/health` endpoint |
 | `config.py` | 131 | `Config` dataclass, `load_config()` from `RP_*` env vars |
-| `llm.py` | 312 | Multi-provider LLM client (Gemini CLI/SDK, OpenRouter, Ollama), `fallback_chain()` orchestrator |
+| `llm.py` | 442 | Multi-provider LLM client (data-driven CLI registry, Gemini SDK, OpenRouter, Ollama), `fallback_chain()` orchestrator |
+| `cli_providers.json` | 33 | Data-driven CLI provider configs (claude_cli, codex_cli, gemini_cli) |
 | `__init__.py` | 10 | Package version (`0.1.0`) |
 
 **Key interfaces**:
@@ -112,39 +116,52 @@ from shared.llm import fallback_chain, call_gemini_cli, call_openrouter, call_ol
 | Analyzer | 8771 | 321 | LLM analysis with 5-criteria relevance scoring | LLM (Gemini/OpenRouter/Ollama) |
 | Extractor | 8772 | 265 | PDF text extraction + LaTeX formula extraction | RAGAnything (:8767) |
 | Validator | 8773 | 339 | Multi-CAS formula validation with consensus | CAS (:8769), SymPy |
-| Codegen | 8774 | 339+311 | Python (SymPy) + Rust code gen + LLM explanations | LLM (Ollama/Gemini) |
-| Orchestrator | 8775 | 437 | Pipeline coordination, retry, batch, Discord alerts | All above + Discord webhook |
+| Codegen | 8774 | 339+311 | Python (SymPy) + Rust code gen + batch LLM explanations | LLM (Ollama/Gemini) |
+| Orchestrator | 8775 | 534+533 | Async pipeline runs, GET /generated-code, GET /runs, retry, batch | All above + Discord webhook |
 
-### Component: LLM Providers (`shared/llm.py`)
+### Component: LLM Providers (`shared/llm.py` + `shared/cli_providers.json`)
 
 **Purpose**: Multi-provider LLM abstraction with automatic failover.
-**Location**: `shared/llm.py`
+**Location**: `shared/llm.py`, `shared/cli_providers.json`
 
 The pipeline uses `fallback_chain()` which tries providers in order until one succeeds:
 
 | Provider | Method | Temperature | Seed | Timeout Default |
 |----------|--------|-------------|------|-----------------|
-| Gemini CLI | subprocess call | Not supported (CLI limitation) | Not supported | 120s |
+| Claude CLI | subprocess (`claude --print`) via data-driven registry | Not supported | Not supported | 120s |
+| Codex CLI | subprocess (`npx @openai/codex exec`) via data-driven registry | Not supported | Not supported | 120s |
+| Gemini CLI | subprocess (`gemini -p`) via data-driven registry | Not supported | Not supported | 120s |
 | Gemini SDK | Python SDK (`google-genai`) | Configurable (default: 0) | Configurable (default: 42) | 60s |
 | OpenRouter | OpenAI-compatible API | Configurable (default: 0) | Configurable (default: 42) | 60s |
 | Ollama | Local LLM (qwen3:8b default) | Configurable (default: 0) | Configurable (default: 42) | 600s |
 
-**Default fallback order**: gemini_cli -> openrouter -> ollama
-**Codegen fallback order**: ollama -> openrouter -> gemini_cli
+**Default fallback order**: `gemini_cli -> openrouter -> ollama` (configurable via `RP_LLM_FALLBACK_ORDER`)
+**Codegen fallback order**: `ollama -> openrouter -> gemini_cli`
 
-All providers default to `temperature=0` and `seed=42` for deterministic output (except Gemini CLI which does not support these parameters).
+CLI providers are **data-driven**: `shared/cli_providers.json` defines command, flags, input mode, and timeout for each CLI tool. Adding a new CLI provider requires only a JSON entry, no Python changes. The generic `call_cli(provider_name, prompt)` function reads the config and executes the correct subprocess.
+
+All providers default to `temperature=0` and `seed=42` for deterministic output (except CLI providers which do not support these parameters).
+
+### Component: Batch Explain (`services/codegen/explain.py`)
+
+**Purpose**: Reduce LLM calls for formula explanations by batching.
+**Location**: `services/codegen/explain.py`
+
+Instead of 1 LLM call per formula (N calls for N formulas), `explain_formulas_batch()` groups formulas into chunks of `RP_CODEGEN_BATCH_SIZE` (default: 50) and sends one call per chunk. For 100 formulas, this reduces from 100 calls to 2 calls.
+
+Falls back to per-formula `explain_formula()` for any formulas that fail batch processing.
 
 ### Component: Test Suite (`tests/`)
 
 **Purpose**: Validates all shared library and service correctness.
 **Location**: `tests/`
-**Results**: 671+ tests pass
+**Results**: 700+ tests pass (668 non-e2e + 60+ e2e)
 
 | Category | Tests | What it covers |
 |----------|-------|----------------|
-| Unit | 445 | All shared/ modules + all services in isolation |
-| Integration | 169 | DB round-trips, HTTP + DB, resilience, hardening |
-| E2E | 54 | Full pipeline flows with real APIs, smoke tests |
+| Unit | 460+ | All shared/ modules + all services in isolation |
+| Integration | 185+ | DB round-trips, HTTP + DB, resilience, hardening |
+| E2E | 60+ | Full pipeline flows, async /run, GET endpoints, real APIs |
 | Smoke (templates) | -- | Jinja2 templates (.j2) for deployment validation |
 
 ## Data Flow
@@ -190,7 +207,7 @@ Daily 8AM timer triggers Orchestrator (:8775)
 
 ## Database Schema
 
-7 tables with foreign key relationships (schema version: v3):
+8 tables with foreign key relationships (schema version: v4):
 
 | Table | Purpose | Populated By |
 |-------|---------|-------------|
@@ -198,7 +215,8 @@ Daily 8AM timer triggers Orchestrator (:8775)
 | `formulas` | Extracted LaTeX formulas with SHA-256 hash, UNIQUE(paper_id, latex_hash) | Extractor |
 | `validations` | CAS validation results per formula per engine | Validator |
 | `generated_code` | Generated Python/Rust code per formula | Codegen |
-| `schema_version` | Migration tracking (current: v3) | init_db() |
+| `pipeline_runs` | Async pipeline execution tracking (run_id, status, params, results) | Orchestrator |
+| `schema_version` | Migration tracking (current: v4) | init_db() |
 | `github_repos` | GitHub repository metadata from code search | GitHub Discovery |
 | `github_analyses` | Gemini analysis results for GitHub repos | GitHub Discovery |
 
@@ -214,7 +232,7 @@ Daily 8AM timer triggers Orchestrator (:8775)
 | 6 | JSON structured logging | Direct Loki/journald integration, Grafana queryable | Less human-readable |
 | 7 | Full independence from N8N | Clean break after N8N crash/data loss | Must reimplement coordination |
 | 8 | Multi-provider LLM fallback | Resilience against single provider outages | Complex config, non-deterministic Gemini CLI |
-| 9 | Schema migrations (v1->v3) | Safe DB evolution with UNIQUE constraints | Migration complexity |
+| 9 | Schema migrations (v1->v4) | Safe DB evolution with UNIQUE constraints + run tracking | Migration complexity |
 | 10 | systemd + watchdog | Auto-restart crashed services, health monitoring | Linux-only deployment |
 
 ## Configuration
@@ -226,10 +244,14 @@ Daily 8AM timer triggers Orchestrator (:8775)
 | `RP_LOG_LEVEL` | Logging level | `INFO` |
 | `RP_DATA_DIR` | Directory for data files | `./data/` |
 | `RP_LLM_TEMPERATURE` | LLM sampling temperature | `0` (deterministic) |
+| `RP_LLM_FALLBACK_ORDER` | LLM provider fallback order | `gemini_cli,openrouter,ollama` |
+| `RP_LLM_TIMEOUT_CLAUDE_CLI` | Claude CLI timeout | `120s` |
+| `RP_LLM_TIMEOUT_CODEX_CLI` | Codex CLI timeout | `120s` |
 | `RP_LLM_TIMEOUT_GEMINI_CLI` | Gemini CLI timeout | `120s` |
 | `RP_LLM_TIMEOUT_GEMINI_SDK` | Gemini SDK timeout | `60s` |
 | `RP_LLM_TIMEOUT_OPENROUTER` | OpenRouter timeout | `60s` |
 | `RP_LLM_TIMEOUT_OLLAMA` | Ollama timeout | `600s` |
+| `RP_CODEGEN_BATCH_SIZE` | Formulas per batch explain call | `50` |
 | `RP_ORCHESTRATOR_TIMEOUT` | Orchestrator per-service timeout | `300s` |
 
 ## Infrastructure
@@ -257,7 +279,8 @@ Daily 8AM timer triggers Orchestrator (:8775)
 | v7.0 Orchestrator+Deploy | 20-22 | Complete | 2026-02-14 |
 | v8.0 GitHub Discovery | 25-27 | Complete | 2026-02-15 |
 | v9.0 Pipeline Hardening | 28-30 | Complete | 2026-02-16 |
-| v10.0 Production Hardening | 32-34 | In Progress | -- |
+| v10.0 Production Hardening | 32-34 | Complete | 2026-02-17 |
+| v11.0 CLI Providers+API+Async | 35-37 | Complete | 2026-02-18 |
 
 ## Related Documentation
 
@@ -267,5 +290,5 @@ Daily 8AM timer triggers Orchestrator (:8775)
 ---
 
 *Architecture documented: 2026-02-10*
-*Last validated: 2026-02-17 (671+ tests pass)*
+*Last validated: 2026-02-18 (700+ tests pass, schema v4)*
 *Auto-updated by architecture-validator agent*

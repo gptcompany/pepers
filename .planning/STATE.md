@@ -5,16 +5,16 @@
 See: .planning/PROJECT.md (updated 2026-02-15)
 
 **Core value:** Reliable, N8N-free academic paper processing pipeline
-**Current focus:** All 10 milestones shipped — production-ready with operational documentation
+**Current focus:** All 11 milestones shipped — production-ready with full documentation
 
 ## Current Position
 
-Phase: 36 of 37 (GET /generated-code + Async /run)
-Plan: 36-01 complete (all tasks done)
+Phase: 37 of 37 (E2E Testing + Documentation)
+Plan: 37-01 complete (all tasks done)
 Status: Complete
-Last activity: 2026-02-18 — Phase 36 complete: async POST /run, GET /generated-code, GET /runs, pipeline_runs table
+Last activity: 2026-02-18 — Phase 37 complete: 12 new E2E tests, ARCHITECTURE.md + RUNBOOK.md updated, RP_LLM_FALLBACK_ORDER configured
 
-Progress: 10/11 milestones shipped (v1.0-v10.0), v11.0 in progress
+Progress: 11/11 milestones shipped (v1.0-v11.0)
 
 ## Shipped Milestones
 
@@ -142,13 +142,14 @@ E2E pipeline test on paper 15 (1806.05293, Kelly criterion stock markets, 6 page
 
 ## Current Stats
 
-- **Total tests**: 668 non-e2e + 48 e2e = 716 total (668 passing non-e2e, 0 regressions)
-- **Total LOC**: ~12,500+ across 6 services + shared library + Docker + GitHub Discovery + deploy
+- **Total tests**: 668 non-e2e + 60+ e2e = 728+ total (all passing, 0 regressions)
+- **Total LOC**: ~13,000+ across 6 services + shared library + Docker + GitHub Discovery + deploy
 - **Services**: 6 microservices (ports 8770-8775) + Docker Compose + systemd units
-- **Duration**: 8 days (2026-02-10 to 2026-02-18)
+- **Duration**: 9 days (2026-02-10 to 2026-02-18)
 - **CAS engines**: MATLAB + SymPy + Maxima with fallback consensus
 - **Schema version**: v4 (pipeline_runs table)
 - **LLM determinism**: temperature=0, seed=42 on all configurable providers
+- **LLM fallback order**: gemini_cli → codex_cli → claude_cli → openrouter → ollama
 
 ## v11.0 CLI Providers + Batch Explain + API + Async
 
@@ -158,7 +159,7 @@ E2E pipeline test on paper 15 (1806.05293, Kelly criterion stock markets, 6 page
 |-------|------|--------|
 | 35. CLI Providers + Batch Explain | Data-driven CLI registry, batch explain | Complete |
 | 36. GET /generated-code + Async /run | New endpoints, async pipeline runs | Complete |
-| 37. E2E Testing + Documentation | Cross-feature E2E, docs update | Pending |
+| 37. E2E Testing + Documentation | 12 E2E tests, ARCHITECTURE.md + RUNBOOK.md | Complete |
 
 ### Phase 35 Deliverables
 
@@ -179,12 +180,24 @@ E2E pipeline test on paper 15 (1806.05293, Kelly criterion stock markets, 6 page
 - `tests/unit/test_db.py`: schema version 3→4 in assertions
 - `services/codegen/explain.py`: `RP_CODEGEN_BATCH_SIZE` env var (default 50)
 
+### Phase 37 Deliverables
+
+- `tests/e2e/test_v11_e2e.py`: 244 LOC — 12 E2E tests
+  - TestAsyncRun (5): HTTP 202, poll completion, invalid stages ×2, invalid paper_id
+  - TestGetGeneratedCode (4): seeded data, language filter, missing paper_id, nonexistent
+  - TestGetRuns (3): empty list, after async run, nonexistent id
+- `tests/e2e/conftest.py`: 57 LOC — shared e2e_orchestrator fixture
+- `tests/e2e/test_orchestrator_e2e.py`: refactored for async 202 + race-safe polling
+- `ARCHITECTURE.md`: CLI providers, batch explain, schema v4, pipeline_runs, updated stats
+- `docs/RUNBOOK.md`: CLI providers config, async /run examples, GET /generated-code
+- `.env`: RP_LLM_FALLBACK_ORDER=gemini_cli,codex_cli,claude_cli,openrouter,ollama
+
 ## Blockers/Concerns
 
-None — v11.0 Phases 35-36 complete, Phase 37 pending.
+None — v11.0 complete.
 
 ## Session Continuity
 
 Last session: 2026-02-18
-Stopped at: Phase 36 complete — ready for Phase 37
+Stopped at: v11.0 milestone complete — all 37 phases done
 Resume file: None

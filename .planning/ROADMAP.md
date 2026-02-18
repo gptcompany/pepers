@@ -20,7 +20,7 @@ None
 - [✅ v8.0 GitHub Discovery + Gemini Analysis](milestones/v8.0-ROADMAP.md) (Phases 25-27) — SHIPPED 2026-02-15
 - [✅ v9.0 Pipeline Hardening — Post-E2E Fixes](milestones/v9.0-ROADMAP.md) (Phases 28-30) — SHIPPED 2026-02-16
 - [✅ v10.0 Production Hardening](milestones/v10.0-ROADMAP.md) (Phases 32-34) — SHIPPED 2026-02-17
-- [🔄 v11.0 CLI Providers + Batch Explain + API + Async](milestones/v11.0-ROADMAP.md) (Phases 35-37) — IN PROGRESS
+- [✅ v11.0 CLI Providers + Batch Explain + API + Async](milestones/v11.0-ROADMAP.md) (Phases 35-37) — SHIPPED 2026-02-18
 
 ## Phases
 
@@ -170,11 +170,11 @@ Plans:
 
 </details>
 
-### 🔄 v11.0 CLI Providers + Batch Explain + API + Async (Phases 35-37) — IN PROGRESS
+### ✅ v11.0 CLI Providers + Batch Explain + API + Async (Phases 35-37) — SHIPPED 2026-02-18
 
 - [x] **Phase 35: CLI Providers + Batch Explain** (1/1 plans) — completed 2026-02-18
 - [x] **Phase 36: GET /generated-code + Async /run** (1/1 plans) — completed 2026-02-18
-- [ ] **Phase 37: E2E Testing + Documentation** (0/1 plans) — pending
+- [x] **Phase 37: E2E Testing + Documentation** (1/1 plans) — completed 2026-02-18
 
 ## Progress
 
@@ -216,4 +216,4 @@ Plans:
 | 34. Orchestrator Smoke Test & Documentation | v10.0 | 1/1 | Complete | 2026-02-17 |
 | 35. CLI Providers + Batch Explain | v11.0 | 1/1 | Complete | 2026-02-18 |
 | 36. GET /generated-code + Async /run | v11.0 | 1/1 | Complete | 2026-02-18 |
-| 37. E2E Testing + Documentation | v11.0 | 0/1 | Pending | — |
+| 37. E2E Testing + Documentation | v11.0 | 1/1 | Complete | 2026-02-18 |

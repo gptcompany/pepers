@@ -13,7 +13,7 @@ Production operations guide for the 6-service research paper processing pipeline
 | codegen | 8774 | Formula to code generation (Python/Rust) | Ollama / OpenRouter |
 | orchestrator | 8775 | Pipeline coordination, batch iteration, status API | All above services |
 
-**Database**: SQLite (WAL mode), schema v3, shared across all services.
+**Database**: SQLite (WAL mode), schema v4, shared across all services.
 
 **Pipeline flow**: discovery -> analyzer -> extractor -> validator -> codegen
 
@@ -102,7 +102,7 @@ All services expose `GET /health` returning JSON:
   "service": "<name>",
   "uptime_seconds": 3600,
   "db_ok": true,
-  "schema_version": 3,
+  "schema_version": 4,
   "last_request_seconds_ago": 120
 }
 ```
@@ -264,17 +264,47 @@ sqlite3 data/research.db "SELECT stage, COUNT(*) FROM formulas WHERE paper_id = 
 journalctl -u rp-validator --since "1 hour ago" | grep <PAPER_ID>
 ```
 
-### 6.4 Full Pipeline Re-run
+### 6.4 Full Pipeline Re-run (Async)
 
-To reprocess a paper through all stages (with `force` to reprocess even if already completed):
+POST /run is **asynchronous** (HTTP 202). It returns immediately with a `run_id` and processes in the background. Poll GET /runs for status.
 
 ```bash
-curl -X POST http://localhost:8775/run \
+# Start async run
+RUN_ID=$(curl -s -X POST http://localhost:8775/run \
   -H "Content-Type: application/json" \
-  -d '{"query": "id:<ARXIV_ID>", "stages": 5, "force": true}'
+  -d '{"query": "id:<ARXIV_ID>", "stages": 5, "force": true}' | python3 -c "import sys,json; print(json.load(sys.stdin)['run_id'])")
+
+echo "Run started: $RUN_ID"
+
+# Poll for completion
+while true; do
+  STATUS=$(curl -s "http://localhost:8775/runs?id=$RUN_ID" | python3 -c "import sys,json; print(json.load(sys.stdin)['status'])")
+  echo "Status: $STATUS"
+  [ "$STATUS" != "running" ] && break
+  sleep 5
+done
+
+# Get final results
+curl -s "http://localhost:8775/runs?id=$RUN_ID" | python3 -m json.tool
 ```
 
-### 6.5 Database Backup and Restore
+### 6.5 Query Generated Code
+
+```bash
+# All generated code for a paper
+curl -s "http://localhost:8775/generated-code?paper_id=42" | python3 -m json.tool
+
+# Filter by language
+curl -s "http://localhost:8775/generated-code?paper_id=42&language=python" | python3 -m json.tool
+
+# Specific formula
+curl -s "http://localhost:8775/generated-code?paper_id=42&formula_id=551" | python3 -m json.tool
+
+# Pagination
+curl -s "http://localhost:8775/generated-code?paper_id=42&limit=10&offset=20" | python3 -m json.tool
+```
+
+### 6.6 Database Backup and Restore
 
 ```bash
 # Backup
@@ -322,12 +352,36 @@ All configuration via environment variables with `RP_` prefix. Set in `.env` (do
 |----------|---------|-------------|
 | `RP_LLM_TEMPERATURE` | 0.0 | LLM temperature (0 = deterministic) |
 | `RP_LLM_SEED` | 42 | LLM seed for reproducibility |
+| `RP_LLM_FALLBACK_ORDER` | `gemini_cli,openrouter,ollama` | Comma-separated provider fallback order |
+
+### CLI Providers
+
+CLI LLM providers are data-driven via `shared/cli_providers.json`. Available providers:
+
+| Provider | CLI Command | Default Model | Timeout Env |
+|----------|-------------|---------------|-------------|
+| `claude_cli` | `claude --print` | sonnet | `RP_LLM_TIMEOUT_CLAUDE_CLI` (120s) |
+| `codex_cli` | `npx @openai/codex exec` | o4-mini | `RP_LLM_TIMEOUT_CODEX_CLI` (120s) |
+| `gemini_cli` | `gemini -p` | (default) | `RP_LLM_TIMEOUT_GEMINI_CLI` (120s) |
+
+**Configuration:**
+
+```bash
+# Set custom fallback order (tried left-to-right, first success wins)
+RP_LLM_FALLBACK_ORDER=gemini_cli,codex_cli,claude_cli,openrouter,ollama
+
+# Override timeout for a specific provider
+RP_LLM_TIMEOUT_CLAUDE_CLI=180
+```
+
+**Adding a new CLI provider:** Edit `shared/cli_providers.json` — no Python changes needed. Required fields: `cmd`, `input_mode` ("stdin" or "arg"), `output_format`, `default_timeout`.
 
 ### Batch Processing
 
 | Variable | Default | Description |
 |----------|---------|-------------|
 | `RP_MAX_FORMULAS` | 50 | Max formulas per validator/codegen batch |
+| `RP_CODEGEN_BATCH_SIZE` | 50 | Formulas per batch explain LLM call |
 
 ### Logging
 
@@ -442,7 +496,7 @@ Run the full pipeline smoke test to verify end-to-end health:
 # Direct mode (calls each service individually)
 python scripts/smoke_test.py
 
-# Via orchestrator (single POST /run)
+# Via orchestrator (async POST /run + poll GET /runs)
 python scripts/smoke_test.py --via-orchestrator
 
 # Quick test with fewer formulas
