@@ -1,0 +1,33 @@
+{
+  "claude_cli": {
+    "cmd": ["claude", "--print", "--output-format", "json"],
+    "system_flag": "--append-system-prompt",
+    "model_flag": "--model",
+    "default_model": "sonnet",
+    "input_mode": "stdin",
+    "output_format": "json",
+    "timeout_env": "RP_LLM_TIMEOUT_CLAUDE_CLI",
+    "default_timeout": 120
+  },
+  "codex_cli": {
+    "cmd": ["npx", "@openai/codex", "exec"],
+    "system_flag": null,
+    "model_flag": null,
+    "default_model": "o4-mini",
+    "input_mode": "arg",
+    "output_format": "text",
+    "timeout_env": "RP_LLM_TIMEOUT_CODEX_CLI",
+    "default_timeout": 120
+  },
+  "gemini_cli": {
+    "cmd": ["gemini", "-p"],
+    "system_flag": null,
+    "model_flag": "-m",
+    "default_model": null,
+    "input_mode": "arg",
+    "output_format": "json",
+    "timeout_env": "RP_LLM_TIMEOUT_GEMINI_CLI",
+    "default_timeout": 120,
+    "extra_args": ["--output-format", "json", "-e", "none"]
+  }
+}

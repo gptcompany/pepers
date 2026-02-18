@@ -1,7 +1,11 @@
 """Shared LLM client functions for the research pipeline.
 
-Three independent client functions + a fallback_chain orchestrator.
+Provider functions + a fallback_chain orchestrator.
 Each function is ~30 LOC, easy to test/mock individually.
+
+CLI providers (claude_cli, codex_cli, gemini_cli) are data-driven via
+shared/cli_providers.json — to add a new CLI or fix flag changes, update
+the JSON config only, zero Python changes needed.
 
 Used by:
 - Analyzer service (Gemini-first fallback: gemini_cli → gemini_sdk → ollama)
@@ -18,12 +22,146 @@ import os
 import re
 import subprocess
 import urllib.request
+from pathlib import Path
 
 from shared.config import LLM_SEED, LLM_TEMPERATURE
 
 logger = logging.getLogger(__name__)
 
-DEFAULT_FALLBACK_ORDER = ["gemini_cli", "openrouter", "ollama"]
+DEFAULT_FALLBACK_ORDER = os.environ.get(
+    "RP_LLM_FALLBACK_ORDER", "gemini_cli,openrouter,ollama"
+).split(",")
+
+
+# ---------------------------------------------------------------------------
+# CLI provider registry (data-driven)
+# ---------------------------------------------------------------------------
+
+_CLI_CONFIGS: dict[str, dict] | None = None
+
+
+def _load_cli_configs() -> dict[str, dict]:
+    """Load CLI provider configs from cli_providers.json (cached)."""
+    global _CLI_CONFIGS
+    if _CLI_CONFIGS is not None:
+        return _CLI_CONFIGS
+    config_path = Path(__file__).parent / "cli_providers.json"
+    with open(config_path) as f:
+        configs: dict[str, dict] = json.load(f)
+    _CLI_CONFIGS = configs
+    return configs
+
+
+def call_cli(
+    provider_name: str,
+    prompt: str,
+    system: str | None = None,
+    model: str | None = None,
+    timeout: int | None = None,
+) -> str:
+    """Call a CLI provider using its JSON config.
+
+    Args:
+        provider_name: Key in cli_providers.json (e.g. "claude_cli").
+        prompt: User prompt text.
+        system: System instruction text.
+        model: Model override (uses config default if None).
+        timeout: Timeout override in seconds.
+
+    Returns:
+        Raw response text.
+
+    Raises:
+        RuntimeError: On non-zero exit, timeout, or parse error.
+        KeyError: If provider_name not found in config.
+    """
+    configs = _load_cli_configs()
+    cfg = configs[provider_name]
+
+    cmd = list(cfg["cmd"])
+
+    # Model flag
+    if cfg.get("model_flag") and (model or cfg.get("default_model")):
+        cmd.extend([cfg["model_flag"], model or cfg["default_model"]])
+
+    # System flag
+    if cfg.get("system_flag") and system:
+        cmd.extend([cfg["system_flag"], system])
+
+    # Extra args
+    if cfg.get("extra_args"):
+        cmd.extend(cfg["extra_args"])
+
+    # Input mode: "arg" appends prompt to cmd, "stdin" pipes it
+    input_text = None
+    if cfg["input_mode"] == "arg":
+        # For gemini_cli, system is prepended to prompt (no system flag)
+        if not cfg.get("system_flag") and system:
+            cmd.append(f"{system}\n\n---\n\n{prompt}")
+        else:
+            cmd.append(prompt)
+    else:
+        input_text = prompt
+
+    # Timeout
+    if timeout is None:
+        timeout = int(os.environ.get(
+            cfg["timeout_env"], str(cfg["default_timeout"])
+        ))
+
+    # Build env — pass GOOGLE_API_KEY for gemini_cli
+    env = dict(os.environ)
+    if provider_name == "gemini_cli":
+        env["GOOGLE_API_KEY"] = _get_gemini_api_key()
+
+    result = subprocess.run(
+        cmd,
+        capture_output=True,
+        text=True,
+        timeout=timeout,
+        input=input_text,
+        stdin=subprocess.DEVNULL if input_text is None else None,
+        env=env,
+    )
+
+    if result.returncode != 0:
+        raise RuntimeError(
+            f"{provider_name} exit {result.returncode}: {result.stderr[:200]}"
+        )
+
+    output = result.stdout.strip()
+
+    # Parse output based on format
+    if cfg["output_format"] == "json":
+        data = json.loads(output)
+        if data.get("error"):
+            raise RuntimeError(
+                f"{provider_name} API error: {data['error'].get('message', data['error'])}"
+            )
+        response_text = data.get("response", "")
+        return _strip_markdown_fences(response_text)
+
+    return _strip_markdown_fences(output)
+
+
+def call_claude_cli(
+    prompt: str,
+    system: str,
+    model: str | None = None,
+    timeout: int | None = None,
+) -> str:
+    """Call Claude via CLI subprocess (thin wrapper on call_cli)."""
+    return call_cli("claude_cli", prompt, system, model, timeout)
+
+
+def call_codex_cli(
+    prompt: str,
+    system: str,
+    model: str | None = None,
+    timeout: int | None = None,
+) -> str:
+    """Call Codex via CLI subprocess (thin wrapper on call_cli)."""
+    return call_cli("codex_cli", prompt, system, model, timeout)
 
 
 def _get_gemini_api_key() -> str:
@@ -57,44 +195,8 @@ def call_gemini_cli(
     model: str = "gemini-2.5-flash",
     timeout: int = int(os.environ.get("RP_LLM_TIMEOUT_GEMINI_CLI", "120")),
 ) -> str:
-    """Call Gemini via CLI subprocess.
-
-    Args:
-        prompt: User prompt text.
-        system: System instruction text.
-        model: Gemini model name.
-        timeout: Subprocess timeout in seconds.
-
-    Returns:
-        Raw response text from Gemini.
-
-    Raises:
-        RuntimeError: On non-zero exit, API error, or timeout.
-    """
-    full_prompt = f"{system}\n\n---\n\n{prompt}"
-
-    result = subprocess.run(
-        ["gemini", "-p", full_prompt, "-m", model,
-         "--output-format", "json", "-e", "none"],
-        capture_output=True,
-        text=True,
-        timeout=timeout,
-        stdin=subprocess.DEVNULL,
-        env={**os.environ, "GOOGLE_API_KEY": _get_gemini_api_key()},
-    )
-    if result.returncode != 0:
-        raise RuntimeError(
-            f"Gemini CLI exit {result.returncode}: {result.stderr[:200]}"
-        )
-
-    data = json.loads(result.stdout)
-    if data.get("error"):
-        raise RuntimeError(
-            f"Gemini API error: {data['error'].get('message', 'unknown')}"
-        )
-
-    response_text = data.get("response", "")
-    return _strip_markdown_fences(response_text)
+    """Call Gemini via CLI subprocess (delegates to call_cli for backward compat)."""
+    return call_cli("gemini_cli", prompt, system, model, timeout)
 
 
 def call_gemini_sdk(
@@ -288,6 +390,8 @@ def fallback_chain(
         "gemini_sdk": call_gemini_sdk,
         "openrouter": call_openrouter,
         "ollama": call_ollama,
+        "claude_cli": call_claude_cli,
+        "codex_cli": call_codex_cli,
     }
 
     # Providers that accept temperature kwarg
