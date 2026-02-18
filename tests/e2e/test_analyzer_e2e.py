@@ -1,7 +1,8 @@
-"""End-to-end tests for Analyzer service — real LLM calls (Ollama).
+"""End-to-end tests for Analyzer service — real LLM calls via fallback chain.
 
-These tests make real HTTP requests to Ollama (localhost:11434).
-They require Ollama running with qwen3:8b and are skipped by default.
+These tests make real LLM calls using the configured fallback chain
+(gemini_cli → codex_cli → claude_cli → openrouter → ollama).
+They are skipped if no LLM provider is available.
 
 Run with: pytest tests/e2e/test_analyzer_e2e.py -m e2e -v
 """
@@ -9,17 +10,16 @@ Run with: pytest tests/e2e/test_analyzer_e2e.py -m e2e -v
 from __future__ import annotations
 
 import json
-import urllib.error
-import urllib.request
 
 import pytest
 
 from shared.db import init_db, transaction
+from shared.llm import fallback_chain
 from services.analyzer.main import AnalyzerHandler, migrate_db
-from services.analyzer.llm import call_ollama
 from services.analyzer.prompt import (
     EXPECTED_SCORE_KEYS,
     SCORING_SYSTEM_PROMPT,
+    build_scoring_system_prompt,
     format_scoring_prompt,
 )
 from services.discovery.main import upsert_paper
@@ -27,13 +27,12 @@ from services.discovery.main import upsert_paper
 pytestmark = pytest.mark.e2e
 
 
-def _ollama_available() -> bool:
-    """Check if Ollama is running on localhost:11434."""
+def _llm_available() -> bool:
+    """Check if at least one LLM provider is reachable."""
     try:
-        req = urllib.request.Request("http://localhost:11434/api/tags")
-        with urllib.request.urlopen(req, timeout=5) as resp:
-            return resp.status == 200
-    except (urllib.error.URLError, OSError):
+        fallback_chain("Say OK", "Reply with just OK")
+        return True
+    except RuntimeError:
         return False
 
 
@@ -47,12 +46,12 @@ def e2e_db(tmp_path):
 
 
 class TestAnalyzerE2E:
-    """End-to-end tests with real Ollama calls."""
+    """End-to-end tests with real LLM calls."""
 
-    def test_ollama_scores_paper(self):
-        """Call real Ollama with a paper prompt and validate JSON structure."""
-        if not _ollama_available():
-            pytest.skip("Ollama not available at localhost:11434")
+    def test_scores_paper(self):
+        """Call real LLM with a paper prompt and validate JSON structure."""
+        if not _llm_available():
+            pytest.skip("No LLM provider available")
 
         prompt = format_scoring_prompt(
             title="The Kelly Criterion in Blackjack, Sports Betting, and the Stock Market",
@@ -66,7 +65,7 @@ class TestAnalyzerE2E:
             categories=["q-fin.PM", "math.PR"],
         )
 
-        response_text = call_ollama(prompt, SCORING_SYSTEM_PROMPT)
+        response_text, provider = fallback_chain(prompt, SCORING_SYSTEM_PROMPT)
         data = json.loads(response_text)
 
         assert "scores" in data
@@ -81,11 +80,10 @@ class TestAnalyzerE2E:
         assert float(scores["topic_relevance"]) >= 0.5
 
     def test_full_pipeline_discover_then_analyze(self, e2e_db):
-        """Insert a paper, analyze with real Ollama, verify DB update."""
-        if not _ollama_available():
-            pytest.skip("Ollama not available at localhost:11434")
+        """Insert a paper, analyze with real LLM, verify DB update."""
+        if not _llm_available():
+            pytest.skip("No LLM provider available")
 
-        # Insert paper
         paper = {
             "arxiv_id": "2401.00001",
             "title": "Optimal Kelly Betting with Continuous Rebalancing",
@@ -104,7 +102,6 @@ class TestAnalyzerE2E:
         paper_id = upsert_paper(e2e_db, paper)
         assert paper_id is not None
 
-        # Analyze
         from unittest.mock import MagicMock
         handler = MagicMock(spec=AnalyzerHandler)
         handler.db_path = e2e_db
@@ -116,7 +113,6 @@ class TestAnalyzerE2E:
         assert result["papers_analyzed"] == 1
         assert result["llm_provider"] is not None
 
-        # Verify DB
         with transaction(e2e_db) as conn:
             row = conn.execute(
                 "SELECT stage, score, prompt_version FROM papers WHERE id=?",
@@ -125,12 +121,12 @@ class TestAnalyzerE2E:
         assert row["stage"] in ("analyzed", "rejected")
         assert row["score"] is not None
         assert 0.0 <= row["score"] <= 1.0
-        assert row["prompt_version"] == "v1"
+        assert row["prompt_version"] == "v2"
 
     def test_rejected_paper_not_kelly(self, e2e_db):
         """A clearly non-Kelly paper should be rejected or scored low."""
-        if not _ollama_available():
-            pytest.skip("Ollama not available at localhost:11434")
+        if not _llm_available():
+            pytest.skip("No LLM provider available")
 
         paper = {
             "arxiv_id": "2401.99999",
@@ -163,5 +159,73 @@ class TestAnalyzerE2E:
             row = conn.execute(
                 "SELECT stage, score FROM papers WHERE id=?", (paper_id,)
             ).fetchone()
-        # Non-Kelly paper should have low score
         assert row["score"] < 0.7 or row["stage"] == "rejected"
+
+
+class TestAnalyzerTopicAgnostic:
+    """E2E tests verifying topic_relevance adapts to different research topics."""
+
+    def test_custom_topic_scores_relevant_paper(self, e2e_db, monkeypatch):
+        """With RP_ANALYZER_TOPIC='reinforcement learning', an RL paper
+        should score high on topic_relevance."""
+        if not _llm_available():
+            pytest.skip("No LLM provider available")
+
+        monkeypatch.setenv(
+            "RP_ANALYZER_TOPIC",
+            "reinforcement learning, policy gradient, Q-learning, multi-agent RL",
+        )
+        custom_prompt = build_scoring_system_prompt(
+            "reinforcement learning, policy gradient, Q-learning, multi-agent RL"
+        )
+        assert "reinforcement learning" in custom_prompt
+
+        user_prompt = format_scoring_prompt(
+            title="Multi-Agent Reinforcement Learning for Cooperative Navigation",
+            abstract=(
+                "We propose a multi-agent reinforcement learning framework for "
+                "cooperative navigation tasks. Using policy gradient methods with "
+                "centralized training and decentralized execution, our approach "
+                "achieves state-of-the-art results on several MARL benchmarks."
+            ),
+            authors=["RL Researcher"],
+            categories=["cs.AI", "cs.MA"],
+        )
+        response, provider = fallback_chain(user_prompt, custom_prompt)
+        data = json.loads(response)
+
+        assert set(data["scores"].keys()) == EXPECTED_SCORE_KEYS
+        assert float(data["scores"]["topic_relevance"]) >= 0.5
+
+    def test_custom_topic_rejects_unrelated_paper(self, e2e_db, monkeypatch):
+        """With RP_ANALYZER_TOPIC='quantum computing', a finance paper
+        should score low on topic_relevance."""
+        if not _llm_available():
+            pytest.skip("No LLM provider available")
+
+        custom_prompt = build_scoring_system_prompt(
+            "quantum computing, quantum error correction, qubit architectures"
+        )
+        assert "quantum computing" in custom_prompt
+
+        user_prompt = format_scoring_prompt(
+            title="The Kelly Criterion in Sports Betting",
+            abstract=(
+                "We study the application of the Kelly criterion to sequential "
+                "sports betting decisions with correlated outcomes and discuss "
+                "practical bankroll management strategies."
+            ),
+            authors=["Finance Author"],
+            categories=["q-fin.PM"],
+        )
+        response, provider = fallback_chain(user_prompt, custom_prompt)
+        data = json.loads(response)
+
+        assert set(data["scores"].keys()) == EXPECTED_SCORE_KEYS
+        assert float(data["scores"]["topic_relevance"]) < 0.5
+
+    def test_default_topic_is_kelly(self):
+        """Without RP_ANALYZER_TOPIC, default topic should be Kelly criterion."""
+        from services.analyzer.prompt import DEFAULT_TOPIC, SCORING_SYSTEM_PROMPT
+        assert "Kelly criterion" in DEFAULT_TOPIC
+        assert "topic_relevance" in SCORING_SYSTEM_PROMPT
