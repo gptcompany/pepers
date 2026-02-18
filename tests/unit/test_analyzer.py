@@ -305,8 +305,11 @@ class TestFallbackChain:
 
     @patch("shared.llm.call_ollama")
     @patch("shared.llm.call_openrouter")
+    @patch("shared.llm.call_claude_cli", side_effect=RuntimeError("not available"))
+    @patch("shared.llm.call_codex_cli", side_effect=RuntimeError("not available"))
     @patch("shared.llm.call_gemini_cli")
-    def test_first_provider_success(self, mock_cli, mock_openrouter, mock_ollama):
+    def test_first_provider_success(self, mock_cli, _codex, _claude,
+                                     mock_openrouter, mock_ollama):
         mock_cli.return_value = '{"scores": {}}'
         result = fallback_chain("prompt", "system")
         assert result == ('{"scores": {}}', "gemini_cli")
@@ -315,8 +318,11 @@ class TestFallbackChain:
 
     @patch("shared.llm.call_ollama")
     @patch("shared.llm.call_openrouter")
+    @patch("shared.llm.call_claude_cli", side_effect=RuntimeError("not available"))
+    @patch("shared.llm.call_codex_cli", side_effect=RuntimeError("not available"))
     @patch("shared.llm.call_gemini_cli")
-    def test_fallback_to_second(self, mock_cli, mock_openrouter, mock_ollama):
+    def test_fallback_to_second(self, mock_cli, _codex, _claude,
+                                 mock_openrouter, mock_ollama):
         mock_cli.side_effect = RuntimeError("CLI failed")
         mock_openrouter.return_value = '{"scores": {}}'
         result = fallback_chain("prompt", "system")
@@ -325,8 +331,11 @@ class TestFallbackChain:
 
     @patch("shared.llm.call_ollama")
     @patch("shared.llm.call_openrouter")
+    @patch("shared.llm.call_claude_cli", side_effect=RuntimeError("not available"))
+    @patch("shared.llm.call_codex_cli", side_effect=RuntimeError("not available"))
     @patch("shared.llm.call_gemini_cli")
-    def test_fallback_to_third(self, mock_cli, mock_openrouter, mock_ollama):
+    def test_fallback_to_third(self, mock_cli, _codex, _claude,
+                                mock_openrouter, mock_ollama):
         mock_cli.side_effect = RuntimeError("CLI failed")
         mock_openrouter.side_effect = RuntimeError("OpenRouter failed")
         mock_ollama.return_value = '{"scores": {}}'
@@ -335,8 +344,11 @@ class TestFallbackChain:
 
     @patch("shared.llm.call_ollama")
     @patch("shared.llm.call_openrouter")
+    @patch("shared.llm.call_claude_cli", side_effect=RuntimeError("not available"))
+    @patch("shared.llm.call_codex_cli", side_effect=RuntimeError("not available"))
     @patch("shared.llm.call_gemini_cli")
-    def test_all_fail(self, mock_cli, mock_openrouter, mock_ollama):
+    def test_all_fail(self, mock_cli, _codex, _claude,
+                       mock_openrouter, mock_ollama):
         mock_cli.side_effect = RuntimeError("CLI failed")
         mock_openrouter.side_effect = RuntimeError("OpenRouter failed")
         mock_ollama.side_effect = RuntimeError("Ollama failed")
@@ -345,8 +357,11 @@ class TestFallbackChain:
 
     @patch("shared.llm.call_ollama")
     @patch("shared.llm.call_openrouter")
+    @patch("shared.llm.call_claude_cli", side_effect=RuntimeError("err4"))
+    @patch("shared.llm.call_codex_cli", side_effect=RuntimeError("err5"))
     @patch("shared.llm.call_gemini_cli")
-    def test_error_messages_collected(self, mock_cli, mock_openrouter, mock_ollama):
+    def test_error_messages_collected(self, mock_cli, _codex, _claude,
+                                      mock_openrouter, mock_ollama):
         mock_cli.side_effect = RuntimeError("err1")
         mock_openrouter.side_effect = RuntimeError("err2")
         mock_ollama.side_effect = RuntimeError("err3")
@@ -359,8 +374,11 @@ class TestFallbackChain:
 
     @patch("shared.llm.call_ollama")
     @patch("shared.llm.call_openrouter")
+    @patch("shared.llm.call_claude_cli", side_effect=RuntimeError("not available"))
+    @patch("shared.llm.call_codex_cli", side_effect=RuntimeError("not available"))
     @patch("shared.llm.call_gemini_cli")
-    def test_returns_tuple(self, mock_cli, mock_openrouter, mock_ollama):
+    def test_returns_tuple(self, mock_cli, _codex, _claude,
+                            mock_openrouter, mock_ollama):
         mock_cli.return_value = "text"
         result = fallback_chain("p", "s")
         assert isinstance(result, tuple)

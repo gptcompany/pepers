@@ -322,7 +322,7 @@ def generate_all(latex: str, formula_id: int) -> list[dict]:
                 "error": str(e),
             })
 
-    # Python via pycode
+    # Python via pycode — with LLM fallback if pycode fails
     try:
         py_code = generate_python(expr, func_name)
         results.append({
@@ -337,13 +337,29 @@ def generate_all(latex: str, formula_id: int) -> list[dict]:
             "error": None,
         })
     except Exception as e:
-        logger.warning("generate_python failed for formula %d: %s",
-                       formula_id, e)
-        results.append({
-            "language": "python",
-            "code": "",
-            "metadata": None,
-            "error": str(e),
-        })
+        logger.warning("generate_python failed for formula %d: %s, "
+                       "trying LLM fallback", formula_id, e)
+        # Layer 5b: LLM fallback when parse succeeds but pycode fails
+        # (e.g. custom Function objects like U(q,p,f), F(k,N,p))
+        llm_result = _llm_codegen_python(latex, func_name)
+        if llm_result is not None:
+            results.append({
+                "language": "python",
+                "code": llm_result["python_code"],
+                "metadata": {
+                    "function_name": func_name,
+                    "variables": llm_result.get("variables", []),
+                    "source": "llm",
+                    "llm_provider": llm_result.get("provider", "unknown"),
+                },
+                "error": None,
+            })
+        else:
+            results.append({
+                "language": "python",
+                "code": "",
+                "metadata": None,
+                "error": str(e),
+            })
 
     return results
