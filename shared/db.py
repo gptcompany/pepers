@@ -197,6 +197,7 @@ def transaction(db_path: str | Path) -> Generator[sqlite3.Connection, None, None
 
 MIGRATIONS: dict[int, str] = {
     3: """
+
     -- v3: Add UNIQUE constraint on (paper_id, latex_hash) to formulas table.
     -- SQLite cannot ALTER TABLE ADD CONSTRAINT, so recreate the table.
     CREATE TABLE IF NOT EXISTS formulas_v3 (
@@ -222,6 +223,22 @@ MIGRATIONS: dict[int, str] = {
     -- Recreate indexes lost after table drop
     CREATE INDEX IF NOT EXISTS idx_formulas_paper_id ON formulas(paper_id);
     CREATE INDEX IF NOT EXISTS idx_formulas_latex_hash ON formulas(latex_hash);
+    """,
+    4: """
+    -- v4: Pipeline runs table for async execution tracking.
+    CREATE TABLE IF NOT EXISTS pipeline_runs (
+        run_id TEXT PRIMARY KEY,
+        status TEXT NOT NULL DEFAULT 'running',
+        params TEXT,
+        results TEXT,
+        errors TEXT,
+        stages_completed INTEGER DEFAULT 0,
+        stages_requested INTEGER DEFAULT 0,
+        started_at TEXT NOT NULL DEFAULT (datetime('now')),
+        completed_at TEXT
+    );
+    CREATE INDEX IF NOT EXISTS idx_pipeline_runs_status ON pipeline_runs(status);
+    CREATE INDEX IF NOT EXISTS idx_pipeline_runs_started ON pipeline_runs(started_at);
     """,
 }
 

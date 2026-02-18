@@ -11,6 +11,7 @@ Environment:
 
 from __future__ import annotations
 
+import json
 import logging
 import os
 import time
@@ -80,6 +81,7 @@ class PipelineRunner:
         max_papers: int = 10,
         max_formulas: int = 50,
         force: bool = False,
+        run_id: str | None = None,
     ) -> dict:
         """Execute a pipeline run.
 
@@ -90,11 +92,13 @@ class PipelineRunner:
             max_papers: Max papers per batch.
             max_formulas: Max formulas per batch.
             force: Reprocess already-processed items.
+            run_id: Pre-generated run ID (for async runs).
 
         Returns:
             Run result dict with run_id, status, results, errors.
         """
-        run_id = self._generate_run_id()
+        if run_id is None:
+            run_id = self._generate_run_id()
         start = time.time()
 
         params = {
@@ -107,6 +111,12 @@ class PipelineRunner:
 
         # Determine which stages to run
         stage_list = self._resolve_stages(query, paper_id, stages)
+
+        # Persist run record
+        try:
+            self._create_run_record(run_id, params, len(stage_list))
+        except Exception:
+            logger.debug("pipeline_runs table not available, skipping persistence")
 
         results: dict[str, dict] = {}
         errors: list[str] = []
@@ -173,7 +183,7 @@ class PipelineRunner:
         if has_failure:
             status = "partial" if stages_completed > 0 else "failed"
 
-        return {
+        run_result = {
             "run_id": run_id,
             "status": status,
             "stages_completed": stages_completed,
@@ -182,6 +192,14 @@ class PipelineRunner:
             "errors": errors,
             "time_ms": elapsed_ms,
         }
+
+        # Persist final results
+        try:
+            self._update_run_record(run_id, run_result)
+        except Exception:
+            logger.debug("pipeline_runs update failed, skipping persistence")
+
+        return run_result
 
     def _resolve_stages(
         self,
@@ -439,6 +457,76 @@ class PipelineRunner:
         now = datetime.now(timezone.utc)
         short_id = uuid.uuid4().hex[:6]
         return f"run-{now.strftime('%Y%m%d-%H%M%S')}-{short_id}"
+
+
+    # -- Run persistence --
+
+    def _create_run_record(
+        self, run_id: str, params: dict, stages_requested: int
+    ) -> None:
+        """Insert a new pipeline_runs row with status='running'."""
+        with transaction(self.db_path) as conn:
+            conn.execute(
+                "INSERT INTO pipeline_runs "
+                "(run_id, status, params, stages_requested) "
+                "VALUES (?, 'running', ?, ?)",
+                (run_id, json.dumps(params, default=str), stages_requested),
+            )
+
+    def _update_run_record(self, run_id: str, result: dict) -> None:
+        """Update pipeline_runs row with final results."""
+        with transaction(self.db_path) as conn:
+            conn.execute(
+                "UPDATE pipeline_runs SET "
+                "status = ?, results = ?, errors = ?, "
+                "stages_completed = ?, completed_at = datetime('now') "
+                "WHERE run_id = ?",
+                (
+                    result["status"],
+                    json.dumps(result.get("results", {}), default=str),
+                    json.dumps(result.get("errors", []), default=str),
+                    result.get("stages_completed", 0),
+                    run_id,
+                ),
+            )
+
+    def get_run_status(self, run_id: str) -> dict | None:
+        """Get a single pipeline run by ID."""
+        with transaction(self.db_path) as conn:
+            row = conn.execute(
+                "SELECT * FROM pipeline_runs WHERE run_id = ?", (run_id,)
+            ).fetchone()
+        if row is None:
+            return None
+        d = dict(row)
+        # Parse JSON fields
+        for field in ("params", "results", "errors"):
+            if d.get(field):
+                try:
+                    d[field] = json.loads(d[field])
+                except (json.JSONDecodeError, TypeError):
+                    pass
+        return d
+
+    def list_runs(self, limit: int = 20) -> list[dict]:
+        """List recent pipeline runs."""
+        with transaction(self.db_path) as conn:
+            rows = conn.execute(
+                "SELECT * FROM pipeline_runs "
+                "ORDER BY started_at DESC LIMIT ?",
+                (limit,),
+            ).fetchall()
+        results = []
+        for row in rows:
+            d = dict(row)
+            for field in ("params", "results", "errors"):
+                if d.get(field):
+                    try:
+                        d[field] = json.loads(d[field])
+                    except (json.JSONDecodeError, TypeError):
+                        pass
+            results.append(d)
+        return results
 
 
 class ServiceError(Exception):

@@ -241,7 +241,8 @@ class TestOrchestratorHTTP:
         assert len(data["services"]) == 5
 
     @patch("services.orchestrator.pipeline.requests.post")
-    def test_run_endpoint(self, mock_post):
+    def test_run_endpoint_returns_202(self, mock_post):
+        """POST /run now returns 202 Accepted with run_id."""
         mock_resp = MagicMock()
         mock_resp.status_code = 200
         mock_resp.json.return_value = {"ok": True}
@@ -254,11 +255,11 @@ class TestOrchestratorHTTP:
             headers={"Content-Type": "application/json"},
         )
         resp = urllib.request.urlopen(req)
+        assert resp.status == 202
         data = json.loads(resp.read())
 
-        assert data["status"] == "completed"
+        assert data["status"] == "running"
         assert data["run_id"].startswith("run-")
-        assert "discovery" in data["results"]
 
     def test_run_invalid_stages(self):
         body = json.dumps({"stages": 0}).encode()
@@ -430,3 +431,237 @@ class TestQueryEndpoints:
         )
         data = json.loads(resp.read())
         assert data == []
+
+    # -- GET /generated-code tests --
+
+    def test_generated_code_by_paper(self):
+        resp = urllib.request.urlopen(
+            f"http://localhost:{self.port}/generated-code?paper_id=1"
+        )
+        data = json.loads(resp.read())
+        assert isinstance(data, list)
+        assert len(data) == 1
+        assert data[0]["language"] == "python"
+        assert data[0]["latex"] == "x^2"
+
+    def test_generated_code_filter_language(self):
+        resp = urllib.request.urlopen(
+            f"http://localhost:{self.port}/generated-code?paper_id=1&language=rust"
+        )
+        data = json.loads(resp.read())
+        assert data == []
+
+    def test_generated_code_filter_formula_id(self):
+        resp = urllib.request.urlopen(
+            f"http://localhost:{self.port}/generated-code?paper_id=1&formula_id=1"
+        )
+        data = json.loads(resp.read())
+        assert len(data) == 1
+
+    def test_generated_code_requires_paper_id(self):
+        with pytest.raises(urllib.error.HTTPError) as exc_info:
+            urllib.request.urlopen(
+                f"http://localhost:{self.port}/generated-code"
+            )
+        assert exc_info.value.code == 400
+
+    def test_generated_code_pagination(self):
+        resp = urllib.request.urlopen(
+            f"http://localhost:{self.port}/generated-code?paper_id=1&limit=1&offset=0"
+        )
+        data = json.loads(resp.read())
+        assert len(data) == 1
+
+        resp2 = urllib.request.urlopen(
+            f"http://localhost:{self.port}/generated-code?paper_id=1&limit=1&offset=1"
+        )
+        data2 = json.loads(resp2.read())
+        assert data2 == []
+
+    def test_generated_code_empty_paper(self):
+        resp = urllib.request.urlopen(
+            f"http://localhost:{self.port}/generated-code?paper_id=2"
+        )
+        data = json.loads(resp.read())
+        assert data == []
+
+
+# ---------------------------------------------------------------------------
+# GET /runs and async POST /run tests
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.integration
+class TestRunsEndpoint:
+    """Test GET /runs, async POST /run, and run persistence."""
+
+    @pytest.fixture(autouse=True)
+    def setup(self, initialized_db):
+        self.db_path = str(initialized_db)
+        self.port = _get_free_port()
+
+        with transaction(self.db_path) as conn:
+            conn.execute(
+                "INSERT INTO papers (arxiv_id, title, stage) VALUES (?, ?, ?)",
+                ("2401.00001", "Test Paper", "discovered"),
+            )
+
+        runner = PipelineRunner(self.db_path)
+        OrchestratorHandler.runner = runner
+
+        self.service = BaseService(
+            "orchestrator", self.port, OrchestratorHandler, self.db_path
+        )
+        self.thread = threading.Thread(target=self.service.run, daemon=True)
+        self.thread.start()
+        time.sleep(0.3)
+        yield
+        if self.service.server:
+            self.service.server.shutdown()
+        OrchestratorHandler.runner = None
+        OrchestratorHandler._routes = None
+
+    def test_list_runs_empty(self):
+        resp = urllib.request.urlopen(f"http://localhost:{self.port}/runs")
+        data = json.loads(resp.read())
+        assert isinstance(data, list)
+        assert data == []
+
+    def test_run_not_found(self):
+        with pytest.raises(urllib.error.HTTPError) as exc_info:
+            urllib.request.urlopen(
+                f"http://localhost:{self.port}/runs?id=nonexistent"
+            )
+        assert exc_info.value.code == 404
+
+    @patch("services.orchestrator.pipeline.requests.post")
+    def test_async_run_returns_202(self, mock_post):
+        """POST /run returns 202 with run_id immediately."""
+        mock_resp = MagicMock()
+        mock_resp.status_code = 200
+        mock_resp.json.return_value = {"ok": True}
+        mock_post.return_value = mock_resp
+
+        body = json.dumps({"query": "test", "stages": 1}).encode()
+        req = urllib.request.Request(
+            f"http://localhost:{self.port}/run",
+            data=body,
+            headers={"Content-Type": "application/json"},
+        )
+        resp = urllib.request.urlopen(req)
+        assert resp.status == 202
+
+        data = json.loads(resp.read())
+        assert "run_id" in data
+        assert data["status"] == "running"
+
+    @patch("services.orchestrator.pipeline.requests.post")
+    def test_async_run_persists_and_completes(self, mock_post):
+        """POST /run → poll GET /runs → status transitions to completed."""
+        mock_resp = MagicMock()
+        mock_resp.status_code = 200
+        mock_resp.json.return_value = {"ok": True}
+        mock_post.return_value = mock_resp
+
+        body = json.dumps({"query": "test", "stages": 1}).encode()
+        req = urllib.request.Request(
+            f"http://localhost:{self.port}/run",
+            data=body,
+            headers={"Content-Type": "application/json"},
+        )
+        resp = urllib.request.urlopen(req)
+        run_id = json.loads(resp.read())["run_id"]
+
+        # Poll until completed (max 10s)
+        deadline = time.monotonic() + 10
+        final_status = None
+        while time.monotonic() < deadline:
+            time.sleep(0.5)
+            poll_resp = urllib.request.urlopen(
+                f"http://localhost:{self.port}/runs?id={run_id}"
+            )
+            poll_data = json.loads(poll_resp.read())
+            if poll_data.get("status") != "running":
+                final_status = poll_data
+                break
+
+        assert final_status is not None, "Run did not complete within 10s"
+        assert final_status["status"] == "completed"
+        assert final_status["run_id"] == run_id
+        assert final_status["completed_at"] is not None
+
+    def test_list_runs_with_limit(self):
+        """list_runs respects limit parameter."""
+        runner = OrchestratorHandler.runner
+        # Create 3 records directly
+        for i in range(3):
+            runner._create_run_record(f"run-test-{i}", {}, 1)
+            runner._update_run_record(
+                f"run-test-{i}",
+                {"status": "completed", "stages_completed": 1},
+            )
+
+        resp = urllib.request.urlopen(
+            f"http://localhost:{self.port}/runs?limit=2"
+        )
+        data = json.loads(resp.read())
+        assert len(data) == 2
+
+
+# ---------------------------------------------------------------------------
+# Run persistence unit tests (no HTTP)
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.integration
+class TestRunPersistence:
+    """Test pipeline_runs CRUD operations."""
+
+    def test_create_and_get(self, initialized_db):
+        runner = PipelineRunner(str(initialized_db))
+        runner._create_run_record("run-001", {"query": "test"}, 3)
+
+        status = runner.get_run_status("run-001")
+        assert status is not None
+        assert status["run_id"] == "run-001"
+        assert status["status"] == "running"
+        assert status["params"]["query"] == "test"
+        assert status["stages_requested"] == 3
+
+    def test_update_run(self, initialized_db):
+        runner = PipelineRunner(str(initialized_db))
+        runner._create_run_record("run-002", {}, 2)
+        runner._update_run_record(
+            "run-002",
+            {
+                "status": "completed",
+                "results": {"discovery": {"ok": True}},
+                "errors": [],
+                "stages_completed": 2,
+            },
+        )
+
+        status = runner.get_run_status("run-002")
+        assert status["status"] == "completed"
+        assert status["completed_at"] is not None
+        assert status["stages_completed"] == 2
+        assert status["results"]["discovery"]["ok"] is True
+
+    def test_get_nonexistent(self, initialized_db):
+        runner = PipelineRunner(str(initialized_db))
+        assert runner.get_run_status("nonexistent") is None
+
+    def test_list_runs(self, initialized_db):
+        runner = PipelineRunner(str(initialized_db))
+        for i in range(5):
+            runner._create_run_record(f"run-{i:03d}", {}, 1)
+
+        runs = runner.list_runs(limit=3)
+        assert len(runs) == 3
+        # Most recent first
+        assert runs[0]["run_id"] == "run-004"
+
+    def test_list_runs_empty(self, initialized_db):
+        runner = PipelineRunner(str(initialized_db))
+        runs = runner.list_runs()
+        assert runs == []

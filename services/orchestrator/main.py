@@ -26,6 +26,7 @@ from __future__ import annotations
 
 import logging
 import os
+import threading
 import time
 from urllib.parse import parse_qs
 
@@ -48,7 +49,10 @@ class OrchestratorHandler(BaseHandler):
 
     @route("POST", "/run")
     def handle_run(self, data: dict) -> dict | None:
-        """Trigger a pipeline run.
+        """Trigger an async pipeline run.
+
+        Returns HTTP 202 immediately with run_id. Poll GET /runs?id=xxx
+        for status.
 
         Request body:
             {
@@ -83,21 +87,35 @@ class OrchestratorHandler(BaseHandler):
             )
             return None
 
+        run_id = PipelineRunner._generate_run_id()
+
         logger.info(
-            "Pipeline run: query=%s paper_id=%s stages=%d",
-            query, paper_id, stages,
+            "Pipeline run %s: query=%s paper_id=%s stages=%d (async)",
+            run_id, query, paper_id, stages,
         )
 
-        result = self.runner.run(
-            query=query,
-            paper_id=paper_id,
-            stages=stages,
-            max_papers=max_papers,
-            max_formulas=max_formulas,
-            force=force,
+        # Spawn background thread
+        thread = threading.Thread(
+            target=_run_pipeline_async,
+            args=(self.runner, run_id),
+            kwargs={
+                "query": query,
+                "paper_id": paper_id,
+                "stages": stages,
+                "max_papers": max_papers,
+                "max_formulas": max_formulas,
+                "force": force,
+            },
+            daemon=True,
         )
+        thread.start()
 
-        return result
+        # Return 202 Accepted immediately
+        self.send_json(
+            {"run_id": run_id, "status": "running"},
+            status=202,
+        )
+        return None  # Already sent response
 
     @route("GET", "/status")
     def handle_status(self) -> dict:
@@ -180,6 +198,76 @@ class OrchestratorHandler(BaseHandler):
                 [*bind, limit],
             ).fetchall()
         return [Formula(**dict(r)).model_dump(mode="json") for r in rows]
+
+    @route("GET", "/generated-code")
+    def handle_generated_code(self) -> list | None:
+        """Query generated code from the pipeline database.
+
+        GET /generated-code?paper_id=42                         # All code for paper
+        GET /generated-code?paper_id=42&language=python         # Filter by language
+        GET /generated-code?paper_id=42&formula_id=551          # Specific formula
+        GET /generated-code?paper_id=42&limit=50&offset=0       # Pagination
+        """
+        params = self._query_params()
+        paper_id = params.get("paper_id")
+
+        if paper_id is None:
+            self.send_error_json(
+                "paper_id query parameter is required",
+                "VALIDATION_ERROR", 400,
+            )
+            return None
+
+        language = params.get("language")
+        formula_id = params.get("formula_id")
+        limit = min(int(params.get("limit", "50")), 200)
+        offset = int(params.get("offset", "0"))
+
+        clauses = ["f.paper_id = ?"]
+        bind: list = [int(paper_id)]
+
+        if language:
+            clauses.append("g.language = ?")
+            bind.append(language)
+        if formula_id:
+            clauses.append("g.formula_id = ?")
+            bind.append(int(formula_id))
+
+        where = "WHERE " + " AND ".join(clauses)
+
+        with transaction(self.db_path) as conn:
+            rows = conn.execute(
+                f"SELECT g.*, f.latex, f.description "  # noqa: S608
+                f"FROM generated_code g "
+                f"JOIN formulas f ON f.id = g.formula_id "
+                f"{where} ORDER BY g.id LIMIT ? OFFSET ?",
+                [*bind, limit, offset],
+            ).fetchall()
+        return [dict(r) for r in rows]
+
+    @route("GET", "/runs")
+    def handle_runs(self) -> dict | list | None:
+        """Query pipeline runs.
+
+        GET /runs                    # List recent runs
+        GET /runs?id=run-xxx         # Single run by ID
+        GET /runs?limit=10           # Custom limit
+        """
+        assert self.runner is not None, "PipelineRunner not initialized"
+        params = self._query_params()
+        run_id = params.get("id")
+
+        if run_id:
+            result = self.runner.get_run_status(run_id)
+            if result is None:
+                self.send_error_json(
+                    f"Run {run_id} not found", "NOT_FOUND", 404
+                )
+                return None
+            return result
+
+        limit = min(int(params.get("limit", "20")), 100)
+        return self.runner.list_runs(limit=limit)
 
     # -- GitHub Discovery endpoints --
 
@@ -365,6 +453,14 @@ class OrchestratorHandler(BaseHandler):
 
             paper["formulas"] = formulas
         return paper
+
+
+def _run_pipeline_async(runner: PipelineRunner, run_id: str, **kwargs) -> None:
+    """Thread target for async pipeline execution."""
+    try:
+        runner.run(run_id=run_id, **kwargs)
+    except Exception:
+        logger.exception("Async pipeline run %s failed", run_id)
 
 
 def _cron_run() -> None:

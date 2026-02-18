@@ -479,7 +479,38 @@ def run_smoke_test_via_orchestrator(
 
     step_t0 = time.monotonic()
     try:
-        result = _post(_orchestrator_url("/run"), run_payload, timeout=timeout)
+        # POST /run now returns HTTP 202 with {run_id, status: "running"}
+        accepted = _post(_orchestrator_url("/run"), run_payload, timeout=30)
+        run_id = accepted.get("run_id")
+        if not run_id:
+            raise RuntimeError(f"No run_id in response: {accepted}")
+
+        # Poll GET /runs?id=xxx until done
+        poll_interval = 5  # seconds
+        deadline = time.monotonic() + timeout
+        result = accepted  # fallback if polling fails
+
+        while time.monotonic() < deadline:
+            time.sleep(poll_interval)
+            try:
+                status_resp = _get(
+                    _orchestrator_url(f"/runs?id={run_id}"), timeout=10
+                )
+                if status_resp.get("status") != "running":
+                    result = status_resp
+                    break
+            except Exception as poll_exc:
+                # Transient polling error — retry
+                print(f"  [poll] {poll_exc}", file=sys.stderr)
+                continue
+        else:
+            # Timeout reached — get final status
+            try:
+                result = _get(
+                    _orchestrator_url(f"/runs?id={run_id}"), timeout=10
+                )
+            except Exception:
+                pass
     except urllib.error.HTTPError as exc:
         elapsed = time.monotonic() - step_t0
         try:

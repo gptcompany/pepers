@@ -9,10 +9,10 @@ See: .planning/PROJECT.md (updated 2026-02-15)
 
 ## Current Position
 
-Phase: 35 of 37 (CLI Providers + Batch Explain)
-Plan: 35-01 complete (all tasks done)
+Phase: 36 of 37 (GET /generated-code + Async /run)
+Plan: 36-01 complete (all tasks done)
 Status: Complete
-Last activity: 2026-02-18 — Phase 35 complete: batch explain + CLI provider tests
+Last activity: 2026-02-18 — Phase 36 complete: async POST /run, GET /generated-code, GET /runs, pipeline_runs table
 
 Progress: 10/11 milestones shipped (v1.0-v10.0), v11.0 in progress
 
@@ -142,12 +142,12 @@ E2E pipeline test on paper 15 (1806.05293, Kelly criterion stock markets, 6 page
 
 ## Current Stats
 
-- **Total tests**: 652 non-e2e + 48 e2e = 700 total (652 passing non-e2e, 0 regressions)
-- **Total LOC**: ~12,000+ across 6 services + shared library + Docker + GitHub Discovery + deploy
+- **Total tests**: 668 non-e2e + 48 e2e = 716 total (668 passing non-e2e, 0 regressions)
+- **Total LOC**: ~12,500+ across 6 services + shared library + Docker + GitHub Discovery + deploy
 - **Services**: 6 microservices (ports 8770-8775) + Docker Compose + systemd units
-- **Duration**: 8 days (2026-02-10 to 2026-02-17)
+- **Duration**: 8 days (2026-02-10 to 2026-02-18)
 - **CAS engines**: MATLAB + SymPy + Maxima with fallback consensus
-- **Schema version**: v3 (UNIQUE constraint on formulas)
+- **Schema version**: v4 (pipeline_runs table)
 - **LLM determinism**: temperature=0, seed=42 on all configurable providers
 
 ## v11.0 CLI Providers + Batch Explain + API + Async
@@ -156,8 +156,8 @@ E2E pipeline test on paper 15 (1806.05293, Kelly criterion stock markets, 6 page
 
 | Phase | Goal | Status |
 |-------|------|--------|
-| 35. CLI Providers + Batch Explain | Data-driven CLI registry, batch explain | In Progress |
-| 36. GET /generated-code + Async /run | New endpoints, async pipeline runs | Pending |
+| 35. CLI Providers + Batch Explain | Data-driven CLI registry, batch explain | Complete |
+| 36. GET /generated-code + Async /run | New endpoints, async pipeline runs | Complete |
 | 37. E2E Testing + Documentation | Cross-feature E2E, docs update | Pending |
 
 ### Phase 35 Deliverables
@@ -169,12 +169,22 @@ E2E pipeline test on paper 15 (1806.05293, Kelly criterion stock markets, 6 page
 - `tests/unit/test_llm.py`: +14 new tests (180 LOC) — CLI registry, call_cli, fallback order
 - `tests/unit/test_codegen.py`: +14 new tests (170 LOC) — batch parse, batch explain
 
+### Phase 36 Deliverables
+
+- `shared/db.py`: +15 LOC — migration v4 (pipeline_runs table + indexes)
+- `services/orchestrator/pipeline.py`: +65 LOC — `_create_run_record()`, `_update_run_record()`, `get_run_status()`, `list_runs()`, run persistence in `run()`
+- `services/orchestrator/main.py`: +75 LOC — `GET /generated-code`, `GET /runs`, async `POST /run` (HTTP 202 + thread), `_run_pipeline_async()`
+- `scripts/smoke_test.py`: +20 LOC — async polling loop (POST /run → poll GET /runs)
+- `tests/integration/test_orchestrator_db.py`: +150 LOC — 16 new tests (generated-code, runs, persistence)
+- `tests/unit/test_db.py`: schema version 3→4 in assertions
+- `services/codegen/explain.py`: `RP_CODEGEN_BATCH_SIZE` env var (default 50)
+
 ## Blockers/Concerns
 
-None — v11.0 Phase 35 in progress.
+None — v11.0 Phases 35-36 complete, Phase 37 pending.
 
 ## Session Continuity
 
 Last session: 2026-02-18
-Stopped at: Phase 35 complete — ready for Phase 36
+Stopped at: Phase 36 complete — ready for Phase 37
 Resume file: None

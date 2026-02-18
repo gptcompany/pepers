@@ -173,7 +173,7 @@ Plans:
 ### 🔄 v11.0 CLI Providers + Batch Explain + API + Async (Phases 35-37) — IN PROGRESS
 
 - [x] **Phase 35: CLI Providers + Batch Explain** (1/1 plans) — completed 2026-02-18
-- [ ] **Phase 36: GET /generated-code + Async /run** (0/1 plans) — pending
+- [x] **Phase 36: GET /generated-code + Async /run** (1/1 plans) — completed 2026-02-18
 - [ ] **Phase 37: E2E Testing + Documentation** (0/1 plans) — pending
 
 ## Progress
@@ -215,5 +215,5 @@ Plans:
 | 33. Reproducibility & Calibration | v10.0 | 1/1 | Complete | 2026-02-17 |
 | 34. Orchestrator Smoke Test & Documentation | v10.0 | 1/1 | Complete | 2026-02-17 |
 | 35. CLI Providers + Batch Explain | v11.0 | 1/1 | Complete | 2026-02-18 |
-| 36. GET /generated-code + Async /run | v11.0 | 0/1 | Pending | — |
+| 36. GET /generated-code + Async /run | v11.0 | 1/1 | Complete | 2026-02-18 |
 | 37. E2E Testing + Documentation | v11.0 | 0/1 | Pending | — |

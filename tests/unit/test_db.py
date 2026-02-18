@@ -140,7 +140,7 @@ class TestInitDb:
         conn = get_connection(tmp_db_path)
         versions = conn.execute("SELECT COUNT(*) FROM schema_version").fetchone()[0]
         conn.close()
-        assert versions == 3  # v1 (original) + v2 (github_repos/analyses) + v3 (UNIQUE constraint)
+        assert versions == 4  # v1 + v2 (github) + v3 (UNIQUE) + v4 (pipeline_runs)
 
     def test_foreign_keys_enforced(self, tmp_db_path):
         init_db(tmp_db_path)
@@ -182,13 +182,13 @@ class TestSchemaMigration:
         conn.close()
         assert "UNIQUE(paper_id, latex_hash)" in schema
 
-    def test_fresh_db_schema_version_3(self, tmp_db_path):
-        """New database should be at schema version 3."""
+    def test_fresh_db_schema_version_4(self, tmp_db_path):
+        """New database should be at schema version 4."""
         init_db(tmp_db_path)
         conn = get_connection(tmp_db_path)
         v = conn.execute("SELECT MAX(version) FROM schema_version").fetchone()[0]
         conn.close()
-        assert v == 3
+        assert v == 4
 
     def test_migration_v2_to_v3(self, tmp_db_path):
         """Existing v2 database should migrate to v3 with UNIQUE constraint."""
@@ -228,7 +228,7 @@ class TestSchemaMigration:
         v = conn.execute("SELECT MAX(version) FROM schema_version").fetchone()[0]
         conn.close()
         assert "UNIQUE" in schema
-        assert v == 3
+        assert v == 4
 
     def test_migration_deduplicates(self, tmp_db_path):
         """Migration should remove duplicate (paper_id, latex_hash) rows."""

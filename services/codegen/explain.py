@@ -9,9 +9,9 @@ consistent response format.
 
 from __future__ import annotations
 
-import logging
-
 import json
+import logging
+import os
 
 from shared.config import LLM_SEED, LLM_TEMPERATURE
 from shared.llm import call_ollama, fallback_chain
@@ -39,6 +39,7 @@ Respond ONLY with valid JSON matching this schema:
 }"""
 
 CODEGEN_FALLBACK_ORDER = ["ollama", "openrouter", "gemini_cli"]
+DEFAULT_BATCH_SIZE = int(os.environ.get("RP_CODEGEN_BATCH_SIZE", "50"))
 
 
 def explain_formula(
@@ -143,7 +144,7 @@ def _parse_batch_response(raw: str, formula_ids: list[int]) -> dict[int, dict]:
 
 def explain_formulas_batch(
     formulas: list[dict],
-    batch_size: int = 10,
+    batch_size: int = DEFAULT_BATCH_SIZE,
 ) -> dict[int, dict]:
     """Generate explanations for multiple formulas in batched LLM calls.
 
