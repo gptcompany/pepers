@@ -120,6 +120,7 @@ class TestStageTransitions:
         ]
 
         with (
+            patch("services.codegen.main.explain_formulas_batch", return_value={}),
             patch("services.codegen.main.explain_formula", return_value=None),
             patch("services.codegen.main.generate_all", return_value=mock_code_results),
         ):
@@ -171,6 +172,7 @@ class TestStageTransitions:
         ]
 
         with (
+            patch("services.codegen.main.explain_formulas_batch", return_value={}),
             patch("services.codegen.main.explain_formula", return_value=None),
             patch("services.codegen.main.generate_all", return_value=mock_code_results),
         ):
@@ -238,6 +240,7 @@ class TestStageTransitions:
         ]
 
         with (
+            patch("services.codegen.main.explain_formulas_batch", return_value={}),
             patch("services.codegen.main.explain_formula", return_value=None),
             patch("services.codegen.main.generate_all", return_value=mock_code_results),
         ):

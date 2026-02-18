@@ -26,7 +26,7 @@ from shared.config import load_config
 from shared.db import get_connection, init_db, transaction
 from shared.server import BaseHandler, BaseService, route
 
-from services.codegen.explain import explain_formula
+from services.codegen.explain import explain_formula, explain_formulas_batch
 from services.codegen.generators import generate_all
 
 logger = logging.getLogger(__name__)
@@ -105,6 +105,9 @@ class CodegenHandler(BaseHandler):
         explanations_count = 0
         processed = 0
 
+        # Batch explain: one LLM call per ~10 formulas instead of per-formula
+        batch_results = explain_formulas_batch(formulas)
+
         for formula_row in formulas:
             fid = formula_row["id"]
             latex = formula_row["latex"]
@@ -116,8 +119,10 @@ class CodegenHandler(BaseHandler):
                 continue
 
             try:
-                # Step 1: LLM explanation (optional, failure doesn't block codegen)
-                explanation = explain_formula(latex, context, paper_title)
+                # Step 1: LLM explanation — use batch result or fall back to per-formula
+                explanation = batch_results.get(fid) or explain_formula(
+                    latex, context, paper_title
+                )
                 if explanation:
                     _update_formula_description(
                         db_path, fid, json.dumps(explanation)

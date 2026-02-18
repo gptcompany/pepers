@@ -191,7 +191,8 @@ class TestCodegenE2EFlow:
         time.sleep(0.3)
 
         # Mock LLM explanation to avoid network dependency
-        with patch("services.codegen.main.explain_formula", return_value={
+        with patch("services.codegen.main.explain_formulas_batch", return_value={}), \
+             patch("services.codegen.main.explain_formula", return_value={
             "explanation": "E2E test explanation",
             "variables": [{"symbol": "p", "name": "probability",
                            "description": "win prob"}],

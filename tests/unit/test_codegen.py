@@ -16,7 +16,11 @@ from services.codegen.generators import (
     generate_rust,
     parse_formula,
 )
-from services.codegen.explain import explain_formula
+from services.codegen.explain import (
+    _parse_batch_response,
+    explain_formula,
+    explain_formulas_batch,
+)
 from shared.models import FormulaExplanation
 
 
@@ -442,3 +446,173 @@ class TestFormulaExplanationModel:
         d = exp.model_dump()
         assert d["explanation"] == "Test"
         assert d["domain"] == "math"
+
+
+# ===========================================================================
+# _parse_batch_response() Tests
+# ===========================================================================
+
+
+_BATCH_RESPONSE_2 = json.dumps([
+    {
+        "index": 0,
+        "explanation": "Formula zero computes X.",
+        "variables": [{"symbol": "x", "name": "var", "description": "desc"}],
+        "assumptions": ["Assumption"],
+        "domain": "statistics",
+    },
+    {
+        "index": 1,
+        "explanation": "Formula one computes Y.",
+        "variables": [],
+        "assumptions": [],
+        "domain": "probability",
+    },
+])
+
+
+class TestParseBatchResponse:
+    """Tests for _parse_batch_response() — JSON array → dict mapping."""
+
+    def test_success_two_items(self):
+        result = _parse_batch_response(_BATCH_RESPONSE_2, [100, 200])
+        assert len(result) == 2
+        assert result[100]["explanation"] == "Formula zero computes X."
+        assert result[200]["domain"] == "probability"
+
+    def test_invalid_json_returns_empty(self):
+        result = _parse_batch_response("not json", [1, 2])
+        assert result == {}
+
+    def test_not_array_returns_empty(self):
+        result = _parse_batch_response('{"key": "value"}', [1])
+        assert result == {}
+
+    def test_partial_failure_skips_bad_items(self):
+        """One valid + one with bad schema → only valid returned."""
+        raw = json.dumps([
+            {
+                "index": 0,
+                "explanation": "Valid.",
+                "variables": [],
+                "assumptions": [],
+                "domain": "math",
+            },
+            {
+                "index": 1,
+                # Missing 'explanation' field — Pydantic validation fails
+            },
+        ])
+        result = _parse_batch_response(raw, [10, 20])
+        assert 10 in result
+        assert 20 not in result
+
+    def test_out_of_range_index_skipped(self):
+        raw = json.dumps([
+            {
+                "index": 5,
+                "explanation": "Out of range.",
+                "variables": [],
+                "assumptions": [],
+                "domain": "math",
+            },
+        ])
+        result = _parse_batch_response(raw, [1, 2])
+        assert result == {}
+
+    def test_missing_index_skipped(self):
+        raw = json.dumps([
+            {
+                "explanation": "No index.",
+                "variables": [],
+                "assumptions": [],
+                "domain": "math",
+            },
+        ])
+        result = _parse_batch_response(raw, [1])
+        assert result == {}
+
+
+# ===========================================================================
+# explain_formulas_batch() Tests
+# ===========================================================================
+
+
+_SAMPLE_FORMULAS = [
+    {"id": 1, "latex": r"\frac{p}{q}", "context": "Kelly criterion", "paper_title": "Paper A"},
+    {"id": 2, "latex": r"x^2 + 1", "context": None, "paper_title": None},
+    {"id": 3, "latex": r"\sigma^2", "context": "Variance", "paper_title": "Paper B"},
+]
+
+
+class TestExplainFormulasBatch:
+    """Tests for explain_formulas_batch() — batched LLM calls."""
+
+    @patch("services.codegen.explain.fallback_chain")
+    def test_batch_success(self, mock_fallback):
+        """All formulas explained in one batch call."""
+        batch_resp = json.dumps([
+            {"index": 0, "explanation": "E0", "variables": [], "assumptions": [], "domain": "math"},
+            {"index": 1, "explanation": "E1", "variables": [], "assumptions": [], "domain": "math"},
+            {"index": 2, "explanation": "E2", "variables": [], "assumptions": [], "domain": "math"},
+        ])
+        mock_fallback.return_value = (batch_resp, "ollama")
+
+        result = explain_formulas_batch(_SAMPLE_FORMULAS, batch_size=10)
+        assert len(result) == 3
+        assert result[1]["explanation"] == "E0"
+        assert result[3]["explanation"] == "E2"
+        # Only one LLM call for 3 formulas
+        assert mock_fallback.call_count == 1
+
+    @patch("services.codegen.explain.fallback_chain")
+    def test_batch_size_chunking(self, mock_fallback):
+        """With batch_size=2, 3 formulas → 2 LLM calls."""
+        batch_resp_1 = json.dumps([
+            {"index": 0, "explanation": "E0", "variables": [], "assumptions": [], "domain": "math"},
+            {"index": 1, "explanation": "E1", "variables": [], "assumptions": [], "domain": "math"},
+        ])
+        batch_resp_2 = json.dumps([
+            {"index": 0, "explanation": "E2", "variables": [], "assumptions": [], "domain": "math"},
+        ])
+        mock_fallback.side_effect = [
+            (batch_resp_1, "ollama"),
+            (batch_resp_2, "ollama"),
+        ]
+
+        result = explain_formulas_batch(_SAMPLE_FORMULAS, batch_size=2)
+        assert len(result) == 3
+        assert mock_fallback.call_count == 2
+
+    @patch("services.codegen.explain.fallback_chain")
+    def test_total_failure_returns_empty(self, mock_fallback):
+        """If fallback_chain raises, result is empty (caller falls back to per-formula)."""
+        mock_fallback.side_effect = RuntimeError("All providers failed")
+
+        result = explain_formulas_batch(_SAMPLE_FORMULAS)
+        assert result == {}
+
+    @patch("services.codegen.explain.fallback_chain")
+    def test_partial_parse_failure(self, mock_fallback):
+        """If LLM returns unparseable JSON, result is empty for that chunk."""
+        mock_fallback.return_value = ("not valid json", "ollama")
+
+        result = explain_formulas_batch(_SAMPLE_FORMULAS)
+        assert result == {}
+
+    def test_empty_formulas_returns_empty(self):
+        """Empty formula list returns empty dict without LLM calls."""
+        result = explain_formulas_batch([])
+        assert result == {}
+
+    @patch("services.codegen.explain.fallback_chain")
+    def test_batch_prompt_includes_all_formulas(self, mock_fallback):
+        """Batch prompt contains all formula LaTeX strings."""
+        mock_fallback.return_value = (json.dumps([]), "ollama")
+
+        explain_formulas_batch(_SAMPLE_FORMULAS[:2], batch_size=10)
+
+        call_args = mock_fallback.call_args
+        prompt = call_args[1]["prompt"] if "prompt" in call_args[1] else call_args[0][0]
+        assert r"\frac{p}{q}" in prompt
+        assert r"x^2 + 1" in prompt

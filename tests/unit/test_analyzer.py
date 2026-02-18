@@ -160,7 +160,7 @@ class TestCallGeminiCli:
         mock_run.return_value = subprocess.CompletedProcess(
             args=[], returncode=1, stdout="", stderr="Error occurred",
         )
-        with pytest.raises(RuntimeError, match="Gemini CLI exit 1"):
+        with pytest.raises(RuntimeError, match="gemini_cli exit 1"):
             call_gemini_cli("prompt", "system")
 
     @patch("shared.llm.subprocess.run")

@@ -10,9 +10,9 @@ See: .planning/PROJECT.md (updated 2026-02-15)
 ## Current Position
 
 Phase: 35 of 37 (CLI Providers + Batch Explain)
-Plan: 35-01 in progress (Tasks 1-2 committed, Tasks 3-4 pending)
-Status: In Progress
-Last activity: 2026-02-18 — v11.0 started, Phase 35 Tasks 1-2 committed (0031cbd)
+Plan: 35-01 complete (all tasks done)
+Status: Complete
+Last activity: 2026-02-18 — Phase 35 complete: batch explain + CLI provider tests
 
 Progress: 10/11 milestones shipped (v1.0-v10.0), v11.0 in progress
 
@@ -142,7 +142,7 @@ E2E pipeline test on paper 15 (1806.05293, Kelly criterion stock markets, 6 page
 
 ## Current Stats
 
-- **Total tests**: 623 non-e2e + 48 e2e + 11 new e2e = 682 total (628 passing, 54 deselected/conditional)
+- **Total tests**: 652 non-e2e + 48 e2e = 700 total (652 passing non-e2e, 0 regressions)
 - **Total LOC**: ~12,000+ across 6 services + shared library + Docker + GitHub Discovery + deploy
 - **Services**: 6 microservices (ports 8770-8775) + Docker Compose + systemd units
 - **Duration**: 8 days (2026-02-10 to 2026-02-17)
@@ -160,17 +160,14 @@ E2E pipeline test on paper 15 (1806.05293, Kelly criterion stock markets, 6 page
 | 36. GET /generated-code + Async /run | New endpoints, async pipeline runs | Pending |
 | 37. E2E Testing + Documentation | Cross-feature E2E, docs update | Pending |
 
-### Phase 35 Deliverables (partial)
+### Phase 35 Deliverables
 
 - `shared/cli_providers.json`: 30 LOC — claude_cli, codex_cli, gemini_cli configs
 - `shared/llm.py`: +130 LOC — `_load_cli_configs()`, `call_cli()`, `call_claude_cli()`, `call_codex_cli()`, refactored `call_gemini_cli()`, `RP_LLM_FALLBACK_ORDER` env var
-
-### Remaining
-
-- `services/codegen/explain.py`: `explain_formulas_batch()` (~80 LOC)
-- `services/codegen/main.py`: batch-first in loop (~15 LOC)
-- `tests/unit/test_llm.py`: ~14 new tests for CLI providers
-- `tests/unit/test_codegen.py`: ~8 new tests for batch explain
+- `services/codegen/explain.py`: +85 LOC — `explain_formulas_batch()`, `_parse_batch_response()`, `BATCH_EXPLANATION_SYSTEM_PROMPT`
+- `services/codegen/main.py`: +5 LOC — batch-first in `handle_process()` loop
+- `tests/unit/test_llm.py`: +14 new tests (180 LOC) — CLI registry, call_cli, fallback order
+- `tests/unit/test_codegen.py`: +14 new tests (170 LOC) — batch parse, batch explain
 
 ## Blockers/Concerns
 
@@ -179,5 +176,5 @@ None — v11.0 Phase 35 in progress.
 ## Session Continuity
 
 Last session: 2026-02-18
-Stopped at: Phase 35 Tasks 1-2 committed (0031cbd), GSD structure created
+Stopped at: Phase 35 complete — ready for Phase 36
 Resume file: None

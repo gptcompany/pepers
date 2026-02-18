@@ -274,9 +274,10 @@ class TestProcessEndpoint:
         assert body["formulas_processed"] == 0
         assert body["code_generated"] == {"c99": 0, "rust": 0, "python": 0}
 
+    @patch("services.codegen.main.explain_formulas_batch", return_value={})
     @patch("services.codegen.main.explain_formula", return_value=None)
     def test_process_with_formula_no_explanation(
-        self, mock_explain, validated_formula_db
+        self, mock_explain, mock_batch, validated_formula_db
     ):
         """Process formula with failed explanation — codegen still succeeds."""
         db = str(validated_formula_db)
@@ -296,13 +297,14 @@ class TestProcessEndpoint:
         # Code should still be generated
         assert body["code_generated"]["python"] >= 1
 
+    @patch("services.codegen.main.explain_formulas_batch", return_value={})
     @patch("services.codegen.main.explain_formula", return_value={
         "explanation": "Test",
         "variables": [],
         "assumptions": [],
         "domain": "math",
     })
-    def test_process_with_explanation(self, mock_explain, validated_formula_db):
+    def test_process_with_explanation(self, mock_explain, mock_batch, validated_formula_db):
         """Full process with successful explanation."""
         db = str(validated_formula_db)
         port = self._start_server(db)
@@ -332,8 +334,9 @@ class TestProcessEndpoint:
         assert formula["description"] is not None
         assert len(gen_code) == 3  # c99, rust, python
 
+    @patch("services.codegen.main.explain_formulas_batch", return_value={})
     @patch("services.codegen.main.explain_formula", return_value=None)
-    def test_process_specific_paper(self, mock_explain, validated_formula_db):
+    def test_process_specific_paper(self, mock_explain, mock_batch, validated_formula_db):
         """Process formulas for a specific paper_id."""
         db = str(validated_formula_db)
         port = self._start_server(db)
@@ -349,8 +352,9 @@ class TestProcessEndpoint:
         assert body["success"] is True
         assert body["formulas_processed"] == 1
 
+    @patch("services.codegen.main.explain_formulas_batch", return_value={})
     @patch("services.codegen.main.explain_formula", return_value=None)
-    def test_process_nonexistent_paper(self, mock_explain, validated_formula_db):
+    def test_process_nonexistent_paper(self, mock_explain, mock_batch, validated_formula_db):
         """Process with nonexistent paper_id returns 0 processed."""
         db = str(validated_formula_db)
         port = self._start_server(db)
