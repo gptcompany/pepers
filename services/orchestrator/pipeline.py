@@ -6,7 +6,8 @@ Validator → Codegen) via HTTP calls to their /process endpoints.
 Environment:
     RP_ORCHESTRATOR_RETRY_MAX=3             # Max retries per service call
     RP_ORCHESTRATOR_RETRY_BACKOFF=4.0       # Backoff base (seconds)
-    RP_ORCHESTRATOR_TIMEOUT=300             # Request timeout (seconds)
+    RP_ORCHESTRATOR_TIMEOUT=300             # Default request timeout (seconds)
+    RP_ORCHESTRATOR_CODEGEN_TIMEOUT=900     # Codegen-specific timeout (seconds)
 """
 
 from __future__ import annotations
@@ -64,6 +65,13 @@ DB_STAGE_INDEX: dict[str, int] = {
 
 class PipelineRunner:
     """Executes pipeline stages sequentially with retry logic."""
+
+    # Per-stage timeout overrides (seconds).  Codegen processes N formulas
+    # sequentially (SymPy parse + codegen + optional LLM fallback per formula),
+    # so it needs a much longer timeout than fast stages like discovery.
+    STAGE_TIMEOUTS: dict[str, int] = {
+        "codegen": int(os.environ.get("RP_ORCHESTRATOR_CODEGEN_TIMEOUT", "900")),
+    }
 
     def __init__(self, db_path: str | Path) -> None:
         self.db_path = str(db_path)
@@ -138,13 +146,15 @@ class PipelineRunner:
             logger.info("Dispatching stage: %s (port %d)", stage_name, port)
             stage_start = time.time()
 
+            stage_timeout = self.STAGE_TIMEOUTS.get(stage_name, self.timeout)
             try:
                 if stage_name in BATCH_STAGES:
                     # Iterate until all formulas are processed
                     batch_results: list[dict] = []
                     for iteration in range(1, MAX_BATCH_ITERATIONS + 1):
                         result = self._call_service_with_retry(
-                            f"http://localhost:{port}/process", stage_params
+                            f"http://localhost:{port}/process", stage_params,
+                            timeout=stage_timeout,
                         )
                         batch_results.append(result)
                         processed = result.get("formulas_processed", 0)
@@ -158,7 +168,8 @@ class PipelineRunner:
                     result = self._merge_batch_results(batch_results, stage_name)
                 else:
                     result = self._call_service_with_retry(
-                        f"http://localhost:{port}/process", stage_params
+                        f"http://localhost:{port}/process", stage_params,
+                        timeout=stage_timeout,
                     )
 
                 stage_ms = int((time.time() - stage_start) * 1000)
@@ -299,12 +310,15 @@ class PipelineRunner:
 
         return result
 
-    def _call_service_with_retry(self, url: str, params: dict) -> dict:
+    def _call_service_with_retry(
+        self, url: str, params: dict, *, timeout: int | None = None,
+    ) -> dict:
         """Call a service endpoint with exponential backoff retry.
 
         Args:
             url: Service /process URL.
             params: Request body.
+            timeout: Request timeout in seconds (overrides default).
 
         Returns:
             Parsed JSON response.
@@ -312,12 +326,13 @@ class PipelineRunner:
         Raises:
             ServiceError: If all retries exhausted.
         """
+        effective_timeout = timeout or self.timeout
         last_error: Exception | None = None
 
         for attempt in range(self.retry_max + 1):
             try:
                 resp = requests.post(
-                    url, json=params, timeout=self.timeout
+                    url, json=params, timeout=effective_timeout
                 )
 
                 if resp.status_code < 400:
@@ -342,7 +357,7 @@ class PipelineRunner:
             except requests.ConnectionError as e:
                 last_error = ServiceError(f"Connection refused: {e}")
             except requests.Timeout as e:
-                last_error = ServiceError(f"Timeout after {self.timeout}s: {e}")
+                last_error = ServiceError(f"Timeout after {effective_timeout}s: {e}")
 
             if attempt < self.retry_max:
                 delay = self.retry_backoff ** attempt  # 1, 4, 16

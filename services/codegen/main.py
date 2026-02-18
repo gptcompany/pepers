@@ -17,6 +17,8 @@ Environment:
 
 from __future__ import annotations
 
+import ctypes
+import gc
 import json
 import logging
 import os
@@ -30,6 +32,21 @@ from services.codegen.explain import explain_formula, explain_formulas_batch
 from services.codegen.generators import generate_all
 
 logger = logging.getLogger(__name__)
+
+
+def _release_memory() -> None:
+    """Force Python GC and return freed heap to OS.
+
+    Python's pymalloc doesn't return freed memory to the OS automatically.
+    After processing each formula (SymPy expressions + codegen ASTs), we
+    explicitly collect garbage and call glibc's malloc_trim(0) to shrink
+    the process RSS. Prevents OOM kills on large formula batches.
+    """
+    gc.collect()
+    try:
+        ctypes.CDLL("libc.so.6").malloc_trim(0)
+    except (OSError, AttributeError):
+        pass  # Non-Linux or libc unavailable
 
 
 def _check_consistency(db_path: str) -> None:
@@ -179,6 +196,11 @@ class CodegenHandler(BaseHandler):
                 errors.append(f"formula {fid}: {e}")
                 _mark_formula_failed(db_path, fid, f"codegen: {e}")
                 processed += 1
+            finally:
+                # Release SymPy expression trees and codegen ASTs between formulas.
+                # Without this, Python's pymalloc fragments heap → RSS only grows →
+                # OOM kill on large batches (exit code 137).
+                _release_memory()
 
         elapsed_ms = int((time.time() - start) * 1000)
 
