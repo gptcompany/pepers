@@ -153,7 +153,7 @@ def sample_llm_scores():
     """Valid LLM scoring response as dict (above threshold)."""
     return {
         "scores": {
-            "kelly_relevance": 0.85,
+            "topic_relevance": 0.85,
             "mathematical_rigor": 0.70,
             "novelty": 0.60,
             "practical_applicability": 0.75,
@@ -174,7 +174,7 @@ def sample_low_score_response():
     """LLM response with below-threshold scores."""
     return json.dumps({
         "scores": {
-            "kelly_relevance": 0.2,
+            "topic_relevance": 0.2,
             "mathematical_rigor": 0.3,
             "novelty": 0.1,
             "practical_applicability": 0.2,

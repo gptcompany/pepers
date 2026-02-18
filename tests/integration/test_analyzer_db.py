@@ -138,7 +138,7 @@ class TestAnalyzerHandlerIntegration:
         assert result["papers_accepted"] == 1
         assert result["papers_rejected"] == 0
         assert result["llm_provider"] == "ollama"
-        assert result["prompt_version"] == "v1"
+        assert result["prompt_version"] == "v2"
 
         # Verify DB state
         with transaction(self.db_path) as conn:
@@ -164,7 +164,7 @@ class TestAnalyzerHandlerIntegration:
         """Score exactly 0.7 → accepted (>= threshold)."""
         scores = {
             "scores": {
-                "kelly_relevance": 0.7,
+                "topic_relevance": 0.7,
                 "mathematical_rigor": 0.7,
                 "novelty": 0.7,
                 "practical_applicability": 0.7,
@@ -186,7 +186,7 @@ class TestAnalyzerHandlerIntegration:
         """Score just below 0.7 → rejected."""
         scores = {
             "scores": {
-                "kelly_relevance": 0.69,
+                "topic_relevance": 0.69,
                 "mathematical_rigor": 0.69,
                 "novelty": 0.69,
                 "practical_applicability": 0.69,
@@ -265,13 +265,13 @@ class TestAnalyzerHandlerIntegration:
 
         # First call: high score, second: low, third: invalid JSON
         high = json.dumps({
-            "scores": {"kelly_relevance": 0.9, "mathematical_rigor": 0.8,
+            "scores": {"topic_relevance": 0.9, "mathematical_rigor": 0.8,
                        "novelty": 0.7, "practical_applicability": 0.8,
                        "data_quality": 0.7},
             "reasoning": "Good.",
         })
         low = json.dumps({
-            "scores": {"kelly_relevance": 0.1, "mathematical_rigor": 0.2,
+            "scores": {"topic_relevance": 0.1, "mathematical_rigor": 0.2,
                        "novelty": 0.1, "practical_applicability": 0.1,
                        "data_quality": 0.1},
             "reasoning": "Bad.",
@@ -347,13 +347,13 @@ class TestScoreStorage:
             row = conn.execute(
                 "SELECT prompt_version FROM papers WHERE id=1"
             ).fetchone()
-        assert row["prompt_version"] == "v1"
+        assert row["prompt_version"] == "v2"
 
     def test_clamped_flag_stored(self, discovered_paper_db):
         db_path = str(discovered_paper_db)
         scores = {
             "scores": {
-                "kelly_relevance": 1.5,
+                "topic_relevance": 1.5,
                 "mathematical_rigor": 0.7,
                 "novelty": 0.6,
                 "practical_applicability": 0.75,

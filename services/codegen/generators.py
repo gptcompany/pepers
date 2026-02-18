@@ -11,7 +11,9 @@ Per-language error isolation: one failure doesn't block others.
 
 from __future__ import annotations
 
+import json
 import logging
+import os
 import re
 
 import sympy
@@ -19,7 +21,31 @@ from sympy.parsing.latex import parse_latex
 from sympy.printing.pycode import pycode
 from sympy.utilities.codegen import codegen
 
+from shared.models import LLMCodegenResult
+
 logger = logging.getLogger(__name__)
+
+CODEGEN_FALLBACK_ORDER = os.environ.get(
+    "RP_CODEGEN_FALLBACK_ORDER",
+    os.environ.get("RP_LLM_FALLBACK_ORDER", "gemini_cli,codex_cli,claude_cli,openrouter,ollama"),
+).split(",")
+
+_LLM_CODEGEN_SYSTEM = """You are a mathematical code generator. Given a LaTeX formula,
+produce equivalent Python/numpy code.
+
+Respond ONLY with valid JSON matching this schema:
+{
+  "python_code": "<single Python expression using math/numpy functions>",
+  "variables": ["<list of free variable names>"],
+  "description": "<one-sentence description>"
+}
+
+Rules:
+1. Use numpy functions (np.exp, np.log, np.sqrt, np.sum, etc.)
+2. Assume 'import numpy as np' is available
+3. Variables should be plain Python identifiers
+4. The python_code must be a valid Python expression (not a statement)
+5. Do NOT include import statements in python_code"""
 
 
 def clean_latex(latex: str) -> str:
@@ -52,6 +78,14 @@ def clean_latex(latex: str) -> str:
     s = s.replace(r'\cdots', '')
     # 7. Remove style commands
     s = re.sub(r'\\(?:display|text|script|scriptscript)style', '', s)
+    # 7b. Remove sizing commands: \big, \Big, \bigg, \Bigg (and l/r variants)
+    s = re.sub(r'\\[Bb]ig{1,2}[lrm]?', '', s)
+    # 7c. Replace \parallel, \| with comma (KL divergence notation)
+    s = s.replace(r'\parallel', ',')
+    s = re.sub(r'(?<!\\)\\\|', ',', s)
+    # 7d. Normalize sign subscripts: _{-} → _{minus}, ^{+} → ^{plus}
+    s = s.replace('_{-}', '_{minus}').replace('^{+}', '^{plus}')
+    s = s.replace('_{+}', '_{plus}').replace('^{-}', '^{minus}')
     # 8. Remove \nonumber, \notag, line breaks, alignment
     s = s.replace(r'\nonumber', '').replace(r'\notag', '')
     s = re.sub(r'\\\\', ' ', s)
@@ -61,11 +95,41 @@ def clean_latex(latex: str) -> str:
     return s
 
 
+def _split_multiline(latex: str) -> str:
+    r"""Extract a single equation from multi-line LaTeX.
+
+    Layer 2: Handles \\-separated lines (align environments), \Rightarrow
+    prefixes, and equality chains (a = b = c → a = c).
+
+    Args:
+        latex: LaTeX string (environments already stripped).
+
+    Returns:
+        Single equation string suitable for parse_latex.
+    """
+    # Split on literal \\ (line breaks in align/gather environments)
+    if r'\\' in latex:
+        lines = [l.strip() for l in re.split(r'\\\\', latex) if l.strip()]
+        if lines:
+            latex = lines[-1]  # take last equation (usually the result)
+
+    # Remove \Rightarrow prefix (e.g. "⟹ y = f(x)")
+    latex = re.sub(r'^\\Rightarrow\s*', '', latex).strip()
+
+    # Equality chain: a = b = c → a = c (keep first and last parts)
+    parts = re.split(r'\s*=\s*', latex)
+    if len(parts) > 2:
+        latex = f"{parts[0]} = {parts[-1]}"
+
+    return latex
+
+
 def parse_formula(latex: str) -> sympy.Expr:
     """Parse LaTeX to SymPy expression.
 
     Uses ANTLR backend (default, more lenient).
     Strips environment wrappers, math delimiters, and unsupported macros.
+    Layer 2: Splits multi-line equations and handles equality chains.
 
     Args:
         latex: LaTeX formula string.
@@ -80,11 +144,47 @@ def parse_formula(latex: str) -> sympy.Expr:
     cleaned = re.sub(r'\\begin\{[^}]+\}|\\end\{[^}]+\}', '', latex).strip()
     # Strip display math delimiters
     cleaned = re.sub(r'^\$\$|^\$|\$\$$|\$$', '', cleaned).strip()
+    # Layer 2: Multi-line split before macro cleanup
+    cleaned = _split_multiline(cleaned)
     # Strip unsupported macros
     cleaned = clean_latex(cleaned)
     if not cleaned:
         raise ValueError("Empty LaTeX after cleanup")
     return parse_latex(cleaned)  # type: ignore[return-value]
+
+
+def _llm_codegen_python(latex: str, func_name: str) -> dict | None:
+    """Layer 5: LLM fallback for Python codegen when parse_latex fails.
+
+    Calls the LLM fallback chain to convert LaTeX → Python/numpy code.
+    Returns None if all providers fail or validation fails.
+
+    Args:
+        latex: Raw LaTeX formula string.
+        func_name: Function name for metadata.
+
+    Returns:
+        Dict with keys python_code, variables, provider — or None on failure.
+    """
+    from shared.llm import fallback_chain
+
+    prompt = f"Convert this LaTeX formula to Python/numpy code:\n\n{latex}"
+    try:
+        raw, provider = fallback_chain(
+            prompt=prompt,
+            system=_LLM_CODEGEN_SYSTEM,
+            order=CODEGEN_FALLBACK_ORDER,
+        )
+        result = LLMCodegenResult.model_validate_json(raw)
+        return {
+            "python_code": result.python_code,
+            "variables": result.variables,
+            "description": result.description,
+            "provider": provider,
+        }
+    except Exception as e:
+        logger.warning("LLM codegen fallback failed for %s: %s", func_name, e)
+        return None
 
 
 def generate_c99(expr: sympy.Expr, func_name: str) -> dict:
@@ -137,6 +237,9 @@ def generate_rust(expr: sympy.Expr, func_name: str) -> dict:
 def generate_python(expr: sympy.Expr, func_name: str) -> str:
     """Generate Python expression via pycode().
 
+    Layer 4: Falls back to strict=False when Function objects are not
+    printable (e.g. custom or unrecognized SymPy functions).
+
     Args:
         expr: SymPy expression to generate code for.
         func_name: Name for the generated function (unused, for API consistency).
@@ -144,7 +247,10 @@ def generate_python(expr: sympy.Expr, func_name: str) -> str:
     Returns:
         Python code string.
     """
-    return pycode(expr)  # type: ignore[return-value]
+    try:
+        return pycode(expr)  # type: ignore[return-value]
+    except Exception:
+        return pycode(expr, strict=False)  # type: ignore[return-value]
 
 
 def generate_all(latex: str, formula_id: int) -> list[dict]:
@@ -165,11 +271,32 @@ def generate_all(latex: str, formula_id: int) -> list[dict]:
         expr = parse_formula(latex)
     except Exception as e:
         logger.warning("parse_latex failed for formula %d: %s", formula_id, e)
+        # Layer 5: LLM fallback for Python-only when parse_latex fails
+        llm_result = _llm_codegen_python(latex, func_name)
+        if llm_result is not None:
+            return [
+                {"language": "c99", "code": "", "metadata": None,
+                 "error": f"parse_latex: {e}"},
+                {"language": "rust", "code": "", "metadata": None,
+                 "error": f"parse_latex: {e}"},
+                {"language": "python", "code": llm_result["python_code"],
+                 "metadata": {
+                     "function_name": func_name,
+                     "variables": llm_result.get("variables", []),
+                     "source": "llm",
+                     "llm_provider": llm_result.get("provider", "unknown"),
+                 },
+                 "error": None},
+            ]
         return [
             {"language": lang, "code": "", "metadata": None,
              "error": f"parse_latex: {e}"}
             for lang in ("c99", "rust", "python")
         ]
+
+    # Layer 3: Equality.rhs extraction — codegen can't handle Equality objects
+    if isinstance(expr, sympy.Equality):
+        expr = expr.rhs
 
     results = []
 

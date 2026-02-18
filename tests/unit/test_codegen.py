@@ -9,6 +9,7 @@ import pytest
 import sympy
 
 from services.codegen.generators import (
+    _split_multiline,
     clean_latex,
     generate_all,
     generate_c99,
@@ -305,7 +306,8 @@ class TestGenerateAll:
             assert "variables" in r["metadata"]
             assert set(r["metadata"]["variables"]) == {"x", "y"}
 
-    def test_invalid_latex_all_errors(self):
+    @patch("services.codegen.generators._llm_codegen_python", return_value=None)
+    def test_invalid_latex_all_errors(self, mock_llm):
         # Use truly unparseable LaTeX (parse_latex is lenient with many inputs)
         results = generate_all("", 1)
         assert len(results) == 3
@@ -313,7 +315,8 @@ class TestGenerateAll:
             assert r["error"] is not None
             assert r["code"] == ""
 
-    def test_empty_latex_all_errors(self):
+    @patch("services.codegen.generators._llm_codegen_python", return_value=None)
+    def test_empty_latex_all_errors(self, mock_llm):
         results = generate_all("", 1)
         assert len(results) == 3
         for r in results:
@@ -324,6 +327,175 @@ class TestGenerateAll:
         for r in results:
             if r["metadata"]:
                 assert r["metadata"]["function_name"] == "formula_7"
+
+
+# ===========================================================================
+# Layer 1: Enhanced clean_latex() Tests
+# ===========================================================================
+
+
+class TestCleanLatexEnhanced:
+    """Tests for Layer 1 — new clean_latex() patterns."""
+
+    def test_strips_big(self):
+        result = clean_latex(r"\big( x \big)")
+        assert r"\big" not in result
+        assert "x" in result
+
+    def test_strips_Big(self):
+        result = clean_latex(r"\Big( x \Big)")
+        assert r"\Big" not in result
+
+    def test_strips_bigg(self):
+        result = clean_latex(r"\bigg( x \bigg)")
+        assert r"\bigg" not in result
+
+    def test_strips_Bigg(self):
+        result = clean_latex(r"\Bigg( x \Bigg)")
+        assert r"\Bigg" not in result
+
+    def test_parallel_to_comma(self):
+        result = clean_latex(r"D_{KL}(p \parallel q)")
+        assert r"\parallel" not in result
+        assert "," in result
+
+    def test_sign_subscripts(self):
+        result = clean_latex(r"x_{-} + y^{+}")
+        assert "_{minus}" in result
+        assert "^{plus}" in result
+
+
+# ===========================================================================
+# Layer 2: Multi-line splitting Tests
+# ===========================================================================
+
+
+class TestSplitMultiline:
+    """Tests for Layer 2 — _split_multiline()."""
+
+    def test_takes_last_line(self):
+        result = _split_multiline(r"a = b \\ c = d")
+        assert "c" in result
+        assert "d" in result
+
+    def test_removes_rightarrow(self):
+        result = _split_multiline(r"\Rightarrow y = f(x)")
+        assert r"\Rightarrow" not in result
+        assert "y" in result
+
+    def test_equality_chain(self):
+        result = _split_multiline("a = b = c")
+        assert result == "a = c"
+
+    def test_single_equation_unchanged(self):
+        result = _split_multiline("x^2 + 1")
+        assert result == "x^2 + 1"
+
+
+# ===========================================================================
+# Layer 3: Equality.rhs extraction Tests
+# ===========================================================================
+
+
+class TestEqualityRhsExtraction:
+    """Tests for Layer 3 — Equality.rhs in generate_all()."""
+
+    def test_equality_produces_code(self):
+        """An equation like x = y + 1 should extract rhs and codegen it."""
+        results = generate_all(r"x = y + 1", 100)
+        for r in results:
+            assert r["error"] is None, f"{r['language']} error: {r['error']}"
+            assert r["code"], f"{r['language']} has empty code"
+
+    def test_equality_rhs_variables(self):
+        """Variables should come from the rhs expression."""
+        results = generate_all(r"f = a + b", 101)
+        c99 = next(r for r in results if r["language"] == "c99")
+        assert c99["error"] is None
+        # rhs is a + b, so variables should include a and b
+        assert set(c99["metadata"]["variables"]) == {"a", "b"}
+
+
+# ===========================================================================
+# Layer 4: pycode strict=False Tests
+# ===========================================================================
+
+
+class TestPycodeStrictFalse:
+    """Tests for Layer 4 — generate_python() strict=False fallback."""
+
+    def test_custom_function_does_not_raise(self):
+        """A custom/unrecognized function should not cause generate_python to fail."""
+        # Create an expression with an unrecognized function
+        x = sympy.Symbol("x")
+        f = sympy.Function("CustomFunc")
+        expr = f(x) + 1
+        # This would fail with strict=True, but Layer 4 catches and retries
+        code = generate_python(expr, "test")
+        assert isinstance(code, str)
+        assert "x" in code
+
+
+# ===========================================================================
+# Layer 5: LLM fallback Tests (mocked)
+# ===========================================================================
+
+
+_VALID_LLM_CODEGEN = json.dumps({
+    "python_code": "np.exp(-x**2 / (2 * sigma**2))",
+    "variables": ["x", "sigma"],
+    "description": "Gaussian function",
+})
+
+
+class TestLLMFallback:
+    """Tests for Layer 5 — LLM fallback when parse_latex fails."""
+
+    @patch("services.codegen.generators._llm_codegen_python")
+    def test_llm_fallback_on_parse_failure(self, mock_llm):
+        """When parse_latex fails, LLM should be tried for Python."""
+        mock_llm.return_value = {
+            "python_code": "np.exp(-x**2)",
+            "variables": ["x"],
+            "description": "Gaussian",
+            "provider": "ollama",
+        }
+        # Empty string triggers ValueError in parse_formula
+        results = generate_all("", 1)
+        assert len(results) == 3
+        py = next(r for r in results if r["language"] == "python")
+        assert py["error"] is None
+        assert py["code"] == "np.exp(-x**2)"
+        assert py["metadata"]["source"] == "llm"
+        # c99 and rust should still be errors
+        c99 = next(r for r in results if r["language"] == "c99")
+        assert c99["error"] is not None
+
+    @patch("services.codegen.generators._llm_codegen_python", return_value=None)
+    def test_llm_fallback_fails_gracefully(self, mock_llm):
+        """When both parse_latex and LLM fail, all 3 languages return errors."""
+        results = generate_all("", 1)
+        assert len(results) == 3
+        for r in results:
+            assert r["error"] is not None
+
+    @patch("shared.llm.fallback_chain",
+           return_value=(_VALID_LLM_CODEGEN, "ollama"))
+    def test_llm_codegen_python_success(self, mock_chain):
+        """_llm_codegen_python returns valid result on success."""
+        from services.codegen.generators import _llm_codegen_python
+        result = _llm_codegen_python(r"\exp(-x^2)", "formula_1")
+        assert result is not None
+        assert result["python_code"] == "np.exp(-x**2 / (2 * sigma**2))"
+        assert result["provider"] == "ollama"
+
+    @patch("shared.llm.fallback_chain",
+           side_effect=RuntimeError("All providers failed"))
+    def test_llm_codegen_python_all_fail(self, mock_chain):
+        """_llm_codegen_python returns None when all providers fail."""
+        from services.codegen.generators import _llm_codegen_python
+        result = _llm_codegen_python(r"\complex_latex", "formula_1")
+        assert result is None
 
 
 # ===========================================================================

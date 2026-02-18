@@ -251,14 +251,14 @@ class TestCallOllama:
         mock_resp = MagicMock()
         mock_resp.status = 200
         mock_resp.read.return_value = json.dumps({
-            "response": '{"scores": {"kelly_relevance": 0.8}}'
+            "response": '{"scores": {"topic_relevance": 0.8}}'
         }).encode()
         mock_resp.__enter__ = MagicMock(return_value=mock_resp)
         mock_resp.__exit__ = MagicMock(return_value=False)
         mock_urlopen.return_value = mock_resp
 
         result = call_ollama("prompt", "system")
-        assert result == '{"scores": {"kelly_relevance": 0.8}}'
+        assert result == '{"scores": {"topic_relevance": 0.8}}'
 
     @patch("shared.llm.urllib.request.urlopen")
     def test_error_in_response(self, mock_urlopen):
@@ -505,7 +505,7 @@ class TestScoreValidation:
     def test_out_of_range_clamped(self, mock_query, mock_fc, mock_update):
         scores = {
             "scores": {
-                "kelly_relevance": 1.5,
+                "topic_relevance": 1.5,
                 "mathematical_rigor": -0.1,
                 "novelty": 0.5,
                 "practical_applicability": 0.5,
@@ -538,7 +538,7 @@ class TestScoreValidation:
     def test_wrong_keys_rejected(self, mock_query, mock_fc):
         scores = {
             "scores": {
-                "kelly_relevance": 0.8,
+                "topic_relevance": 0.8,
                 "mathematical_rigor": 0.7,
                 "novelty": 0.6,
                 "wrong_key": 0.5,
@@ -567,7 +567,7 @@ class TestScoreValidation:
     def test_non_numeric_value(self, mock_query, mock_fc):
         scores = {
             "scores": {
-                "kelly_relevance": "high",
+                "topic_relevance": "high",
                 "mathematical_rigor": 0.7,
                 "novelty": 0.6,
                 "practical_applicability": 0.5,
@@ -737,11 +737,11 @@ class TestPromptConstants:
     """Tests for prompt.py constants."""
 
     def test_prompt_version(self):
-        assert PROMPT_VERSION == "v1"
+        assert PROMPT_VERSION == "v2"
 
     def test_expected_score_keys(self):
         assert EXPECTED_SCORE_KEYS == frozenset({
-            "kelly_relevance",
+            "topic_relevance",
             "mathematical_rigor",
             "novelty",
             "practical_applicability",

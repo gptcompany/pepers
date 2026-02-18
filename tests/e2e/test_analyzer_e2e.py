@@ -77,8 +77,8 @@ class TestAnalyzerE2E:
             fval = float(val)
             assert 0.0 <= fval <= 1.0, f"{key}={fval} out of range"
 
-        # For a highly relevant paper, kelly_relevance should be high
-        assert float(scores["kelly_relevance"]) >= 0.5
+        # For a highly relevant paper, topic_relevance should be high
+        assert float(scores["topic_relevance"]) >= 0.5
 
     def test_full_pipeline_discover_then_analyze(self, e2e_db):
         """Insert a paper, analyze with real Ollama, verify DB update."""

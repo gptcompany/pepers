@@ -189,6 +189,18 @@ class GeneratedCode(BaseModel):
         return _parse_json_dict(v)
 
 
+class LLMCodegenResult(BaseModel):
+    """LLM-generated Python code from LaTeX (Layer 5 fallback).
+
+    Used when SymPy parse_latex fails and we fall back to LLM codegen.
+    Only Python output — C99/Rust remain errors for safety.
+    """
+
+    python_code: str
+    variables: list[str] = []
+    description: str = ""
+
+
 class ServiceStatus(BaseModel):
     """Standard response for /health and /status endpoints.
 
