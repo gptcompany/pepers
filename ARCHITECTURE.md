@@ -21,7 +21,7 @@ Research Pipeline is a set of 5 standalone Python microservices plus 1 orchestra
 | Secrets | dotenvx (ECIES) | Encrypted env var management |
 | Process Mgmt | systemd | Service lifecycle, journald logging, watchdog |
 | Monitoring | Prometheus + Grafana + Loki | Metrics, dashboards, centralized logs |
-| Notifications | Discord webhook | Pipeline completion summaries |
+| Notifications | Apprise (90+ targets) | Pipeline completion summaries (Discord, Slack, Telegram, etc.) |
 
 ## Project Structure
 
@@ -46,7 +46,8 @@ research-pipeline/
 │   │   └── explain.py          # LLM formula explanations + batch explain (206 LOC)
 │   └── orchestrator/           # Pipeline coordination
 │       ├── main.py             # HTTP endpoints + async /run (534 LOC)
-│       └── pipeline.py         # Stage dispatch + retry + run persistence (533 LOC)
+│       ├── pipeline.py         # Stage dispatch + retry + run persistence (533 LOC)
+│       └── notifications.py    # Apprise multi-target notifications (68 LOC)
 ├── tests/                      # 700+ tests
 │   ├── conftest.py             # Shared fixtures
 │   ├── unit/                   # 460+ unit tests
@@ -117,7 +118,7 @@ from shared.llm import fallback_chain, call_gemini_cli, call_openrouter, call_ol
 | Extractor | 8772 | 265 | PDF text extraction + LaTeX formula extraction | RAGAnything (:8767) |
 | Validator | 8773 | 339 | Multi-CAS formula validation with consensus | CAS (:8769), SymPy |
 | Codegen | 8774 | 339+311 | Python (SymPy) + Rust code gen + batch LLM explanations | LLM (Ollama/Gemini) |
-| Orchestrator | 8775 | 534+533 | Async pipeline runs, GET /generated-code, GET /runs, retry, batch | All above + Discord webhook |
+| Orchestrator | 8775 | 534+533 | Async pipeline runs, GET /generated-code, GET /runs, semantic search, retry, batch | All above + RAGAnything query + Apprise notifications |
 
 ### Component: LLM Providers (`shared/llm.py` + `shared/cli_providers.json`)
 
@@ -202,7 +203,7 @@ Daily 8AM timer triggers Orchestrator (:8775)
   +-- INSERT generated_code -> SQLite [stage=codegen]
          |
          v
-  Orchestrator: mark [stage=complete], send Discord summary
+  Orchestrator: mark [stage=complete], send Apprise notification
 ```
 
 ## Database Schema
@@ -254,6 +255,9 @@ Daily 8AM timer triggers Orchestrator (:8775)
 | `RP_LLM_TIMEOUT_OLLAMA` | Ollama timeout | `600s` |
 | `RP_CODEGEN_BATCH_SIZE` | Formulas per batch explain call | `50` |
 | `RP_ORCHESTRATOR_TIMEOUT` | Orchestrator per-service timeout | `300s` |
+| `RP_NOTIFY_URLS` | Apprise notification URLs (comma-separated) | `` (disabled) |
+| `RP_RAG_QUERY_URL` | RAGAnything query endpoint | `http://localhost:8767` |
+| `RP_RAG_QUERY_TIMEOUT` | RAG query timeout (seconds) | `30` |
 
 ## Infrastructure
 
@@ -264,7 +268,7 @@ Daily 8AM timer triggers Orchestrator (:8775)
 - **Startup validation**: Consistency checks on extractor, validator, codegen at boot
 - **Daily trigger**: systemd timer at 8:00 AM activating the Orchestrator
 - **Monitoring**: Prometheus + Grafana dashboard + Loki structured logs
-- **Alerts**: Discord webhook for pipeline completion/failure summaries
+- **Alerts**: Apprise multi-target notifications (`RP_NOTIFY_URLS`)
 - **External services**: CAS (:8769), RAGAnything (:8767), Ollama (:11434)
 
 ## Development Status

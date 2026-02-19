@@ -402,3 +402,105 @@ class TestScheduler:
         os.environ["RP_ORCHESTRATOR_CRON_ENABLED"] = "0"
         scheduler = create_scheduler(lambda: None)
         assert scheduler is None
+
+
+# ---------------------------------------------------------------------------
+# _query_rag
+# ---------------------------------------------------------------------------
+
+
+class TestQueryRag:
+    """Tests for RAGAnything query helper."""
+
+    @patch("services.orchestrator.main.urllib.request.urlopen")
+    def test_returns_parsed_json(self, mock_urlopen):
+        from services.orchestrator.main import _query_rag
+
+        mock_resp = MagicMock()
+        mock_resp.read.return_value = b'{"success": true, "answer": "Kelly is optimal"}'
+        mock_urlopen.return_value = mock_resp
+
+        result = _query_rag("Kelly criterion", "hybrid")
+
+        assert result["success"] is True
+        assert "Kelly" in result["answer"]
+        mock_urlopen.assert_called_once()
+
+    @patch("services.orchestrator.main.urllib.request.urlopen")
+    def test_sends_correct_payload(self, mock_urlopen):
+        import json
+        from services.orchestrator.main import _query_rag
+
+        mock_resp = MagicMock()
+        mock_resp.read.return_value = b'{"success": true, "answer": ""}'
+        mock_urlopen.return_value = mock_resp
+
+        _query_rag("test query", "local")
+
+        call_args = mock_urlopen.call_args
+        req = call_args[0][0]
+        body = json.loads(req.data.decode())
+        assert body["query"] == "test query"
+        assert body["mode"] == "local"
+
+    @patch("services.orchestrator.main.urllib.request.urlopen")
+    def test_raises_on_network_error(self, mock_urlopen):
+        from services.orchestrator.main import _query_rag
+
+        mock_urlopen.side_effect = ConnectionError("refused")
+
+        with pytest.raises(ConnectionError):
+            _query_rag("test", "hybrid")
+
+
+# ---------------------------------------------------------------------------
+# OrchestratorHandler._search_fallback
+# ---------------------------------------------------------------------------
+
+
+class TestSearchFallback:
+    """Tests for SQLite fallback search."""
+
+    def test_matches_by_title(self, tmp_path):
+        from shared.db import init_db, transaction
+        from services.orchestrator.main import OrchestratorHandler
+
+        db = str(tmp_path / "test.db")
+        init_db(db)
+
+        with transaction(db) as conn:
+            conn.execute(
+                "INSERT INTO papers (arxiv_id, title, abstract, stage) "
+                "VALUES (?, ?, ?, ?)",
+                ("2401.00001", "Kelly Criterion in Finance", "Optimal betting", "analyzed"),
+            )
+            conn.execute(
+                "INSERT INTO papers (arxiv_id, title, abstract, stage) "
+                "VALUES (?, ?, ?, ?)",
+                ("2401.00002", "Unrelated Topic", "Nothing relevant", "discovered"),
+            )
+
+        handler = OrchestratorHandler.__new__(OrchestratorHandler)
+        handler.db_path = db
+
+        result = handler._search_fallback("Kelly")
+
+        assert result["success"] is True
+        assert result["mode"] == "fallback"
+        assert len(result["papers"]) == 1
+        assert "Kelly" in result["papers"][0]["title"]
+
+    def test_no_matches_returns_empty(self, tmp_path):
+        from shared.db import init_db
+        from services.orchestrator.main import OrchestratorHandler
+
+        db = str(tmp_path / "test.db")
+        init_db(db)
+
+        handler = OrchestratorHandler.__new__(OrchestratorHandler)
+        handler.db_path = db
+
+        result = handler._search_fallback("nonexistent")
+
+        assert result["success"] is True
+        assert result["papers"] == []

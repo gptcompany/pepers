@@ -11,6 +11,7 @@ dependencies = [
     "apscheduler>=3.10",
     "sympy>=1.12",
     "antlr4-python3-runtime==4.11",
+    "apprise>=1.9.7",
 ]
 
 [project.optional-dependencies]

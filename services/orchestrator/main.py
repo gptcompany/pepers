@@ -24,10 +24,12 @@ Environment:
 
 from __future__ import annotations
 
+import json
 import logging
 import os
 import threading
 import time
+import urllib.request
 from urllib.parse import parse_qs
 
 from shared.config import load_config
@@ -36,10 +38,27 @@ from shared.models import Formula, GitHubAnalysis, GitHubRepo, Paper
 from shared.server import BaseHandler, BaseService, route
 
 from services.orchestrator.github_search import search_and_analyze
+from services.orchestrator.notifications import notify, notify_pipeline_result
 from services.orchestrator.pipeline import PipelineRunner
 from services.orchestrator.scheduler import create_scheduler
 
 logger = logging.getLogger(__name__)
+
+_RAG_URL = os.environ.get("RP_RAG_QUERY_URL", "http://localhost:8767")
+_RAG_QUERY_TIMEOUT = int(os.environ.get("RP_RAG_QUERY_TIMEOUT", "30"))
+
+
+def _query_rag(query: str, mode: str = "hybrid") -> dict:
+    """Query RAGAnything knowledge graph. Returns dict with answer."""
+    payload = json.dumps({"query": query, "mode": mode}).encode()
+    req = urllib.request.Request(
+        f"{_RAG_URL}/query",
+        data=payload,
+        headers={"Content-Type": "application/json"},
+        method="POST",
+    )
+    resp = urllib.request.urlopen(req, timeout=_RAG_QUERY_TIMEOUT)
+    return json.loads(resp.read().decode())
 
 
 class OrchestratorHandler(BaseHandler):
@@ -390,6 +409,72 @@ class OrchestratorHandler(BaseHandler):
 
         return results
 
+    # -- Semantic search endpoint --
+
+    @route("POST", "/search")
+    def handle_search(self, data: dict) -> dict | None:
+        """Semantic search across all processed papers via RAGAnything.
+
+        Request body:
+            {
+                "query": "Kelly criterion stochastic volatility",
+                "mode": "hybrid"
+            }
+
+        Mode options: hybrid, local, global, mix, naive, bypass.
+        Falls back to SQLite substring match if RAGAnything is unavailable.
+        """
+        query = data.get("query", "").strip()
+        if not query:
+            self.send_error_json(
+                "query is required", "VALIDATION_ERROR", 400
+            )
+            return None
+
+        mode = data.get("mode", "hybrid")
+        start = time.time()
+
+        try:
+            rag_result = _query_rag(query, mode)
+        except Exception as e:
+            logger.warning("RAG query failed, falling back to SQLite: %s", e)
+            return self._search_fallback(query)
+
+        elapsed_ms = int((time.time() - start) * 1000)
+
+        return {
+            "success": rag_result.get("success", False),
+            "query": query,
+            "mode": mode,
+            "answer": rag_result.get("answer", ""),
+            "time_ms": elapsed_ms,
+        }
+
+    def _search_fallback(self, query: str) -> dict:
+        """Fallback: substring match on title/abstract in SQLite."""
+        terms = query.lower().split()
+        with transaction(self.db_path) as conn:
+            rows = conn.execute(
+                "SELECT * FROM papers ORDER BY created_at DESC LIMIT 200"
+            ).fetchall()
+
+        matches = []
+        for row in rows:
+            text = f"{row['title']} {row['abstract'] or ''}".lower()
+            if any(t in text for t in terms):
+                matches.append(
+                    Paper(**dict(row)).model_dump(mode="json")
+                )
+
+        return {
+            "success": True,
+            "query": query,
+            "mode": "fallback",
+            "answer": None,
+            "papers": matches[:20],
+            "time_ms": 0,
+        }
+
     # -- Helpers for paper queries --
 
     def _list_papers(
@@ -458,9 +543,11 @@ class OrchestratorHandler(BaseHandler):
 def _run_pipeline_async(runner: PipelineRunner, run_id: str, **kwargs) -> None:
     """Thread target for async pipeline execution."""
     try:
-        runner.run(run_id=run_id, **kwargs)
+        result = runner.run(run_id=run_id, **kwargs)
+        notify_pipeline_result(result)
     except Exception:
         logger.exception("Async pipeline run %s failed", run_id)
+        notify("[FAIL] Research Pipeline", f"Run {run_id} crashed")
 
 
 def _cron_run() -> None:
@@ -496,8 +583,10 @@ def _cron_run() -> None:
             result["stages_requested"],
             elapsed,
         )
+        notify_pipeline_result(result)
     except Exception:
         logger.exception("Cron run failed")
+        notify("[FAIL] Research Pipeline", "Cron run crashed")
 
 
 def main() -> None:
