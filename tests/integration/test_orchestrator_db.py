@@ -487,6 +487,94 @@ class TestQueryEndpoints:
 
 
 # ---------------------------------------------------------------------------
+# POST /search with context_only
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.integration
+class TestSearchContextOnly:
+    """Test POST /search endpoint with context_only parameter."""
+
+    @pytest.fixture(autouse=True)
+    def setup(self, initialized_db):
+        self.db_path = str(initialized_db)
+        self.port = _get_free_port()
+        runner = PipelineRunner(self.db_path)
+        OrchestratorHandler.runner = runner
+        self.service = BaseService(
+            "orchestrator", self.port, OrchestratorHandler, self.db_path
+        )
+        self.thread = threading.Thread(target=self.service.run, daemon=True)
+        self.thread.start()
+        time.sleep(0.3)
+        yield
+        if self.service.server:
+            self.service.server.shutdown()
+        OrchestratorHandler.runner = None
+        OrchestratorHandler._routes = None
+
+    @patch("services.orchestrator.main._query_rag")
+    def test_search_default_no_context_only(self, mock_rag):
+        mock_rag.return_value = {"success": True, "answer": "synthesized response"}
+        body = json.dumps({"query": "Kelly criterion"}).encode()
+        req = urllib.request.Request(
+            f"http://localhost:{self.port}/search",
+            data=body, headers={"Content-Type": "application/json"},
+        )
+        resp = urllib.request.urlopen(req)
+        data = json.loads(resp.read())
+        assert data["success"] is True
+        assert "answer" in data
+        assert "context" not in data
+        assert data.get("context_only") is False
+        mock_rag.assert_called_once_with("Kelly criterion", "hybrid", context_only=False)
+
+    @patch("services.orchestrator.main._query_rag")
+    def test_search_context_only_true(self, mock_rag):
+        mock_rag.return_value = {"success": True, "context": "raw chunk data here"}
+        body = json.dumps({"query": "volatility model", "context_only": True}).encode()
+        req = urllib.request.Request(
+            f"http://localhost:{self.port}/search",
+            data=body, headers={"Content-Type": "application/json"},
+        )
+        resp = urllib.request.urlopen(req)
+        data = json.loads(resp.read())
+        assert data["success"] is True
+        assert data["context_only"] is True
+        assert "context" in data
+        assert "answer" not in data
+        assert data["context"] == "raw chunk data here"
+        mock_rag.assert_called_once_with("volatility model", "hybrid", context_only=True)
+
+    @patch("services.orchestrator.main._query_rag")
+    def test_search_context_only_with_mode(self, mock_rag):
+        mock_rag.return_value = {"success": True, "context": "local chunks"}
+        body = json.dumps({"query": "test", "mode": "local", "context_only": True}).encode()
+        req = urllib.request.Request(
+            f"http://localhost:{self.port}/search",
+            data=body, headers={"Content-Type": "application/json"},
+        )
+        resp = urllib.request.urlopen(req)
+        data = json.loads(resp.read())
+        assert data["mode"] == "local"
+        assert data["context_only"] is True
+        mock_rag.assert_called_once_with("test", "local", context_only=True)
+
+    @patch("services.orchestrator.main._query_rag")
+    def test_search_has_time_ms(self, mock_rag):
+        mock_rag.return_value = {"success": True, "context": "chunks"}
+        body = json.dumps({"query": "test", "context_only": True}).encode()
+        req = urllib.request.Request(
+            f"http://localhost:{self.port}/search",
+            data=body, headers={"Content-Type": "application/json"},
+        )
+        resp = urllib.request.urlopen(req)
+        data = json.loads(resp.read())
+        assert "time_ms" in data
+        assert isinstance(data["time_ms"], int)
+
+
+# ---------------------------------------------------------------------------
 # GET /runs and async POST /run tests
 # ---------------------------------------------------------------------------
 

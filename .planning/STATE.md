@@ -9,10 +9,10 @@ See: .planning/PROJECT.md (updated 2026-02-15)
 
 ## Current Position
 
-Phase: 38 of 42 (Branding & Naming)
-Plan: 38-01 complete
+Phase: 39 of 42 (RAGAnything context_only)
+Plan: 39-01 complete
 Status: Complete
-Last activity: 2026-02-19 — Phase 38 complete: renamed to PePeRS, 19 files updated, 699 tests pass
+Last activity: 2026-02-19 — Phase 39 complete: context_only mode in RAG wrapper + orchestrator, 6 new tests, 705 total
 
 Progress: 11/11 milestones shipped (v1.0-v11.0), v12.0 in progress
 

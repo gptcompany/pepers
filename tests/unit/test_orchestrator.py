@@ -452,6 +452,39 @@ class TestQueryRag:
         with pytest.raises(ConnectionError):
             _query_rag("test", "hybrid")
 
+    @patch("services.orchestrator.main.urllib.request.urlopen")
+    def test_context_only_sends_param(self, mock_urlopen):
+        import json
+        from services.orchestrator.main import _query_rag
+
+        mock_resp = MagicMock()
+        mock_resp.read.return_value = b'{"success": true, "context": "raw chunks"}'
+        mock_urlopen.return_value = mock_resp
+
+        result = _query_rag("test query", "hybrid", context_only=True)
+
+        call_args = mock_urlopen.call_args
+        req = call_args[0][0]
+        body = json.loads(req.data.decode())
+        assert body["context_only"] is True
+        assert result["context"] == "raw chunks"
+
+    @patch("services.orchestrator.main.urllib.request.urlopen")
+    def test_context_only_false_by_default(self, mock_urlopen):
+        import json
+        from services.orchestrator.main import _query_rag
+
+        mock_resp = MagicMock()
+        mock_resp.read.return_value = b'{"success": true, "answer": "synthesized"}'
+        mock_urlopen.return_value = mock_resp
+
+        _query_rag("test query", "hybrid")
+
+        call_args = mock_urlopen.call_args
+        req = call_args[0][0]
+        body = json.loads(req.data.decode())
+        assert body["context_only"] is False
+
 
 # ---------------------------------------------------------------------------
 # OrchestratorHandler._search_fallback

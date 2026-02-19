@@ -48,9 +48,11 @@ _RAG_URL = os.environ.get("RP_RAG_QUERY_URL", "http://localhost:8767")
 _RAG_QUERY_TIMEOUT = int(os.environ.get("RP_RAG_QUERY_TIMEOUT", "30"))
 
 
-def _query_rag(query: str, mode: str = "hybrid") -> dict:
-    """Query RAGAnything knowledge graph. Returns dict with answer."""
-    payload = json.dumps({"query": query, "mode": mode}).encode()
+def _query_rag(query: str, mode: str = "hybrid", context_only: bool = False) -> dict:
+    """Query RAGAnything knowledge graph. Returns dict with answer or context."""
+    payload = json.dumps({
+        "query": query, "mode": mode, "context_only": context_only,
+    }).encode()
     req = urllib.request.Request(
         f"{_RAG_URL}/query",
         data=payload,
@@ -418,10 +420,12 @@ class OrchestratorHandler(BaseHandler):
         Request body:
             {
                 "query": "Kelly criterion stochastic volatility",
-                "mode": "hybrid"
+                "mode": "hybrid",
+                "context_only": false
             }
 
         Mode options: hybrid, local, global, mix, naive, bypass.
+        context_only: if true, returns raw context chunks without LLM synthesis (fast, <2s).
         Falls back to SQLite substring match if RAGAnything is unavailable.
         """
         query = data.get("query", "").strip()
@@ -432,23 +436,29 @@ class OrchestratorHandler(BaseHandler):
             return None
 
         mode = data.get("mode", "hybrid")
+        context_only = data.get("context_only", False)
         start = time.time()
 
         try:
-            rag_result = _query_rag(query, mode)
+            rag_result = _query_rag(query, mode, context_only=context_only)
         except Exception as e:
             logger.warning("RAG query failed, falling back to SQLite: %s", e)
             return self._search_fallback(query)
 
         elapsed_ms = int((time.time() - start) * 1000)
 
-        return {
+        result = {
             "success": rag_result.get("success", False),
             "query": query,
             "mode": mode,
-            "answer": rag_result.get("answer", ""),
+            "context_only": context_only,
             "time_ms": elapsed_ms,
         }
+        if context_only:
+            result["context"] = rag_result.get("context", "")
+        else:
+            result["answer"] = rag_result.get("answer", "")
+        return result
 
     def _search_fallback(self, query: str) -> dict:
         """Fallback: substring match on title/abstract in SQLite."""
