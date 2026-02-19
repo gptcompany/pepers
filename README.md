@@ -1,0 +1,174 @@
+```
+    ____  ___  ____  ___  ____  ____
+   / __ \/ _ \/ __ \/ _ \/ __ \/ __/
+  / /_/ /  __/ /_/ /  __/ /_/ /\ \
+ / .___/\___/ .___/\___/ _, _/___/
+/_/        /_/        /_/ |_|
+```
+
+# PePeRS
+
+**Paper Extraction, Processing, Evaluation, Retrieval & Synthesis**
+
+6 Python microservices that discover academic papers, extract LaTeX formulas, validate math with CAS engines, and generate production code. No frameworks, no hallucinations — every formula is algebraically verified.
+
+---
+
+## What It Does
+
+```
+arXiv/OpenAlex  -->  LLM Analysis  -->  PDF Extraction  -->  CAS Validation  -->  Code Generation
+  (Discovery)       (Analyzer)         (Extractor)         (Validator)          (Codegen)
+     :8770             :8771              :8772               :8773               :8774
+                                                                                    |
+                                    Orchestrator (:8775) coordinates all stages     |
+                                    Async HTTP API + cron scheduling                |
+                                                                                    v
+                                                                          Python / C99 / Rust
+```
+
+**Pipeline flow**: Paper discovery -> LLM relevance scoring -> PDF formula extraction -> Multi-CAS validation (SymPy + Maxima + MATLAB consensus) -> Code generation with batch LLM explanations.
+
+## Features
+
+| Feature | What It Does |
+|---------|-------------|
+| **Multi-source Discovery** | arXiv API + Semantic Scholar + CrossRef enrichment |
+| **LLM Analysis** | 5-criteria relevance scoring with configurable fallback chain (Gemini, Claude, Codex, OpenRouter, Ollama) |
+| **Formula Extraction** | PDF -> RAGAnything text -> 5-pass LaTeX regex with complexity filtering |
+| **CAS Validation** | Multi-engine consensus: SymPy + Maxima + MATLAB. Both must agree = VALID |
+| **Code Generation** | SymPy `codegen()` for C99/Rust/Python + batch LLM explanations |
+| **GitHub Discovery** | Search GitHub for paper implementations, analyze with Gemini |
+| **Async Pipeline** | `POST /run` returns HTTP 202, poll `GET /runs` for progress |
+| **RAG Search** | Semantic search over processed papers via RAGAnything knowledge graph |
+| **Notifications** | Apprise (90+ targets): Discord, Slack, Telegram, email, etc. |
+| **Deterministic LLM** | `temperature=0`, `seed=42` on all configurable providers |
+
+## Quick Start
+
+```bash
+# Install dependencies
+uv sync --all-extras
+
+# Initialize database
+python3 -c "from shared.db import init_db; init_db('data/research.db')"
+
+# Run all services (Docker)
+docker compose up -d
+
+# Or run individually (systemd)
+sudo systemctl start rp-pipeline.target
+
+# Trigger a pipeline run
+curl -X POST http://localhost:8775/run \
+  -H "Content-Type: application/json" \
+  -d '{"query": "abs:\"Kelly criterion\" AND cat:q-fin.*"}'
+# Returns HTTP 202 with run_id
+
+# Check progress
+curl http://localhost:8775/runs?id=<run_id>
+
+# Search papers (RAG semantic search)
+curl -X POST http://localhost:8775/search \
+  -H "Content-Type: application/json" \
+  -d '{"query": "optimal portfolio allocation"}'
+```
+
+## Architecture
+
+```
+pepers/
+├── shared/              # Common library (db, models, server, config, llm)
+│   ├── db.py            # SQLite WAL + migrations (schema v4)
+│   ├── models.py        # 13 Pydantic models
+│   ├── server.py        # Base HTTP server + @route decorator
+│   ├── config.py        # RP_ env var loader
+│   ├── llm.py           # Multi-provider LLM (6 providers + fallback chain)
+│   └── cli_providers.json
+├── services/
+│   ├── discovery/       # arXiv + S2 + CrossRef (:8770)
+│   ├── analyzer/        # LLM scoring (:8771)
+│   ├── extractor/       # PDF + LaTeX (:8772)
+│   ├── validator/       # CAS consensus (:8773)
+│   ├── codegen/         # Code gen + batch explain (:8774)
+│   └── orchestrator/    # Pipeline + API + cron (:8775)
+├── tests/               # 728+ tests (unit, integration, e2e)
+├── deploy/              # 6 systemd .service + .target
+├── docker-compose.yml   # All services, host networking
+└── Dockerfile           # Multi-stage build
+```
+
+## Configuration
+
+All config via environment variables with `RP_` prefix:
+
+| Variable | Default | Description |
+|----------|---------|-------------|
+| `RP_DB_PATH` | `data/research.db` | SQLite database path |
+| `RP_LOG_LEVEL` | `INFO` | Logging level |
+| `RP_LLM_FALLBACK_ORDER` | `gemini_cli,codex_cli,...` | LLM provider priority |
+| `RP_LLM_TEMPERATURE` | `0.0` | LLM temperature (determinism) |
+| `RP_NOTIFY_URLS` | — | Apprise notification URLs (CSV) |
+| `RP_ORCHESTRATOR_CRON` | `0 8 * * *` | Daily pipeline schedule |
+| `RP_DISCOVERY_SOURCES` | `arxiv` | Paper sources (future: openalex) |
+
+See [docs/RUNBOOK.md](docs/RUNBOOK.md) for full configuration reference.
+
+## API Endpoints
+
+### Orchestrator (:8775)
+
+| Method | Endpoint | Description |
+|--------|----------|-------------|
+| `POST /run` | Trigger async pipeline (HTTP 202) |
+| `GET /runs` | List/poll pipeline runs |
+| `POST /search` | RAG semantic search |
+| `GET /papers` | List papers by stage |
+| `GET /formulas` | List formulas by paper |
+| `GET /generated-code` | Get generated code |
+| `POST /search-github` | Search GitHub for implementations |
+| `GET /github-repos` | List discovered repos |
+
+### All Services
+
+| Method | Endpoint | Description |
+|--------|----------|-------------|
+| `GET /health` | Health check (DB status, schema version) |
+| `GET /status` | Service status + uptime |
+| `POST /process` | Process papers/formulas |
+
+## Tech Stack
+
+- **Python 3.11+** — stdlib-first (`http.server`, `sqlite3`, `logging`)
+- **SQLite WAL** — shared database, schema v4, 7 tables
+- **Pydantic v2** — 13 data models with validation
+- **SymPy** — CAS engine + C99/Rust/Python codegen
+- **Apprise** — 90+ notification targets
+- **Docker Compose** — host networking, health checks
+
+No web frameworks. No ORMs. No message queues.
+
+## Stats
+
+- **13,000+ LOC** Python across 6 services + shared library
+- **728+ tests** (unit, integration, e2e) — all passing
+- **11 milestones** shipped (v1.0-v11.0)
+- **6 LLM providers** with configurable fallback chain
+- **3 CAS engines** for mathematical consensus
+- **3 codegen languages** (Python, C99, Rust)
+
+## External Dependencies
+
+| Service | Port | Required |
+|---------|------|----------|
+| RAGAnything | 8767 | For PDF extraction + semantic search |
+| CAS Microservice | 8769 | For formula validation (SymPy + Maxima + MATLAB) |
+| Ollama | 11434 | For local LLM (optional, fallback chain) |
+
+## License
+
+Internal project.
+
+---
+
+**Docs**: [Architecture](docs/ARCHITECTURE.md) | [Runbook](docs/RUNBOOK.md)

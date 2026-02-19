@@ -1,10 +1,10 @@
-# Research Pipeline Architecture
+# PePeRS Architecture
 
 > **Note**: Canonical architecture source. Auto-updated by architecture-validator.
 
 ## Overview
 
-Research Pipeline is a set of 5 standalone Python microservices plus 1 orchestrator that replaces the failed N8N W1-W5 academic paper processing pipeline. It discovers Kelly criterion papers from arXiv, enriches them with citation data, analyzes relevance with a local LLM, extracts LaTeX formulas, validates formulas against multiple Computer Algebra Systems, and generates production Python/Rust code. All services share a common library (`shared/`) and communicate via HTTP JSON. The system is managed by systemd and monitored by an existing Prometheus + Grafana + Loki stack.
+PePeRS (Paper Extraction, Processing, Evaluation, Retrieval & Synthesis) is a set of 5 standalone Python microservices plus 1 orchestrator that replaces the failed N8N W1-W5 academic paper processing pipeline. It discovers academic papers from arXiv, enriches them with citation data, analyzes relevance with LLM providers, extracts LaTeX formulas, validates formulas against multiple Computer Algebra Systems, and generates production Python/Rust code. All services share a common library (`shared/`) and communicate via HTTP JSON. The system is managed by systemd and monitored by an existing Prometheus + Grafana + Loki stack.
 
 The project originated after N8N crashed in January 2026 and the restored 17 workflows had never successfully processed a single paper end-to-end (all tables empty, 0 executions). Rather than fix N8N, the pipeline is being rebuilt as independent, replaceable microservices.
 
@@ -27,7 +27,7 @@ The project originated after N8N crashed in January 2026 and the restored 17 wor
 ## Project Structure
 
 ```
-research-pipeline/
+pepers/
 ├── shared/                     # Shared library (all services import from here)
 │   ├── __init__.py             # Package metadata, convenience imports
 │   ├── db.py                   # SQLite connection management (WAL mode)
@@ -71,7 +71,7 @@ research-pipeline/
 ### Component: Shared Library (`shared/`)
 
 **Purpose**: Common infrastructure for all 6 microservices. Eliminates duplication and enforces consistent patterns across the pipeline.
-**Location**: `/media/sam/1TB/research-pipeline/shared/`
+**Location**: `/media/sam/1TB/pepers/shared/`
 **LOC**: 816 lines across 5 files
 
 #### `shared/db.py` -- SQLite Database Layer (170 LOC)
@@ -175,7 +175,7 @@ service.run()
 ```
 RP_DISCOVERY_PORT=8770
 RP_ANALYZER_PORT=8771
-RP_DB_PATH=/media/sam/1TB/research-pipeline/data/research.db
+RP_DB_PATH=/media/sam/1TB/pepers/data/research.db
 RP_LOG_LEVEL=INFO
 ```
 
@@ -184,7 +184,7 @@ RP_LOG_LEVEL=INFO
 ### Component: Services
 
 **Purpose**: Individual microservices that implement the paper processing pipeline.
-**Location**: `/media/sam/1TB/research-pipeline/services/`
+**Location**: `/media/sam/1TB/pepers/services/`
 **Status**: All 6 services implemented and running in production.
 
 | Service | Port | Purpose | External Dependencies |
@@ -224,7 +224,7 @@ LaTeX→code conversion uses 5 cumulative layers to maximize success rate:
 ### Component: Test Suite (`tests/`)
 
 **Purpose**: Validates all services with unit, integration, e2e, and smoke tests.
-**Location**: `/media/sam/1TB/research-pipeline/tests/`
+**Location**: `/media/sam/1TB/pepers/tests/`
 **Results**: 685+ tests pass, 0 failures
 
 **Structure**:
@@ -300,7 +300,7 @@ Returns 200 always (if service is running). Used by Prometheus and Grafana.
 {
   "service": "discovery",
   "version": "0.1.0",
-  "db_path": "/media/sam/1TB/research-pipeline/data/research.db",
+  "db_path": "/media/sam/1TB/pepers/data/research.db",
   "uptime_seconds": 3600.5
 }
 ```

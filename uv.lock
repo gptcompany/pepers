@@ -1051,6 +1051,44 @@ wheels = [
 ]
 
 [[package]]
+name = "pepers"
+version = "0.1.0"
+source = { virtual = "." }
+dependencies = [
+    { name = "antlr4-python3-runtime" },
+    { name = "apprise" },
+    { name = "apscheduler" },
+    { name = "arxiv" },
+    { name = "google-genai" },
+    { name = "pydantic" },
+    { name = "requests" },
+    { name = "sympy" },
+]
+
+[package.optional-dependencies]
+dev = [
+    { name = "pytest" },
+    { name = "pytest-asyncio" },
+    { name = "pytest-cov" },
+]
+
+[package.metadata]
+requires-dist = [
+    { name = "antlr4-python3-runtime", specifier = "==4.11" },
+    { name = "apprise", specifier = ">=1.9.7" },
+    { name = "apscheduler", specifier = ">=3.10" },
+    { name = "arxiv", specifier = ">=2.4.0" },
+    { name = "google-genai", specifier = ">=1.0" },
+    { name = "pydantic", specifier = ">=2.0" },
+    { name = "pytest", marker = "extra == 'dev'", specifier = ">=8.0" },
+    { name = "pytest-asyncio", marker = "extra == 'dev'", specifier = ">=0.23" },
+    { name = "pytest-cov", marker = "extra == 'dev'", specifier = ">=5.0" },
+    { name = "requests", specifier = ">=2.28" },
+    { name = "sympy", specifier = ">=1.12" },
+]
+provides-extras = ["dev"]
+
+[[package]]
 name = "pluggy"
 version = "1.6.0"
 source = { registry = "https://pypi.org/simple" }
@@ -1482,44 +1520,6 @@ sdist = { url = "https://files.pythonhosted.org/packages/42/f2/05f29bc3913aea15e
 wheels = [
     { url = "https://files.pythonhosted.org/packages/3b/5d/63d4ae3b9daea098d5d6f5da83984853c1bbacd5dc826764b249fe119d24/requests_oauthlib-2.0.0-py2.py3-none-any.whl", hash = "sha256:7dd8a5c40426b779b0868c404bdef9768deccf22749cde15852df527e6269b36", size = 24179, upload-time = "2024-03-22T20:32:28.055Z" },
 ]
-
-[[package]]
-name = "research-pipeline"
-version = "0.1.0"
-source = { virtual = "." }
-dependencies = [
-    { name = "antlr4-python3-runtime" },
-    { name = "apprise" },
-    { name = "apscheduler" },
-    { name = "arxiv" },
-    { name = "google-genai" },
-    { name = "pydantic" },
-    { name = "requests" },
-    { name = "sympy" },
-]
-
-[package.optional-dependencies]
-dev = [
-    { name = "pytest" },
-    { name = "pytest-asyncio" },
-    { name = "pytest-cov" },
-]
-
-[package.metadata]
-requires-dist = [
-    { name = "antlr4-python3-runtime", specifier = "==4.11" },
-    { name = "apprise", specifier = ">=1.9.7" },
-    { name = "apscheduler", specifier = ">=3.10" },
-    { name = "arxiv", specifier = ">=2.4.0" },
-    { name = "google-genai", specifier = ">=1.0" },
-    { name = "pydantic", specifier = ">=2.0" },
-    { name = "pytest", marker = "extra == 'dev'", specifier = ">=8.0" },
-    { name = "pytest-asyncio", marker = "extra == 'dev'", specifier = ">=0.23" },
-    { name = "pytest-cov", marker = "extra == 'dev'", specifier = ">=5.0" },
-    { name = "requests", specifier = ">=2.28" },
-    { name = "sympy", specifier = ">=1.12" },
-]
-provides-extras = ["dev"]
 
 [[package]]
 name = "rsa"

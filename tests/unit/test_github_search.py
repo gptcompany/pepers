@@ -390,7 +390,7 @@ class TestCloneAndCleanup:
     def test_cleanup_only_removes_temp_dirs(self):
         # Create a dir outside tempdir to verify cleanup_clone won't remove it
         import shutil
-        non_temp = Path("/media/sam/1TB/research-pipeline/.pytest_cleanup_test")
+        non_temp = Path(__file__).resolve().parent.parent.parent / ".pytest_cleanup_test"
         non_temp.mkdir(exist_ok=True)
         fake_repo = non_temp / "repo"
         fake_repo.mkdir(exist_ok=True)

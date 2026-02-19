@@ -1,4 +1,4 @@
-name: research-pipeline
+name: pepers
 
 services:
   discovery:
@@ -72,7 +72,7 @@ services:
       - RP_DB_PATH=/data/research.db
       - RP_EXTRACTOR_MAX_PAPERS=10
       - RP_EXTRACTOR_PDF_DIR=/data/pdfs
-      - RP_EXTRACTOR_PDF_HOST_DIR=/media/sam/1TB/research-pipeline/data/pdfs
+      - RP_EXTRACTOR_PDF_HOST_DIR=/media/sam/1TB/pepers/data/pdfs
       - RP_EXTRACTOR_RAG_URL=http://localhost:8767
       - RP_LOG_LEVEL=INFO
     env_file: .env

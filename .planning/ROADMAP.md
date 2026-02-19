@@ -21,6 +21,7 @@ None
 - [✅ v9.0 Pipeline Hardening — Post-E2E Fixes](milestones/v9.0-ROADMAP.md) (Phases 28-30) — SHIPPED 2026-02-16
 - [✅ v10.0 Production Hardening](milestones/v10.0-ROADMAP.md) (Phases 32-34) — SHIPPED 2026-02-17
 - [✅ v11.0 CLI Providers + Batch Explain + API + Async](milestones/v11.0-ROADMAP.md) (Phases 35-37) — SHIPPED 2026-02-18
+- [🔄 v12.0 Distribution & Branding](milestones/v12.0-ROADMAP.md) (Phases 38-42) — IN PROGRESS
 
 ## Phases
 
@@ -176,6 +177,14 @@ Plans:
 - [x] **Phase 36: GET /generated-code + Async /run** (1/1 plans) — completed 2026-02-18
 - [x] **Phase 37: E2E Testing + Documentation** (1/1 plans) — completed 2026-02-18
 
+### 🔄 v12.0 Distribution & Branding (Phases 38-42) — IN PROGRESS
+
+- [x] **Phase 38: Branding & Naming** (1/1 plans) — completed 2026-02-19
+- [ ] **Phase 39: RAGAnything context_only** (0/1 plans)
+- [ ] **Phase 40: MCP Server SSE** (0/1 plans)
+- [ ] **Phase 41: One-Click Install** (0/1 plans)
+- [ ] **Phase 42: Multi-Source Discovery (OpenAlex)** (0/1 plans)
+
 ## Progress
 
 | Phase | Milestone | Plans Complete | Status | Completed |
@@ -217,3 +226,8 @@ Plans:
 | 35. CLI Providers + Batch Explain | v11.0 | 1/1 | Complete | 2026-02-18 |
 | 36. GET /generated-code + Async /run | v11.0 | 1/1 | Complete | 2026-02-18 |
 | 37. E2E Testing + Documentation | v11.0 | 1/1 | Complete | 2026-02-18 |
+| 38. Branding & Naming | v12.0 | 0/1 | Not started | — |
+| 39. RAGAnything context_only | v12.0 | 0/1 | Not started | — |
+| 40. MCP Server SSE | v12.0 | 0/1 | Not started | — |
+| 41. One-Click Install | v12.0 | 0/1 | Not started | — |
+| 42. Multi-Source Discovery (OpenAlex) | v12.0 | 0/1 | Not started | — |

@@ -1,20 +1,20 @@
-# State: Research Pipeline
+# State: PePeRS
 
 ## Project Reference
 
 See: .planning/PROJECT.md (updated 2026-02-15)
 
 **Core value:** Reliable, N8N-free academic paper processing pipeline
-**Current focus:** All 11 milestones shipped — production-ready with full documentation
+**Current focus:** v12.0 Distribution & Branding — naming, MCP Server, packaging, OpenAlex
 
 ## Current Position
 
-Phase: 37 of 37 (E2E Testing + Documentation)
-Plan: 37-01 complete (all tasks done)
+Phase: 38 of 42 (Branding & Naming)
+Plan: 38-01 complete
 Status: Complete
-Last activity: 2026-02-18 — Phase 37 complete: 12 new E2E tests, ARCHITECTURE.md + RUNBOOK.md updated, RP_LLM_FALLBACK_ORDER configured
+Last activity: 2026-02-19 — Phase 38 complete: renamed to PePeRS, 19 files updated, 699 tests pass
 
-Progress: 11/11 milestones shipped (v1.0-v11.0)
+Progress: 11/11 milestones shipped (v1.0-v11.0), v12.0 in progress
 
 ## Shipped Milestones
 

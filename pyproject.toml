@@ -1,7 +1,7 @@
 [project]
-name = "research-pipeline"
+name = "pepers"
 version = "0.1.0"
-description = "Academic paper processing pipeline — microservices for discovery, analysis, extraction, validation, and code generation."
+description = "PePeRS — Paper Extraction, Processing, Evaluation, Retrieval & Synthesis. Microservices for academic paper discovery, LLM analysis, formula extraction, CAS validation, and code generation."
 requires-python = ">=3.10"
 dependencies = [
     "pydantic>=2.0",

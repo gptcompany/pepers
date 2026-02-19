@@ -1,4 +1,4 @@
-"""Configuration management for research pipeline services.
+"""Configuration management for PePeRS services.
 
 Loads configuration from environment variables with dotenvx integration.
 Each service has a standard set of config fields plus service-specific ones.
@@ -6,7 +6,7 @@ Each service has a standard set of config fields plus service-specific ones.
 Env var naming convention: RP_{SERVICE}_{FIELD}
 - RP_DISCOVERY_PORT=8770
 - RP_ANALYZER_PORT=8771
-- RP_DB_PATH=/media/sam/1TB/research-pipeline/data/research.db
+- RP_DB_PATH=/media/sam/1TB/pepers/data/research.db
 - RP_LOG_LEVEL=INFO
 
 Usage:
@@ -14,7 +14,7 @@ Usage:
 
     config = load_config("discovery")
     print(config.port)      # 8770
-    print(config.db_path)   # /media/sam/1TB/research-pipeline/data/research.db
+    print(config.db_path)   # /media/sam/1TB/pepers/data/research.db
     print(config.log_level) # INFO
 
 Design decisions:

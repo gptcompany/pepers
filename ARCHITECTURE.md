@@ -1,11 +1,11 @@
-# Research Pipeline Architecture
+# PePeRS Architecture
 
 > **Note**: Canonical architecture source. Auto-updated by architecture-validator.
 > **Full documentation**: [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md)
 
 ## Overview
 
-Research Pipeline is a set of 5 standalone Python microservices plus 1 orchestrator that replaces the failed N8N W1-W5 academic paper processing pipeline. It discovers Kelly criterion papers from arXiv, enriches them with citation data, analyzes relevance with LLM providers (Gemini, OpenRouter, Ollama), extracts LaTeX formulas, validates formulas against multiple Computer Algebra Systems, and generates production Python/Rust code. All services share a common library (`shared/`) and communicate via HTTP JSON. The system is managed by systemd and monitored by an existing Prometheus + Grafana + Loki stack.
+PePeRS (Paper Extraction, Processing, Evaluation, Retrieval & Synthesis) is a set of 5 standalone Python microservices plus 1 orchestrator that replaces the failed N8N W1-W5 academic paper processing pipeline. It discovers Kelly criterion papers from arXiv, enriches them with citation data, analyzes relevance with LLM providers (Gemini, OpenRouter, Ollama), extracts LaTeX formulas, validates formulas against multiple Computer Algebra Systems, and generates production Python/Rust code. All services share a common library (`shared/`) and communicate via HTTP JSON. The system is managed by systemd and monitored by an existing Prometheus + Grafana + Loki stack.
 
 ## Tech Stack
 
@@ -26,7 +26,7 @@ Research Pipeline is a set of 5 standalone Python microservices plus 1 orchestra
 ## Project Structure
 
 ```
-research-pipeline/
+pepers/
 ├── shared/                     # Shared library (all services import from here)
 │   ├── __init__.py             # Package metadata (0.1.0)
 │   ├── db.py                   # SQLite + WAL + migrations v4 (279 LOC)

@@ -1,4 +1,4 @@
-# Research Pipeline -- Operational Runbook
+# PePeRS -- Operational Runbook
 
 Production operations guide for the 6-service research paper processing pipeline.
 
@@ -66,14 +66,14 @@ sudo systemctl start rp-orchestrator
 **Option B: Docker Compose**
 
 ```bash
-cd /media/sam/1TB/research-pipeline
+cd /media/sam/1TB/pepers
 docker compose up -d
 ```
 
 **Option C: Manual (development)**
 
 ```bash
-cd /media/sam/1TB/research-pipeline
+cd /media/sam/1TB/pepers
 python -m services.discovery.main &
 python -m services.analyzer.main &
 python -m services.extractor.main &

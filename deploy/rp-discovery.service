@@ -1,14 +1,14 @@
 [Unit]
-Description=Research Pipeline - Discovery Service
+Description=PePeRS - Discovery Service
 After=network.target
 PartOf=rp-pipeline.target
 
 [Service]
 Type=simple
-WorkingDirectory=/media/sam/1TB/research-pipeline
+WorkingDirectory=/media/sam/1TB/pepers
 Environment=RP_DB_PATH=data/research.db
 Environment=RP_DISCOVERY_PORT=8770
-ExecStart=/media/sam/1TB/research-pipeline/.venv/bin/python -m services.discovery.main
+ExecStart=/media/sam/1TB/pepers/.venv/bin/python -m services.discovery.main
 Restart=always
 RestartSec=5
 WatchdogSec=60
@@ -16,7 +16,7 @@ WatchdogSec=60
 PrivateTmp=true
 NoNewPrivileges=true
 ProtectSystem=strict
-ReadWritePaths=/media/sam/1TB/research-pipeline/data
+ReadWritePaths=/media/sam/1TB/pepers/data
 
 [Install]
 WantedBy=rp-pipeline.target

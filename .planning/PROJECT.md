@@ -1,4 +1,4 @@
-# Research Pipeline
+# PePeRS (Paper Extraction, Processing, Evaluation, Retrieval & Synthesis)
 
 ## What This Is
 

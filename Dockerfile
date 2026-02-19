@@ -1,8 +1,8 @@
-# Multi-stage build for research-pipeline services.
+# Multi-stage build for PePeRS services.
 # Each service shares the same image, selected via SERVICE build arg.
 #
 # Build: docker compose build
-# Or single: docker build --build-arg SERVICE=orchestrator -t rp-orchestrator .
+# Or single: docker build --build-arg SERVICE=orchestrator -t pepers-orchestrator .
 
 # Stage 1: Builder — install dependencies
 FROM python:3.12-slim AS builder
