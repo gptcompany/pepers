@@ -44,11 +44,14 @@ pepers/
 │   │   ├── main.py             # Service entry + endpoints (339 LOC)
 │   │   ├── generators.py       # SymPy-based Python/Rust codegen (222 LOC)
 │   │   └── explain.py          # LLM formula explanations + batch explain (206 LOC)
-│   └── orchestrator/           # Pipeline coordination
-│       ├── main.py             # HTTP endpoints + async /run (534 LOC)
-│       ├── pipeline.py         # Stage dispatch + retry + run persistence (533 LOC)
-│       └── notifications.py    # Apprise multi-target notifications (68 LOC)
-├── tests/                      # 700+ tests
+│   ├── orchestrator/           # Pipeline coordination
+│   │   ├── main.py             # HTTP endpoints + async /run (534 LOC)
+│   │   ├── pipeline.py         # Stage dispatch + retry + run persistence (533 LOC)
+│   │   └── notifications.py    # Apprise multi-target notifications (68 LOC)
+│   └── mcp/                    # MCP Server (SSE transport)
+│       ├── server.py           # FastMCP server + 8 tools + arcade flavor (~260 LOC)
+│       └── __main__.py         # Entry point: python -m services.mcp
+├── tests/                      # 745+ tests
 │   ├── conftest.py             # Shared fixtures
 │   ├── unit/                   # 460+ unit tests
 │   ├── integration/            # 185+ integration tests
@@ -57,7 +60,7 @@ pepers/
 ├── scripts/                    # CLI tools
 │   └── smoke_test.py           # E2E smoke test CLI (452 LOC)
 ├── deploy/                     # Deployment artifacts
-│   ├── *.service               # 6 systemd service units
+│   ├── *.service               # 7 systemd service units (6 pipeline + MCP)
 │   └── rp-pipeline.target      # systemd target for all services
 ├── data/                       # Runtime data (gitignored)
 │   └── research.db             # SQLite database
@@ -119,6 +122,7 @@ from shared.llm import fallback_chain, call_gemini_cli, call_openrouter, call_ol
 | Validator | 8773 | 339 | Multi-CAS formula validation with consensus | CAS (:8769), SymPy |
 | Codegen | 8774 | 339+311 | Python (SymPy) + Rust code gen + batch LLM explanations | LLM (Ollama/Gemini) |
 | Orchestrator | 8775 | 534+533 | Async pipeline runs, GET /generated-code, GET /runs, semantic search, retry, batch | All above + RAGAnything query + Apprise notifications |
+| MCP Server | 8776 | ~260 | MCP SSE interface — 8 tools wrapping orchestrator API for Claude Desktop/Cursor | MCP SDK, Orchestrator (:8775) |
 
 ### Component: LLM Providers (`shared/llm.py` + `shared/cli_providers.json`)
 

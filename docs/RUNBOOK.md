@@ -1,6 +1,6 @@
 # PePeRS -- Operational Runbook
 
-Production operations guide for the 6-service research paper processing pipeline.
+Production operations guide for the 7-service research paper processing pipeline.
 
 ## 1. Service Overview
 
@@ -12,6 +12,7 @@ Production operations guide for the 6-service research paper processing pipeline
 | validator | 8773 | CAS mathematical validation (multi-engine consensus) | CAS engine (:8769), SymPy |
 | codegen | 8774 | 5-layer LaTeX→code (C99/Rust/Python) + batch LLM explain | LLM fallback chain, SymPy |
 | orchestrator | 8775 | Pipeline coordination, batch iteration, status API | All above services |
+| mcp | 8776 | MCP Server (SSE) — 8 tools for Claude Desktop/Cursor | Orchestrator (:8775) |
 
 **Database**: SQLite (WAL mode), schema v4, shared across all services.
 
@@ -129,6 +130,37 @@ Response includes `all_healthy: true/false` and per-service status.
 
 ```bash
 curl -s http://localhost:8775/status | python3 -m json.tool
+```
+
+### MCP Server
+
+The MCP server (port 8776) uses SSE transport and requires the orchestrator to be running.
+
+**Verify MCP is running:**
+
+```bash
+curl -sf http://localhost:8776/sse -m 2 -o /dev/null && echo "MCP UP" || echo "MCP DOWN"
+```
+
+**MCP tools available:**
+
+| Tool | Description |
+|------|-------------|
+| `search_papers` | RAG semantic search (context_only mode available) |
+| `list_papers` | List papers by pipeline stage |
+| `get_paper` | Get paper details with formulas |
+| `get_formulas` | Get formulas for a paper |
+| `run_pipeline` | Trigger async pipeline run |
+| `get_run_status` | Poll pipeline run status |
+| `search_github` | Search GitHub implementations |
+| `get_generated_code` | Get generated code artifacts |
+
+**Arcade flavor**: Set `RP_MCP_FLAVOR=plain` to disable gaming-themed output messages.
+
+**Start manually:**
+
+```bash
+RP_MCP_PORT=8776 RP_MCP_FLAVOR=arcade python -m services.mcp
 ```
 
 ## 5. Common Failure Modes

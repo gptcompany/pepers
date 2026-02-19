@@ -181,7 +181,7 @@ Plans:
 
 - [x] **Phase 38: Branding & Naming** (1/1 plans) — completed 2026-02-19
 - [x] **Phase 39: RAGAnything context_only** (1/1 plans) — completed 2026-02-19
-- [ ] **Phase 40: MCP Server SSE** (0/1 plans)
+- [x] **Phase 40: MCP Server SSE** (1/1 plans) — completed 2026-02-19
 - [ ] **Phase 41: One-Click Install** (0/1 plans)
 - [ ] **Phase 42: Multi-Source Discovery (OpenAlex)** (0/1 plans)
 
@@ -228,6 +228,6 @@ Plans:
 | 37. E2E Testing + Documentation | v11.0 | 1/1 | Complete | 2026-02-18 |
 | 38. Branding & Naming | v12.0 | 1/1 | Complete | 2026-02-19 |
 | 39. RAGAnything context_only | v12.0 | 1/1 | Complete | 2026-02-19 |
-| 40. MCP Server SSE | v12.0 | 0/1 | Not started | — |
+| 40. MCP Server SSE | v12.0 | 1/1 | Complete | 2026-02-19 |
 | 41. One-Click Install | v12.0 | 0/1 | Not started | — |
 | 42. Multi-Source Discovery (OpenAlex) | v12.0 | 0/1 | Not started | — |

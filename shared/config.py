@@ -44,6 +44,7 @@ SERVICE_PORTS: dict[str, int] = {
     "validator": 8773,
     "codegen": 8774,
     "orchestrator": 8775,
+    "mcp": 8776,
 }
 
 

@@ -18,13 +18,13 @@ class TestConstants:
         assert "research.db" in str(DEFAULT_DB_PATH)
 
     def test_service_ports_all_present(self):
-        expected = ["discovery", "analyzer", "extractor", "validator", "codegen", "orchestrator"]
+        expected = ["discovery", "analyzer", "extractor", "validator", "codegen", "orchestrator", "mcp"]
         for svc in expected:
             assert svc in SERVICE_PORTS
 
     def test_service_ports_range(self):
         for port in SERVICE_PORTS.values():
-            assert 8770 <= port <= 8775
+            assert 8770 <= port <= 8776
 
     def test_service_ports_unique(self):
         ports = list(SERVICE_PORTS.values())

@@ -10,7 +10,7 @@
 
 **Paper Extraction, Processing, Evaluation, Retrieval & Synthesis**
 
-6 Python microservices that discover academic papers, extract LaTeX formulas, validate math with CAS engines, and generate production code. No frameworks, no hallucinations — every formula is algebraically verified.
+7 Python microservices that discover academic papers, extract LaTeX formulas, validate math with CAS engines, and generate production code. Includes an MCP Server for Claude Desktop/Cursor integration. No frameworks, no hallucinations — every formula is algebraically verified.
 
 ---
 
@@ -24,7 +24,8 @@ arXiv/OpenAlex  -->  LLM Analysis  -->  PDF Extraction  -->  CAS Validation  -->
                                     Orchestrator (:8775) coordinates all stages     |
                                     Async HTTP API + cron scheduling                |
                                                                                     v
-                                                                          Python / C99 / Rust
+                                    MCP Server (:8776) — SSE interface         Python / C99 / Rust
+                                    for Claude Desktop / Cursor
 ```
 
 **Pipeline flow**: Paper discovery -> LLM relevance scoring -> PDF formula extraction -> Multi-CAS validation (SymPy + Maxima + MATLAB consensus) -> Code generation with batch LLM explanations.
@@ -41,6 +42,7 @@ arXiv/OpenAlex  -->  LLM Analysis  -->  PDF Extraction  -->  CAS Validation  -->
 | **GitHub Discovery** | Search GitHub for paper implementations, analyze with Gemini |
 | **Async Pipeline** | `POST /run` returns HTTP 202, poll `GET /runs` for progress |
 | **RAG Search** | Semantic search over processed papers via RAGAnything knowledge graph |
+| **MCP Server** | SSE interface with 8 tools for Claude Desktop/Cursor. Arcade flavor output! |
 | **Notifications** | Apprise (90+ targets): Discord, Slack, Telegram, email, etc. |
 | **Deterministic LLM** | `temperature=0`, `seed=42` on all configurable providers |
 
@@ -91,9 +93,10 @@ pepers/
 │   ├── extractor/       # PDF + LaTeX (:8772)
 │   ├── validator/       # CAS consensus (:8773)
 │   ├── codegen/         # Code gen + batch explain (:8774)
-│   └── orchestrator/    # Pipeline + API + cron (:8775)
-├── tests/               # 728+ tests (unit, integration, e2e)
-├── deploy/              # 6 systemd .service + .target
+│   ├── orchestrator/    # Pipeline + API + cron (:8775)
+│   └── mcp/             # MCP Server SSE (:8776)
+├── tests/               # 745+ tests (unit, integration, e2e)
+├── deploy/              # 7 systemd .service + .target
 ├── docker-compose.yml   # All services, host networking
 └── Dockerfile           # Multi-stage build
 ```
@@ -111,6 +114,8 @@ All config via environment variables with `RP_` prefix:
 | `RP_NOTIFY_URLS` | — | Apprise notification URLs (CSV) |
 | `RP_ORCHESTRATOR_CRON` | `0 8 * * *` | Daily pipeline schedule |
 | `RP_DISCOVERY_SOURCES` | `arxiv` | Paper sources (future: openalex) |
+| `RP_MCP_PORT` | `8776` | MCP Server SSE port |
+| `RP_MCP_FLAVOR` | `arcade` | MCP output flavor: `arcade` or `plain` |
 
 See [docs/RUNBOOK.md](docs/RUNBOOK.md) for full configuration reference.
 
@@ -129,6 +134,21 @@ See [docs/RUNBOOK.md](docs/RUNBOOK.md) for full configuration reference.
 | `POST /search-github` | Search GitHub for implementations |
 | `GET /github-repos` | List discovered repos |
 
+### MCP Server (:8776)
+
+8 tools available via SSE transport for Claude Desktop, Cursor, and other MCP clients:
+
+| Tool | Description |
+|------|-------------|
+| `search_papers` | RAG semantic search (fast `context_only` mode available) |
+| `list_papers` | List papers by pipeline stage |
+| `get_paper` | Get paper details with formulas |
+| `get_formulas` | Get formulas for a paper |
+| `run_pipeline` | Trigger async pipeline run |
+| `get_run_status` | Poll pipeline run status |
+| `search_github` | Search GitHub implementations |
+| `get_generated_code` | Get generated code artifacts |
+
 ### All Services
 
 | Method | Endpoint | Description |
@@ -143,6 +163,7 @@ See [docs/RUNBOOK.md](docs/RUNBOOK.md) for full configuration reference.
 - **SQLite WAL** — shared database, schema v4, 7 tables
 - **Pydantic v2** — 13 data models with validation
 - **SymPy** — CAS engine + C99/Rust/Python codegen
+- **MCP SDK** — FastMCP with SSE transport for tool integration
 - **Apprise** — 90+ notification targets
 - **Docker Compose** — host networking, health checks
 
@@ -150,8 +171,8 @@ No web frameworks. No ORMs. No message queues.
 
 ## Stats
 
-- **13,000+ LOC** Python across 6 services + shared library
-- **728+ tests** (unit, integration, e2e) — all passing
+- **13,000+ LOC** Python across 7 services + shared library
+- **745+ tests** (unit, integration, e2e) — all passing
 - **11 milestones** shipped (v1.0-v11.0)
 - **6 LLM providers** with configurable fallback chain
 - **3 CAS engines** for mathematical consensus
