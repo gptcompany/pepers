@@ -9,10 +9,10 @@ See: .planning/PROJECT.md (updated 2026-02-15)
 
 ## Current Position
 
-Phase: 40 of 42 (MCP Server SSE)
-Plan: 40-01 complete
+Phase: 41 of 42 (One-Click Install)
+Plan: 41-01 complete
 Status: Complete
-Last activity: 2026-02-19 — Phase 40 complete: MCP Server SSE with 8 tools + arcade flavor, 40 new tests, 745 total
+Last activity: 2026-02-19 — Phase 41 complete: Docker compose + uv tool install + pepers-mcp CLI, 745 tests passing
 
 Progress: 11/11 milestones shipped (v1.0-v11.0), v12.0 in progress
 

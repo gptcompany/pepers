@@ -195,3 +195,32 @@ services:
       codegen:
         condition: service_healthy
         restart: true
+
+  mcp:
+    build:
+      context: .
+      dockerfile: Dockerfile
+      args:
+        SERVICE: mcp
+    network_mode: host
+    environment:
+      - RP_MCP_PORT=8776
+      - RP_ORCHESTRATOR_URL=http://localhost:8775
+      - RP_MCP_FLAVOR=arcade
+    env_file: .env
+    volumes:
+      - ./data:/data
+    user: "1000:1000"
+    restart: unless-stopped
+    command: ["python", "-m", "services.mcp"]
+    healthcheck:
+      test: ["CMD", "python", "-c",
+        "import urllib.request; urllib.request.urlopen('http://localhost:8776/sse')"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 15s
+    depends_on:
+      orchestrator:
+        condition: service_healthy
+        restart: true

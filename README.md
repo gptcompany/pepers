@@ -46,20 +46,44 @@ arXiv/OpenAlex  -->  LLM Analysis  -->  PDF Extraction  -->  CAS Validation  -->
 | **Notifications** | Apprise (90+ targets): Discord, Slack, Telegram, email, etc. |
 | **Deterministic LLM** | `temperature=0`, `seed=42` on all configurable providers |
 
+## Install
+
+### Option 1: Docker (recommended)
+
+```bash
+git clone https://github.com/gptcompany/pepers.git
+cd pepers
+cp .env.example .env  # Configure API keys
+docker compose up -d  # Starts all 7 services + MCP server
+```
+
+### Option 2: uv (standalone MCP server)
+
+```bash
+uv tool install git+https://github.com/gptcompany/pepers.git
+pepers-mcp --port 8776 --flavor arcade
+```
+
+### Option 3: Development
+
+```bash
+git clone https://github.com/gptcompany/pepers.git
+cd pepers
+uv sync --all-extras
+python3 -c "from shared.db import init_db; init_db('data/research.db')"
+```
+
 ## Quick Start
 
 ```bash
-# Install dependencies
-uv sync --all-extras
-
-# Initialize database
-python3 -c "from shared.db import init_db; init_db('data/research.db')"
-
 # Run all services (Docker)
 docker compose up -d
 
 # Or run individually (systemd)
 sudo systemctl start rp-pipeline.target
+
+# Start MCP server standalone
+pepers-mcp  # or: python -m services.mcp
 
 # Trigger a pipeline run
 curl -X POST http://localhost:8775/run \
