@@ -140,7 +140,7 @@ class TestInitDb:
         conn = get_connection(tmp_db_path)
         versions = conn.execute("SELECT COUNT(*) FROM schema_version").fetchone()[0]
         conn.close()
-        assert versions == 4  # v1 + v2 (github) + v3 (UNIQUE) + v4 (pipeline_runs)
+        assert versions == 5  # v1 + v2 (github) + v3 (UNIQUE) + v4 (pipeline_runs) + v5 (openalex)
 
     def test_foreign_keys_enforced(self, tmp_db_path):
         init_db(tmp_db_path)
@@ -182,17 +182,17 @@ class TestSchemaMigration:
         conn.close()
         assert "UNIQUE(paper_id, latex_hash)" in schema
 
-    def test_fresh_db_schema_version_4(self, tmp_db_path):
-        """New database should be at schema version 4."""
+    def test_fresh_db_schema_version_5(self, tmp_db_path):
+        """New database should be at schema version 5."""
         init_db(tmp_db_path)
         conn = get_connection(tmp_db_path)
         v = conn.execute("SELECT MAX(version) FROM schema_version").fetchone()[0]
         conn.close()
-        assert v == 4
+        assert v == 5
 
     def test_migration_v2_to_v3(self, tmp_db_path):
         """Existing v2 database should migrate to v3 with UNIQUE constraint."""
-        # Create v2-style DB without UNIQUE on formulas
+        # Create v2-style DB without UNIQUE on formulas (full column set)
         conn = get_connection(tmp_db_path)
         conn.execute(
             "CREATE TABLE schema_version "
@@ -202,8 +202,14 @@ class TestSchemaMigration:
         conn.execute("INSERT INTO schema_version (version) VALUES (2)")
         conn.execute(
             "CREATE TABLE papers (id INTEGER PRIMARY KEY AUTOINCREMENT, "
-            "arxiv_id TEXT UNIQUE NOT NULL, title TEXT NOT NULL, "
-            "stage TEXT NOT NULL DEFAULT 'discovered', "
+            "arxiv_id TEXT UNIQUE NOT NULL, title TEXT NOT NULL, abstract TEXT, "
+            "authors TEXT, categories TEXT, doi TEXT, pdf_url TEXT, "
+            "published_date TEXT, semantic_scholar_id TEXT, "
+            "citation_count INTEGER DEFAULT 0, reference_count INTEGER DEFAULT 0, "
+            "influential_citation_count INTEGER DEFAULT 0, venue TEXT, "
+            "fields_of_study TEXT, tldr TEXT, open_access INTEGER DEFAULT 0, "
+            "crossref_data TEXT, "
+            "stage TEXT NOT NULL DEFAULT 'discovered', score REAL, error TEXT, "
             "created_at TEXT NOT NULL DEFAULT (datetime('now')), "
             "updated_at TEXT NOT NULL DEFAULT (datetime('now')))"
         )
@@ -228,7 +234,7 @@ class TestSchemaMigration:
         v = conn.execute("SELECT MAX(version) FROM schema_version").fetchone()[0]
         conn.close()
         assert "UNIQUE" in schema
-        assert v == 4
+        assert v == 5
 
     def test_migration_deduplicates(self, tmp_db_path):
         """Migration should remove duplicate (paper_id, latex_hash) rows."""
@@ -241,8 +247,14 @@ class TestSchemaMigration:
         conn.execute("INSERT INTO schema_version (version) VALUES (2)")
         conn.execute(
             "CREATE TABLE papers (id INTEGER PRIMARY KEY AUTOINCREMENT, "
-            "arxiv_id TEXT UNIQUE NOT NULL, title TEXT NOT NULL, "
-            "stage TEXT NOT NULL DEFAULT 'discovered', "
+            "arxiv_id TEXT UNIQUE NOT NULL, title TEXT NOT NULL, abstract TEXT, "
+            "authors TEXT, categories TEXT, doi TEXT, pdf_url TEXT, "
+            "published_date TEXT, semantic_scholar_id TEXT, "
+            "citation_count INTEGER DEFAULT 0, reference_count INTEGER DEFAULT 0, "
+            "influential_citation_count INTEGER DEFAULT 0, venue TEXT, "
+            "fields_of_study TEXT, tldr TEXT, open_access INTEGER DEFAULT 0, "
+            "crossref_data TEXT, "
+            "stage TEXT NOT NULL DEFAULT 'discovered', score REAL, error TEXT, "
             "created_at TEXT NOT NULL DEFAULT (datetime('now')), "
             "updated_at TEXT NOT NULL DEFAULT (datetime('now')))"
         )
@@ -292,4 +304,161 @@ class TestSchemaMigration:
             conn.execute(
                 "INSERT INTO formulas (paper_id, latex, latex_hash, stage) VALUES (1, 'x^2', 'abc', 'extracted')"
             )
+        conn.close()
+
+
+class TestSchemaMigrationV5:
+    """Tests for schema migration v5 (OpenAlex multi-source)."""
+
+    def test_fresh_db_has_source_column(self, tmp_db_path):
+        """New database should have source column on papers."""
+        init_db(tmp_db_path)
+        conn = get_connection(tmp_db_path)
+        schema = conn.execute(
+            "SELECT sql FROM sqlite_master WHERE name='papers'"
+        ).fetchone()[0]
+        conn.close()
+        assert "source TEXT NOT NULL DEFAULT 'arxiv'" in schema
+
+    def test_fresh_db_has_openalex_id_column(self, tmp_db_path):
+        """New database should have openalex_id column on papers."""
+        init_db(tmp_db_path)
+        conn = get_connection(tmp_db_path)
+        schema = conn.execute(
+            "SELECT sql FROM sqlite_master WHERE name='papers'"
+        ).fetchone()[0]
+        conn.close()
+        assert "openalex_id TEXT UNIQUE" in schema
+
+    def test_fresh_db_arxiv_id_nullable(self, tmp_db_path):
+        """New database should allow NULL arxiv_id."""
+        init_db(tmp_db_path)
+        conn = get_connection(tmp_db_path)
+        # Insert paper without arxiv_id
+        conn.execute(
+            "INSERT INTO papers (title, source, openalex_id, stage) "
+            "VALUES ('OA Paper', 'openalex', 'W123', 'discovered')"
+        )
+        conn.commit()
+        row = conn.execute(
+            "SELECT arxiv_id, source, openalex_id FROM papers WHERE openalex_id='W123'"
+        ).fetchone()
+        conn.close()
+        assert row["arxiv_id"] is None
+        assert row["source"] == "openalex"
+        assert row["openalex_id"] == "W123"
+
+    def test_fresh_db_has_openalex_index(self, tmp_db_path):
+        """New database should have index on openalex_id."""
+        init_db(tmp_db_path)
+        conn = get_connection(tmp_db_path)
+        indexes = [
+            row[0]
+            for row in conn.execute(
+                "SELECT name FROM sqlite_master WHERE type='index' AND name LIKE 'idx_%'"
+            ).fetchall()
+        ]
+        conn.close()
+        assert "idx_papers_openalex_id" in indexes
+        assert "idx_papers_source" in indexes
+
+    def test_migration_v4_to_v5(self, tmp_db_path):
+        """Existing v4 database should migrate to v5 with source + openalex_id."""
+        # Create v4-style DB
+        conn = get_connection(tmp_db_path)
+        conn.execute(
+            "CREATE TABLE schema_version "
+            "(version INTEGER PRIMARY KEY, applied_at TEXT NOT NULL DEFAULT (datetime('now')))"
+        )
+        for v in [1, 2, 3, 4]:
+            conn.execute("INSERT INTO schema_version (version) VALUES (?)", (v,))
+        conn.execute(
+            "CREATE TABLE papers (id INTEGER PRIMARY KEY AUTOINCREMENT, "
+            "arxiv_id TEXT UNIQUE NOT NULL, title TEXT NOT NULL, abstract TEXT, "
+            "authors TEXT, categories TEXT, doi TEXT, pdf_url TEXT, "
+            "published_date TEXT, semantic_scholar_id TEXT, "
+            "citation_count INTEGER DEFAULT 0, reference_count INTEGER DEFAULT 0, "
+            "influential_citation_count INTEGER DEFAULT 0, venue TEXT, "
+            "fields_of_study TEXT, tldr TEXT, open_access INTEGER DEFAULT 0, "
+            "crossref_data TEXT, "
+            "stage TEXT NOT NULL DEFAULT 'discovered', score REAL, error TEXT, "
+            "created_at TEXT NOT NULL DEFAULT (datetime('now')), "
+            "updated_at TEXT NOT NULL DEFAULT (datetime('now')))"
+        )
+        # Insert a paper before migration
+        conn.execute(
+            "INSERT INTO papers (arxiv_id, title, stage) VALUES ('2401.00001', 'Existing Paper', 'discovered')"
+        )
+        conn.commit()
+        conn.close()
+
+        # Run init_db (triggers migration v5)
+        init_db(tmp_db_path)
+
+        conn = get_connection(tmp_db_path)
+        v = conn.execute("SELECT MAX(version) FROM schema_version").fetchone()[0]
+        assert v == 5
+
+        # Check schema has new columns
+        schema = conn.execute(
+            "SELECT sql FROM sqlite_master WHERE name='papers'"
+        ).fetchone()[0]
+        assert "source TEXT NOT NULL DEFAULT 'arxiv'" in schema
+        assert "openalex_id TEXT UNIQUE" in schema
+
+        # Check existing paper preserved with source='arxiv'
+        row = conn.execute(
+            "SELECT * FROM papers WHERE arxiv_id='2401.00001'"
+        ).fetchone()
+        assert row is not None
+        assert row["title"] == "Existing Paper"
+        assert row["source"] == "arxiv"
+        assert row["openalex_id"] is None
+        conn.close()
+
+    def test_migration_preserves_all_data(self, tmp_db_path):
+        """Migration v5 should preserve all existing paper data."""
+        conn = get_connection(tmp_db_path)
+        conn.execute(
+            "CREATE TABLE schema_version "
+            "(version INTEGER PRIMARY KEY, applied_at TEXT NOT NULL DEFAULT (datetime('now')))"
+        )
+        for v in [1, 2, 3, 4]:
+            conn.execute("INSERT INTO schema_version (version) VALUES (?)", (v,))
+        conn.execute(
+            "CREATE TABLE papers (id INTEGER PRIMARY KEY AUTOINCREMENT, "
+            "arxiv_id TEXT UNIQUE NOT NULL, title TEXT NOT NULL, abstract TEXT, "
+            "authors TEXT, categories TEXT, doi TEXT, pdf_url TEXT, "
+            "published_date TEXT, semantic_scholar_id TEXT, "
+            "citation_count INTEGER DEFAULT 0, reference_count INTEGER DEFAULT 0, "
+            "influential_citation_count INTEGER DEFAULT 0, venue TEXT, "
+            "fields_of_study TEXT, tldr TEXT, open_access INTEGER DEFAULT 0, "
+            "crossref_data TEXT, "
+            "stage TEXT NOT NULL DEFAULT 'discovered', score REAL, error TEXT, "
+            "created_at TEXT NOT NULL DEFAULT (datetime('now')), "
+            "updated_at TEXT NOT NULL DEFAULT (datetime('now')))"
+        )
+        # Insert multiple papers
+        for i in range(5):
+            conn.execute(
+                "INSERT INTO papers (arxiv_id, title, citation_count, stage) "
+                "VALUES (?, ?, ?, 'discovered')",
+                (f"2401.{i:05d}", f"Paper {i}", i * 10),
+            )
+        conn.commit()
+        conn.close()
+
+        init_db(tmp_db_path)
+
+        conn = get_connection(tmp_db_path)
+        count = conn.execute("SELECT COUNT(*) FROM papers").fetchone()[0]
+        assert count == 5
+
+        for i in range(5):
+            row = conn.execute(
+                "SELECT * FROM papers WHERE arxiv_id=?", (f"2401.{i:05d}",)
+            ).fetchone()
+            assert row["title"] == f"Paper {i}"
+            assert row["citation_count"] == i * 10
+            assert row["source"] == "arxiv"
         conn.close()

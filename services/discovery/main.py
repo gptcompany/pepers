@@ -1,17 +1,19 @@
-"""Discovery service — searches arXiv, enriches with Semantic Scholar and CrossRef.
+"""Discovery service — searches arXiv/OpenAlex, enriches with Semantic Scholar and CrossRef.
 
 First microservice in the research pipeline. Accepts search queries via POST /process,
-discovers papers on arXiv, enriches each with citation data from Semantic Scholar and
-optionally CrossRef (when a journal DOI exists). All data persists to SQLite via shared lib.
+discovers papers on arXiv and/or OpenAlex, enriches each with citation data from
+Semantic Scholar and optionally CrossRef (when a journal DOI exists).
+All data persists to SQLite via shared lib.
 
 Usage:
     python -m services.discovery.main
 
 Environment:
-    RP_DISCOVERY_PORT=8770       # Service port (default: 8770)
-    RP_DB_PATH=data/research.db  # SQLite database path
-    RP_DISCOVERY_MAX_RESULTS=50  # Default max results per query
-    RP_LOG_LEVEL=INFO            # Log level
+    RP_DISCOVERY_PORT=8770            # Service port (default: 8770)
+    RP_DB_PATH=data/research.db       # SQLite database path
+    RP_DISCOVERY_MAX_RESULTS=50       # Default max results per query
+    RP_DISCOVERY_SOURCES=arxiv        # Comma-separated: arxiv,openalex
+    RP_LOG_LEVEL=INFO                 # Log level
 """
 
 from __future__ import annotations
@@ -50,6 +52,11 @@ DATACITE_PREFIX = "10.48550"
 
 # Default max results
 DEFAULT_MAX_RESULTS = int(os.environ.get("RP_DISCOVERY_MAX_RESULTS", "50"))
+
+# Discovery sources (comma-separated)
+DEFAULT_SOURCES = os.environ.get("RP_DISCOVERY_SOURCES", "arxiv")
+
+VALID_SOURCES = {"arxiv", "openalex"}
 
 
 def extract_arxiv_id(result: arxiv.Result) -> str:
@@ -228,8 +235,11 @@ def upsert_paper(db_path: str, paper: dict[str, Any]) -> int | None:
     """
     columns = [
         "arxiv_id", "title", "abstract", "authors", "categories",
-        "doi", "pdf_url", "published_date", "stage",
+        "doi", "pdf_url", "published_date", "source", "stage",
     ]
+    # Default source to 'arxiv' for backward compat
+    if "source" not in paper:
+        paper = {**paper, "source": "arxiv"}
     values = [paper.get(col) for col in columns]
     placeholders = ", ".join(["?"] * len(columns))
     col_names = ", ".join(columns)
@@ -328,10 +338,14 @@ class DiscoveryHandler(BaseHandler):
 
     @route("POST", "/process")
     def handle_process(self, data: dict) -> dict:
-        """Discover and enrich papers from arXiv.
+        """Discover and enrich papers from arXiv and/or OpenAlex.
 
         Request body:
-            {"query": "abs:\"Kelly criterion\" AND cat:q-fin.*", "max_results": 50}
+            {
+                "query": "abs:\"Kelly criterion\" AND cat:q-fin.*",
+                "max_results": 50,
+                "sources": ["arxiv", "openalex"]  // optional, defaults to env var
+            }
 
         Returns:
             Summary dict with counts of found, new, enriched papers.
@@ -349,84 +363,132 @@ class DiscoveryHandler(BaseHandler):
             self.send_error_json("'max_results' must be integer 1-500", "VALIDATION_ERROR", 422)
             return None  # type: ignore[return-value]
 
+        # Parse sources
+        sources_raw = data.get("sources") or [
+            s.strip() for s in DEFAULT_SOURCES.split(",") if s.strip()
+        ]
+        if isinstance(sources_raw, str):
+            sources_raw = [s.strip() for s in sources_raw.split(",") if s.strip()]
+        sources: list[str] = [s for s in sources_raw if s in VALID_SOURCES]
+        if not sources:
+            self.send_error_json(
+                f"'sources' must contain at least one of: {', '.join(VALID_SOURCES)}",
+                "VALIDATION_ERROR", 422,
+            )
+            return None  # type: ignore[return-value]
+
         assert self.db_path is not None, "db_path must be set"
         db_path: str = self.db_path
         errors: list[str] = []
         papers_new = 0
         papers_enriched_s2 = 0
         papers_enriched_cr = 0
+        total_found = 0
 
-        # Step 1: Search arXiv
-        logger.info("Searching arXiv: query=%r max_results=%d", query, max_results)
-        try:
-            papers = search_arxiv(query, max_results)
-        except Exception as e:
-            logger.error("arXiv search failed: %s", e)
-            self.send_error_json(f"arXiv search failed: {e}", "ARXIV_ERROR", 502)
-            return None  # type: ignore[return-value]
-
-        logger.info("arXiv returned %d papers", len(papers))
-
-        # Step 2: For each paper — upsert, then enrich
-        for paper in papers:
-            arxiv_id = paper["arxiv_id"]
-
-            # Upsert paper
-            paper_id = upsert_paper(db_path, paper)
-            if paper_id is None:
-                errors.append(f"DB upsert failed: {arxiv_id}")
-                continue
-
-            # Track new vs updated (check if created_at == updated_at)
+        # --- arXiv source ---
+        if "arxiv" in sources:
+            logger.info("Searching arXiv: query=%r max_results=%d", query, max_results)
             try:
-                with transaction(db_path) as conn:
-                    row = conn.execute(
-                        "SELECT created_at, updated_at FROM papers WHERE id=?",
-                        (paper_id,),
-                    ).fetchone()
-                    if row and row["created_at"] == row["updated_at"]:
-                        papers_new += 1
-            except Exception:
-                pass  # Non-critical — just affects count
-
-            # Enrich with Semantic Scholar
-            s2_data: dict[str, Any] | None = None
-            try:
-                s2_data = enrich_s2(arxiv_id)
-                if s2_data:
-                    if update_paper_s2(db_path, paper_id, s2_data):
-                        papers_enriched_s2 += 1
-                time.sleep(S2_DELAY)
+                papers = search_arxiv(query, max_results)
             except Exception as e:
-                errors.append(f"S2 enrichment failed for {arxiv_id}: {e}")
-                logger.warning("S2 enrichment error for %s: %s", arxiv_id, e)
+                logger.error("arXiv search failed: %s", e)
+                errors.append(f"arXiv search failed: {e}")
+                papers = []
 
-            # Enrich with CrossRef (only if journal DOI available)
-            doi = paper.get("doi")
-            # Also check if S2 found a DOI
-            if not doi and s2_data and "doi" in s2_data:
-                doi = s2_data["doi"]
+            logger.info("arXiv returned %d papers", len(papers))
+            total_found += len(papers)
 
-            if doi:
+            for paper in papers:
+                arxiv_id = paper["arxiv_id"]
+
+                paper_id = upsert_paper(db_path, paper)
+                if paper_id is None:
+                    errors.append(f"DB upsert failed: {arxiv_id}")
+                    continue
+
+                # Track new vs updated
                 try:
-                    cr_data = enrich_crossref(doi)
-                    if cr_data:
-                        if update_paper_crossref(db_path, paper_id, cr_data):
-                            papers_enriched_cr += 1
-                    time.sleep(CR_DELAY)
+                    with transaction(db_path) as conn:
+                        row = conn.execute(
+                            "SELECT created_at, updated_at FROM papers WHERE id=?",
+                            (paper_id,),
+                        ).fetchone()
+                        if row and row["created_at"] == row["updated_at"]:
+                            papers_new += 1
+                except Exception:
+                    pass
+
+                # Enrich with Semantic Scholar
+                s2_data: dict[str, Any] | None = None
+                try:
+                    s2_data = enrich_s2(arxiv_id)
+                    if s2_data:
+                        if update_paper_s2(db_path, paper_id, s2_data):
+                            papers_enriched_s2 += 1
+                    time.sleep(S2_DELAY)
                 except Exception as e:
-                    errors.append(f"CrossRef enrichment failed for {arxiv_id}: {e}")
-                    logger.warning("CrossRef enrichment error for %s: %s", arxiv_id, e)
+                    errors.append(f"S2 enrichment failed for {arxiv_id}: {e}")
+                    logger.warning("S2 enrichment error for %s: %s", arxiv_id, e)
+
+                # Enrich with CrossRef (only if journal DOI available)
+                doi = paper.get("doi")
+                if not doi and s2_data and "doi" in s2_data:
+                    doi = s2_data["doi"]
+
+                if doi:
+                    try:
+                        cr_data = enrich_crossref(doi)
+                        if cr_data:
+                            if update_paper_crossref(db_path, paper_id, cr_data):
+                                papers_enriched_cr += 1
+                        time.sleep(CR_DELAY)
+                    except Exception as e:
+                        errors.append(f"CrossRef enrichment failed for {arxiv_id}: {e}")
+                        logger.warning("CrossRef enrichment error for %s: %s", arxiv_id, e)
+
+        # --- OpenAlex source ---
+        if "openalex" in sources:
+            from services.discovery.openalex import search_openalex, upsert_openalex_paper
+
+            logger.info("Searching OpenAlex: query=%r max_results=%d", query, max_results)
+            try:
+                oa_papers = search_openalex(query, max_results)
+            except Exception as e:
+                logger.error("OpenAlex search failed: %s", e)
+                errors.append(f"OpenAlex search failed: {e}")
+                oa_papers = []
+
+            logger.info("OpenAlex returned %d papers", len(oa_papers))
+            total_found += len(oa_papers)
+
+            for paper in oa_papers:
+                oa_id = paper.get("openalex_id", "?")
+                paper_id = upsert_openalex_paper(db_path, paper)
+                if paper_id is None:
+                    errors.append(f"DB upsert failed: {oa_id}")
+                    continue
+
+                try:
+                    with transaction(db_path) as conn:
+                        row = conn.execute(
+                            "SELECT created_at, updated_at FROM papers WHERE id=?",
+                            (paper_id,),
+                        ).fetchone()
+                        if row and row["created_at"] == row["updated_at"]:
+                            papers_new += 1
+                except Exception:
+                    pass
 
         elapsed_ms = int((time.time() - start) * 1000)
         logger.info(
-            "Discovery complete: found=%d new=%d s2=%d cr=%d errors=%d time=%dms",
-            len(papers), papers_new, papers_enriched_s2, papers_enriched_cr,
+            "Discovery complete: sources=%s found=%d new=%d s2=%d cr=%d errors=%d time=%dms",
+            sources, total_found, papers_new, papers_enriched_s2, papers_enriched_cr,
             len(errors), elapsed_ms,
         )
 
         return {
-            "papers_found": len(papers),
+            "sources": sources,
+            "papers_found": total_found,
             "papers_new": papers_new,
             "papers_enriched_s2": papers_enriched_s2,
             "papers_enriched_cr": papers_enriched_cr,

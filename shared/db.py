@@ -42,7 +42,7 @@ CREATE TABLE IF NOT EXISTS schema_version (
 -- papers: academic paper metadata (Discovery service)
 CREATE TABLE IF NOT EXISTS papers (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
-    arxiv_id TEXT UNIQUE NOT NULL,
+    arxiv_id TEXT UNIQUE,
     title TEXT NOT NULL,
     abstract TEXT,
     authors TEXT,
@@ -59,6 +59,8 @@ CREATE TABLE IF NOT EXISTS papers (
     tldr TEXT,
     open_access INTEGER DEFAULT 0,
     crossref_data TEXT,
+    source TEXT NOT NULL DEFAULT 'arxiv',
+    openalex_id TEXT UNIQUE,
     stage TEXT NOT NULL DEFAULT 'discovered',
     score REAL,
     error TEXT,
@@ -143,6 +145,8 @@ CREATE TABLE IF NOT EXISTS github_analyses (
 INDEXES = """
 CREATE INDEX IF NOT EXISTS idx_papers_stage ON papers(stage);
 CREATE INDEX IF NOT EXISTS idx_papers_arxiv_id ON papers(arxiv_id);
+CREATE INDEX IF NOT EXISTS idx_papers_openalex_id ON papers(openalex_id);
+CREATE INDEX IF NOT EXISTS idx_papers_source ON papers(source);
 CREATE INDEX IF NOT EXISTS idx_formulas_paper_id ON formulas(paper_id);
 CREATE INDEX IF NOT EXISTS idx_formulas_latex_hash ON formulas(latex_hash);
 CREATE INDEX IF NOT EXISTS idx_validations_formula_id ON validations(formula_id);
@@ -240,6 +244,58 @@ MIGRATIONS: dict[int, str] = {
     CREATE INDEX IF NOT EXISTS idx_pipeline_runs_status ON pipeline_runs(status);
     CREATE INDEX IF NOT EXISTS idx_pipeline_runs_started ON pipeline_runs(started_at);
     """,
+    5: """
+    -- v5: Multi-source discovery (OpenAlex).
+    -- Relax arxiv_id NOT NULL, add source + openalex_id columns.
+    PRAGMA foreign_keys=OFF;
+    CREATE TABLE IF NOT EXISTS papers_v5 (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        arxiv_id TEXT UNIQUE,
+        title TEXT NOT NULL,
+        abstract TEXT,
+        authors TEXT,
+        categories TEXT,
+        doi TEXT,
+        pdf_url TEXT,
+        published_date TEXT,
+        semantic_scholar_id TEXT,
+        citation_count INTEGER DEFAULT 0,
+        reference_count INTEGER DEFAULT 0,
+        influential_citation_count INTEGER DEFAULT 0,
+        venue TEXT,
+        fields_of_study TEXT,
+        tldr TEXT,
+        open_access INTEGER DEFAULT 0,
+        crossref_data TEXT,
+        source TEXT NOT NULL DEFAULT 'arxiv',
+        openalex_id TEXT UNIQUE,
+        stage TEXT NOT NULL DEFAULT 'discovered',
+        score REAL,
+        error TEXT,
+        created_at TEXT NOT NULL DEFAULT (datetime('now')),
+        updated_at TEXT NOT NULL DEFAULT (datetime('now'))
+    );
+    INSERT OR IGNORE INTO papers_v5 (
+        id, arxiv_id, title, abstract, authors, categories, doi, pdf_url,
+        published_date, semantic_scholar_id, citation_count, reference_count,
+        influential_citation_count, venue, fields_of_study, tldr, open_access,
+        crossref_data, source, stage, score, error, created_at, updated_at
+    )
+    SELECT
+        id, arxiv_id, title, abstract, authors, categories, doi, pdf_url,
+        published_date, semantic_scholar_id, citation_count, reference_count,
+        influential_citation_count, venue, fields_of_study, tldr, open_access,
+        crossref_data, 'arxiv', stage, score, error, created_at, updated_at
+    FROM papers;
+    DROP TABLE papers;
+    ALTER TABLE papers_v5 RENAME TO papers;
+    -- Recreate indexes lost after table drop
+    CREATE INDEX IF NOT EXISTS idx_papers_stage ON papers(stage);
+    CREATE INDEX IF NOT EXISTS idx_papers_arxiv_id ON papers(arxiv_id);
+    CREATE INDEX IF NOT EXISTS idx_papers_openalex_id ON papers(openalex_id);
+    CREATE INDEX IF NOT EXISTS idx_papers_source ON papers(source);
+    PRAGMA foreign_keys=ON;
+    """,
 }
 
 
@@ -269,10 +325,12 @@ def init_db(db_path: str | Path) -> None:
     conn = get_connection(db_path)
     try:
         conn.executescript(SCHEMA)
-        conn.executescript(INDEXES)
         conn.execute("INSERT OR IGNORE INTO schema_version (version) VALUES (1)")
         conn.execute("INSERT OR IGNORE INTO schema_version (version) VALUES (2)")
         conn.commit()
         _run_migrations(conn)
+        # Create indexes AFTER migrations so columns added by migrations exist
+        conn.executescript(INDEXES)
+        conn.commit()
     finally:
         conn.close()

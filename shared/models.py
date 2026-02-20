@@ -62,13 +62,13 @@ def _parse_json_dict(v: Any) -> dict | None:
 class Paper(BaseModel):
     """Academic paper metadata.
 
-    Populated by Discovery service (arXiv API + Semantic Scholar/CrossRef).
+    Populated by Discovery service (arXiv/OpenAlex + Semantic Scholar/CrossRef).
     """
 
     model_config = ConfigDict(from_attributes=True)
 
     id: int | None = None
-    arxiv_id: str
+    arxiv_id: str | None = None
     title: str
     abstract: str | None = None
     authors: list[str] = []
@@ -87,6 +87,9 @@ class Paper(BaseModel):
     open_access: bool = False
     # CrossRef enrichment
     crossref_data: dict | None = None
+    # Multi-source tracking
+    source: str = "arxiv"
+    openalex_id: str | None = None
     # Pipeline state
     stage: PipelineStage = PipelineStage.DISCOVERED
     score: float | None = None
