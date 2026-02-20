@@ -36,7 +36,8 @@ pepers/
 │   ├── llm.py                  # LLM client: data-driven CLI registry + fallback chain (442 LOC)
 │   └── cli_providers.json      # CLI provider configs (claude_cli, codex_cli, gemini_cli)
 ├── services/                   # 6 microservice implementations
-│   ├── discovery/main.py       # arXiv + Semantic Scholar + CrossRef (448 LOC)
+│   ├── discovery/main.py       # arXiv + OpenAlex + S2 + CrossRef (495 LOC)
+│   ├── discovery/openalex.py   # OpenAlex API client + upsert (195 LOC)
 │   ├── analyzer/main.py        # LLM 5-criteria relevance scoring (321 LOC)
 │   ├── extractor/main.py       # PDF -> LaTeX formula extraction via RAGAnything (265 LOC)
 │   ├── validator/main.py       # Multi-CAS formula validation (339 LOC)
@@ -51,7 +52,7 @@ pepers/
 │   └── mcp/                    # MCP Server (SSE transport)
 │       ├── server.py           # FastMCP server + 8 tools + arcade flavor (~260 LOC)
 │       └── __main__.py         # Entry point: python -m services.mcp
-├── tests/                      # 745+ tests
+├── tests/                      # 790+ tests
 │   ├── conftest.py             # Shared fixtures
 │   ├── unit/                   # 460+ unit tests
 │   ├── integration/            # 185+ integration tests
@@ -81,7 +82,7 @@ pepers/
 
 | Module | LOC | Purpose |
 |--------|-----|---------|
-| `db.py` | 279 | SQLite connection (WAL mode, FK ON), `transaction()` context manager, `init_db()`, schema migrations (v1-v4) |
+| `db.py` | 333 | SQLite connection (WAL mode, FK ON), `transaction()` context manager, `init_db()`, schema migrations (v1-v5) |
 | `models.py` | 306 | Pydantic v2 data models + `PipelineStage` enum, JSON field auto-parsing |
 | `server.py` | 328 | `BaseHandler` + `BaseService` + `@route` decorator + `JsonFormatter` + `/health` endpoint |
 | `config.py` | 131 | `Config` dataclass, `load_config()` from `RP_*` env vars |
@@ -116,7 +117,7 @@ from shared.llm import fallback_chain, call_gemini_cli, call_openrouter, call_ol
 
 | Service | Port | LOC | Purpose | External Deps |
 |---------|------|-----|---------|---------------|
-| Discovery | 8770 | 448 | arXiv API + Semantic Scholar + CrossRef enrichment | arXiv, S2, CrossRef APIs |
+| Discovery | 8770 | 495 | arXiv + OpenAlex + Semantic Scholar + CrossRef enrichment | arXiv, OpenAlex, S2, CrossRef APIs |
 | Analyzer | 8771 | 321 | LLM analysis with 5-criteria relevance scoring | LLM (Gemini/OpenRouter/Ollama) |
 | Extractor | 8772 | 265 | PDF text extraction + LaTeX formula extraction | RAGAnything (:8767) |
 | Validator | 8773 | 339 | Multi-CAS formula validation with consensus | CAS (:8769), SymPy |
@@ -177,6 +178,8 @@ Daily 8AM timer triggers Orchestrator (:8775)
          v
   Discovery (:8770)
   +-- Query arXiv API (keywords: kelly criterion, portfolio optimization, ...)
+  +-- Query OpenAlex API (200M+ works, configurable via RP_DISCOVERY_SOURCES)
+  +-- Cross-source dedup (same paper from arXiv + OpenAlex merged)
   +-- Enrich via Semantic Scholar (citations, references, tldr)
   +-- Enrich via CrossRef (DOI metadata)
   +-- INSERT papers -> SQLite [stage=discovered]
@@ -212,16 +215,16 @@ Daily 8AM timer triggers Orchestrator (:8775)
 
 ## Database Schema
 
-8 tables with foreign key relationships (schema version: v4):
+8 tables with foreign key relationships (schema version: v5):
 
 | Table | Purpose | Populated By |
 |-------|---------|-------------|
-| `papers` | Academic paper metadata (arXiv + enrichment) | Discovery |
+| `papers` | Academic paper metadata (arXiv/OpenAlex + enrichment, source tracking) | Discovery |
 | `formulas` | Extracted LaTeX formulas with SHA-256 hash, UNIQUE(paper_id, latex_hash) | Extractor |
 | `validations` | CAS validation results per formula per engine | Validator |
 | `generated_code` | Generated Python/Rust code per formula | Codegen |
 | `pipeline_runs` | Async pipeline execution tracking (run_id, status, params, results) | Orchestrator |
-| `schema_version` | Migration tracking (current: v4) | init_db() |
+| `schema_version` | Migration tracking (current: v5) | init_db() |
 | `github_repos` | GitHub repository metadata from code search | GitHub Discovery |
 | `github_analyses` | Gemini analysis results for GitHub repos | GitHub Discovery |
 
@@ -237,7 +240,7 @@ Daily 8AM timer triggers Orchestrator (:8775)
 | 6 | JSON structured logging | Direct Loki/journald integration, Grafana queryable | Less human-readable |
 | 7 | Full independence from N8N | Clean break after N8N crash/data loss | Must reimplement coordination |
 | 8 | Multi-provider LLM fallback | Resilience against single provider outages | Complex config, non-deterministic Gemini CLI |
-| 9 | Schema migrations (v1->v4) | Safe DB evolution with UNIQUE constraints + run tracking | Migration complexity |
+| 9 | Schema migrations (v1->v5) | Safe DB evolution with UNIQUE constraints + run tracking + multi-source | Migration complexity |
 | 10 | systemd + watchdog | Auto-restart crashed services, health monitoring | Linux-only deployment |
 
 ## Configuration
@@ -246,6 +249,7 @@ Daily 8AM timer triggers Orchestrator (:8775)
 |----------|---------|---------|
 | `RP_{SERVICE}_PORT` | TCP port for a service | See port map |
 | `RP_DB_PATH` | Path to SQLite database | `./data/research.db` |
+| `RP_DISCOVERY_SOURCES` | Comma-separated discovery sources | `arxiv` (options: `arxiv,openalex`) |
 | `RP_LOG_LEVEL` | Logging level | `INFO` |
 | `RP_DATA_DIR` | Directory for data files | `./data/` |
 | `RP_LLM_TEMPERATURE` | LLM sampling temperature | `0` (deterministic) |
@@ -299,5 +303,5 @@ Daily 8AM timer triggers Orchestrator (:8775)
 ---
 
 *Architecture documented: 2026-02-10*
-*Last validated: 2026-02-18 (700+ tests pass, schema v4)*
+*Last validated: 2026-02-20 (790+ tests pass, schema v5)*
 *Auto-updated by architecture-validator agent*

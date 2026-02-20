@@ -6,7 +6,7 @@ Production operations guide for the 7-service research paper processing pipeline
 
 | Service | Port | Description | External Dependencies |
 |---------|------|-------------|-----------------------|
-| discovery | 8770 | arXiv/Semantic Scholar/CrossRef paper search | arXiv API, S2 API, CrossRef API |
+| discovery | 8770 | arXiv/OpenAlex/Semantic Scholar/CrossRef paper search | arXiv API, OpenAlex API, S2 API, CrossRef API |
 | analyzer | 8771 | Topic-agnostic LLM scoring (5 criteria, 0-1.0 scale) | LLM fallback chain |
 | extractor | 8772 | PDF to LaTeX formula extraction | RAGAnything (:8767) |
 | validator | 8773 | CAS mathematical validation (multi-engine consensus) | CAS engine (:8769), SymPy |
@@ -14,7 +14,7 @@ Production operations guide for the 7-service research paper processing pipeline
 | orchestrator | 8775 | Pipeline coordination, batch iteration, status API | All above services |
 | mcp | 8776 | MCP Server (SSE) — 8 tools for Claude Desktop/Cursor | Orchestrator (:8775) |
 
-**Database**: SQLite (WAL mode), schema v4, shared across all services.
+**Database**: SQLite (WAL mode), schema v5, shared across all services.
 
 **Pipeline flow**: discovery -> analyzer -> extractor -> validator -> codegen
 
@@ -103,7 +103,7 @@ All services expose `GET /health` returning JSON:
   "service": "<name>",
   "uptime_seconds": 3600,
   "db_ok": true,
-  "schema_version": 4,
+  "schema_version": 5,
   "last_request_seconds_ago": 120
 }
 ```
@@ -395,6 +395,13 @@ All configuration via environment variables with `RP_` prefix. Set in `.env` (do
 |----------|---------|-------------|
 | `RP_DB_PATH` | `data/research.db` | SQLite database path |
 | `RP_DATA_DIR` | `data/` | Data directory for PDFs and cache |
+
+### Discovery
+
+| Variable | Default | Description |
+|----------|---------|-------------|
+| `RP_DISCOVERY_MAX_RESULTS` | 50 | Max results per search query |
+| `RP_DISCOVERY_SOURCES` | `arxiv` | Comma-separated sources: `arxiv`, `openalex` |
 
 ### Orchestrator
 

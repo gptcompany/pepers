@@ -34,7 +34,7 @@ arXiv/OpenAlex  -->  LLM Analysis  -->  PDF Extraction  -->  CAS Validation  -->
 
 | Feature | What It Does |
 |---------|-------------|
-| **Multi-source Discovery** | arXiv API + Semantic Scholar + CrossRef enrichment |
+| **Multi-source Discovery** | arXiv + OpenAlex (200M+ works) + Semantic Scholar + CrossRef enrichment |
 | **LLM Analysis** | 5-criteria relevance scoring with configurable fallback chain (Gemini, Claude, Codex, OpenRouter, Ollama) |
 | **Formula Extraction** | PDF -> RAGAnything text -> 5-pass LaTeX regex with complexity filtering |
 | **CAS Validation** | Multi-engine consensus: SymPy + Maxima + MATLAB. Both must agree = VALID |
