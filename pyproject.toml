@@ -13,6 +13,7 @@ dependencies = [
     "antlr4-python3-runtime==4.11",
     "apprise>=1.9.7",
     "mcp>=1.0",
+    "prometheus-client>=0.24.1",
 ]
 
 [project.scripts]

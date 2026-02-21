@@ -38,6 +38,10 @@ import time
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from typing import Any, Callable
 
+from prometheus_client import generate_latest, CONTENT_TYPE_LATEST
+
+from shared.metrics import REQUEST_COUNT, REQUEST_DURATION, ERROR_COUNT
+
 # Maximum request body size (10 MB). Requests exceeding this receive HTTP 413.
 MAX_BODY_SIZE = 10 * 1024 * 1024
 
@@ -121,33 +125,62 @@ class BaseHandler(BaseHTTPRequestHandler):
         key = (http_method, path_no_query)
         handler_name = routes.get(key)
 
-        if handler_name:
-            if path_no_query != "/health":
-                # Atomic on CPython (GIL), lock for correctness on other runtimes
-                self.__class__.last_request_time = time.time()
-            handler = getattr(self, handler_name)
-            try:
-                if http_method == "POST":
-                    data = self.read_json()
-                    if data is None:
-                        return  # error already sent by read_json
-                    result = handler(data)
-                else:
-                    result = handler()
-                if result is not None:
-                    self.send_json(result)
-            except BrokenPipeError:
-                logger.warning("Client disconnected before response sent")
-            except Exception as e:
-                logger.exception("Handler error: %s", e)
+        # Skip metrics recording for /metrics and /health (avoids self-counting
+        # and noise from Prometheus scrape interval)
+        skip_metrics = path_no_query in ("/metrics", "/health")
+
+        self._response_status = 200
+        start_time = time.monotonic()
+
+        try:
+            if handler_name:
+                if path_no_query != "/health":
+                    # Atomic on CPython (GIL), lock for correctness on other runtimes
+                    self.__class__.last_request_time = time.time()
+                handler = getattr(self, handler_name)
                 try:
-                    self.send_error_json(str(e), "INTERNAL_ERROR", 500)
+                    if http_method == "POST":
+                        data = self.read_json()
+                        if data is None:
+                            return  # error already sent by read_json
+                        result = handler(data)
+                    else:
+                        result = handler()
+                    if result is not None:
+                        self.send_json(result)
                 except BrokenPipeError:
-                    logger.warning("Client disconnected during error response")
-        else:
-            self.send_error_json(
-                f"Not found: {self.path}", "NOT_FOUND", 404
-            )
+                    logger.warning("Client disconnected before response sent")
+                except Exception as e:
+                    logger.exception("Handler error: %s", e)
+                    self._response_status = 500
+                    try:
+                        self.send_error_json(str(e), "INTERNAL_ERROR", 500)
+                    except BrokenPipeError:
+                        logger.warning("Client disconnected during error response")
+            else:
+                self._response_status = 404
+                self.send_error_json(
+                    f"Not found: {self.path}", "NOT_FOUND", 404
+                )
+        finally:
+            if not skip_metrics:
+                duration = time.monotonic() - start_time
+                service = self.__class__.service_name
+                endpoint = path_no_query
+                status_code = str(self._response_status)
+                REQUEST_COUNT.labels(
+                    service=service, endpoint=endpoint,
+                    method=http_method, status_code=status_code,
+                ).inc()
+                REQUEST_DURATION.labels(
+                    service=service, endpoint=endpoint,
+                    method=http_method,
+                ).observe(duration)
+                if self._response_status >= 400:
+                    ERROR_COUNT.labels(
+                        service=service, endpoint=endpoint,
+                        method=http_method, status_code=status_code,
+                    ).inc()
 
     def do_GET(self) -> None:
         """Handle GET requests via route dispatch."""
@@ -164,6 +197,7 @@ class BaseHandler(BaseHTTPRequestHandler):
             data: Response body (will be JSON-serialized).
             status: HTTP status code.
         """
+        self._response_status = status
         body = json.dumps(data, default=str).encode("utf-8")
         self.send_response(status)
         self.send_header("Content-Type", "application/json")
@@ -310,6 +344,16 @@ class BaseService:
                 result["db_path"] = handler.db_path
             return result
 
+        @route("GET", "/metrics")
+        def handle_metrics(self_handler: BaseHandler) -> None:
+            """Expose Prometheus metrics in text format."""
+            output = generate_latest()
+            self_handler.send_response(200)
+            self_handler.send_header("Content-Type", CONTENT_TYPE_LATEST)
+            self_handler.send_header("Content-Length", str(len(output)))
+            self_handler.end_headers()
+            self_handler.wfile.write(output)
+
         # Bind to handler class only if not already defined by subclass
         if not hasattr(handler, "handle_health") or not hasattr(
             getattr(handler, "handle_health", None), "_route"
@@ -319,6 +363,10 @@ class BaseService:
             getattr(handler, "handle_status", None), "_route"
         ):
             handler.handle_status = handle_status  # type: ignore[attr-defined]
+        if not hasattr(handler, "handle_metrics") or not hasattr(
+            getattr(handler, "handle_metrics", None), "_route"
+        ):
+            handler.handle_metrics = handle_metrics  # type: ignore[attr-defined]
 
         # Reset route cache so new routes are discovered
         handler._routes = None
