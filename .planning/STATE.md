@@ -10,28 +10,29 @@ See: .planning/PROJECT.md (updated 2026-02-21)
 ## Current Position
 
 Phase: 44 of 46 (Prometheus Metrics)
-Plan: 0 of 1 in current phase
-Status: Ready to plan
-Last activity: 2026-02-21 — Phase 43 completed (2/2 plans)
+Plan: 1 of 1 in current phase
+Status: Phase complete
+Last activity: 2026-02-21 — Phase 44 plan 1 completed
 
-Progress: [███░░░░░░░] 33% (2/6 plans)
+Progress: [█████░░░░░] 50% (3/6 plans)
 
 ## Performance Metrics
 
 **Velocity:**
-- Total plans completed: 2 (v13.0)
-- Average duration: —
-- Total execution time: —
+- Total plans completed: 3 (v13.0)
+- Average duration: ~11min
+- Total execution time: ~11min (measured)
 
 **By Phase:**
 
 | Phase | Plans | Total | Avg/Plan |
 |-------|-------|-------|----------|
 | 43 | 2/2 | — | — |
+| 44 | 1/1 | 11min | 11min |
 
 **Recent Trend:**
-- Last 5 plans: 43-01, 43-02
-- Trend: —
+- Last 5 plans: 43-01, 43-02, 44-01
+- Trend: stable
 
 *Updated after each plan completion*
 
@@ -49,6 +50,8 @@ Recent decisions affecting current work:
 - [Phase 43]: Body size limit checks Content-Length BEFORE reading rfile (prevents DoS)
 - [Phase 43]: All 'running' pipeline runs cleaned unconditionally at startup (single-instance, all are orphaned)
 - [Phase 43]: daemon_threads=True on ThreadingHTTPServer for clean shutdown
+- [Phase 44]: Counter names omit _total suffix (prometheus-client appends automatically)
+- [Phase 44]: /metrics and /health excluded from request counting to prevent self-counting noise
 
 ### Pending Todos
 
@@ -63,5 +66,5 @@ None yet.
 ## Session Continuity
 
 Last session: 2026-02-21
-Stopped at: Phase 43 complete, ready to start Phase 44
+Stopped at: Completed 44-01-PLAN.md
 Resume file: None

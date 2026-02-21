@@ -151,7 +151,7 @@ None
 **Milestone Goal:** Harden PePeRS for stable production use -- concurrent request handling, Prometheus observability, Docker production deployment, and pipeline resilience.
 
 - [x] **Phase 43: Server Concurrency + Resilience** - ThreadingHTTPServer, body size limits, SQLite thread safety, stuck-state cleanup — completed 2026-02-21
-- [ ] **Phase 44: Prometheus Metrics** - /metrics endpoints on all services with request/pipeline counters
+- [x] **Phase 44: Prometheus Metrics** - /metrics endpoints on all services with request/pipeline counters (completed 2026-02-21)
 - [ ] **Phase 45: Docker Production Hardening** - Log rotation, memory limits, auto-start, graceful shutdown
 - [ ] **Phase 46: Monitoring Integration** - process-exporter, Prometheus scrape, Grafana dashboard, alert rules
 
@@ -264,6 +264,6 @@ Phases execute in numeric order: 43 → 44 → 45 → 46
 | 41. One-Click Install | v12.0 | 1/1 | Complete | 2026-02-19 |
 | 42. Multi-Source Discovery (OpenAlex) | v12.0 | 1/1 | Complete | 2026-02-20 |
 | 43. Server Concurrency + Resilience | v13.0 | 2/2 | Complete | 2026-02-21 |
-| 44. Prometheus Metrics | v13.0 | 0/1 | Not started | - |
+| 44. Prometheus Metrics | 1/1 | Complete   | 2026-02-21 | - |
 | 45. Docker Production Hardening | v13.0 | 0/1 | Not started | - |
 | 46. Monitoring Integration | v13.0 | 0/2 | Not started | - |

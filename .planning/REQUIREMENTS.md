@@ -15,8 +15,8 @@ Requirements for production hardening. Each maps to roadmap phases.
 
 ### Monitoring
 
-- [ ] **MON-01**: Each service exposes /metrics endpoint with Prometheus format (request count, duration histogram, error count)
-- [ ] **MON-02**: Orchestrator exposes pipeline-specific metrics (papers processed, formulas validated, run duration)
+- [x] **MON-01**: Each service exposes /metrics endpoint with Prometheus format (request count, duration histogram, error count)
+- [x] **MON-02**: Orchestrator exposes pipeline-specific metrics (papers processed, formulas validated, run duration)
 - [ ] **MON-03**: process-exporter identifies PePeRS services individually (not generic python-main.py)
 - [ ] **MON-04**: Prometheus scrapes all PePeRS /metrics endpoints (8770-8776)
 - [ ] **MON-05**: Grafana dashboard shows pipeline health (6 panels: service health, throughput, latency, errors, formula results, active runs)
@@ -64,8 +64,8 @@ Requirements for production hardening. Each maps to roadmap phases.
 | CONC-01 | Phase 43 | Done |
 | CONC-02 | Phase 43 | Done |
 | CONC-03 | Phase 43 | Done |
-| MON-01 | Phase 44 | Pending |
-| MON-02 | Phase 44 | Pending |
+| MON-01 | Phase 44 | Complete |
+| MON-02 | Phase 44 | Complete |
 | MON-03 | Phase 46 | Pending |
 | MON-04 | Phase 46 | Pending |
 | MON-05 | Phase 46 | Pending |
