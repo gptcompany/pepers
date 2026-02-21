@@ -150,7 +150,7 @@ None
 
 **Milestone Goal:** Harden PePeRS for stable production use -- concurrent request handling, Prometheus observability, Docker production deployment, and pipeline resilience.
 
-- [ ] **Phase 43: Server Concurrency + Resilience** - ThreadingHTTPServer, body size limits, SQLite thread safety, stuck-state cleanup
+- [x] **Phase 43: Server Concurrency + Resilience** - ThreadingHTTPServer, body size limits, SQLite thread safety, stuck-state cleanup — completed 2026-02-21
 - [ ] **Phase 44: Prometheus Metrics** - /metrics endpoints on all services with request/pipeline counters
 - [ ] **Phase 45: Docker Production Hardening** - Log rotation, memory limits, auto-start, graceful shutdown
 - [ ] **Phase 46: Monitoring Integration** - process-exporter, Prometheus scrape, Grafana dashboard, alert rules
@@ -169,8 +169,8 @@ None
 **Plans**: TBD
 
 Plans:
-- [ ] 43-01: ThreadingHTTPServer + body size limit + SQLite thread safety in shared/server.py and shared/db.py
-- [ ] 43-02: Stuck-state cleanup in orchestrator startup + tests for all Phase 43 changes
+- [x] 43-01: ThreadingHTTPServer + body size limit + SQLite thread safety in shared/server.py and shared/db.py
+- [x] 43-02: Stuck-state cleanup in orchestrator startup + tests for all Phase 43 changes
 
 ### Phase 44: Prometheus Metrics
 **Goal**: Every PePeRS service exposes machine-readable performance metrics that Prometheus can scrape
@@ -263,7 +263,7 @@ Phases execute in numeric order: 43 → 44 → 45 → 46
 | 40. MCP Server SSE | v12.0 | 1/1 | Complete | 2026-02-19 |
 | 41. One-Click Install | v12.0 | 1/1 | Complete | 2026-02-19 |
 | 42. Multi-Source Discovery (OpenAlex) | v12.0 | 1/1 | Complete | 2026-02-20 |
-| 43. Server Concurrency + Resilience | v13.0 | 0/2 | Not started | - |
+| 43. Server Concurrency + Resilience | v13.0 | 2/2 | Complete | 2026-02-21 |
 | 44. Prometheus Metrics | v13.0 | 0/1 | Not started | - |
 | 45. Docker Production Hardening | v13.0 | 0/1 | Not started | - |
 | 46. Monitoring Integration | v13.0 | 0/2 | Not started | - |

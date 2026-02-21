@@ -474,6 +474,36 @@ class PipelineRunner:
         return f"run-{now.strftime('%Y%m%d-%H%M%S')}-{short_id}"
 
 
+    def cleanup_stuck_runs(self) -> int:
+        """Mark all 'running' pipeline runs as 'failed' on startup.
+
+        At process startup, any run still in 'running' state is orphaned
+        (the previous process crashed or was killed). We mark them all as
+        failed unconditionally — there is no surviving thread to complete them.
+
+        Returns:
+            Number of runs marked as failed.
+        """
+        with transaction(self.db_path) as conn:
+            rows = conn.execute(
+                "SELECT run_id FROM pipeline_runs WHERE status = 'running'"
+            ).fetchall()
+            if not rows:
+                return 0
+            run_ids = [r["run_id"] for r in rows]
+            error_json = json.dumps(
+                ["Marked as failed: orphaned in running state at service restart"]
+            )
+            conn.execute(
+                "UPDATE pipeline_runs SET status = 'failed', "
+                "errors = ?, completed_at = datetime('now') "
+                "WHERE status = 'running'",
+                (error_json,),
+            )
+        for rid in run_ids:
+            logger.warning("Cleaned stuck pipeline run: %s", rid)
+        return len(run_ids)
+
     # -- Run persistence --
 
     def _create_run_record(

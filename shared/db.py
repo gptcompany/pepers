@@ -161,6 +161,9 @@ CREATE INDEX IF NOT EXISTS idx_github_analyses_recommendation ON github_analyses
 def get_connection(db_path: str | Path) -> sqlite3.Connection:
     """Create a new SQLite connection with WAL mode and foreign keys.
 
+    Thread-safe: creates a new connection per call. Safe for use in
+    threaded HTTP handlers (ThreadingHTTPServer).
+
     Args:
         db_path: Path to the SQLite database file.
 

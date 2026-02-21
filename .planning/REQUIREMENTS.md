@@ -9,9 +9,9 @@ Requirements for production hardening. Each maps to roadmap phases.
 
 ### Concurrency
 
-- [ ] **CONC-01**: All 6 microservices handle concurrent requests via ThreadingHTTPServer
-- [ ] **CONC-02**: Request body size is limited to 10MB with 413 error on exceeding
-- [ ] **CONC-03**: SQLite connections are verified thread-safe (per-request, no caching)
+- [x] **CONC-01**: All 6 microservices handle concurrent requests via ThreadingHTTPServer
+- [x] **CONC-02**: Request body size is limited to 10MB with 413 error on exceeding
+- [x] **CONC-03**: SQLite connections are verified thread-safe (per-request, no caching)
 
 ### Monitoring
 
@@ -31,7 +31,7 @@ Requirements for production hardening. Each maps to roadmap phases.
 
 ### Resilience
 
-- [ ] **RES-01**: Orchestrator startup cleans stuck pipeline_runs (running >5min → failed with reason)
+- [x] **RES-01**: Orchestrator startup cleans stuck pipeline_runs (all running → failed with reason)
 
 ## Future Requirements
 
@@ -61,9 +61,9 @@ Requirements for production hardening. Each maps to roadmap phases.
 
 | Requirement | Phase | Status |
 |-------------|-------|--------|
-| CONC-01 | Phase 43 | Pending |
-| CONC-02 | Phase 43 | Pending |
-| CONC-03 | Phase 43 | Pending |
+| CONC-01 | Phase 43 | Done |
+| CONC-02 | Phase 43 | Done |
+| CONC-03 | Phase 43 | Done |
 | MON-01 | Phase 44 | Pending |
 | MON-02 | Phase 44 | Pending |
 | MON-03 | Phase 46 | Pending |
@@ -74,7 +74,7 @@ Requirements for production hardening. Each maps to roadmap phases.
 | DEP-02 | Phase 45 | Pending |
 | DEP-03 | Phase 45 | Pending |
 | DEP-04 | Phase 45 | Pending |
-| RES-01 | Phase 43 | Pending |
+| RES-01 | Phase 43 | Done |
 
 **Coverage:**
 - v13.0 requirements: 14 total

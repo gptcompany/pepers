@@ -35,8 +35,11 @@ import logging
 import signal
 import threading
 import time
-from http.server import BaseHTTPRequestHandler, HTTPServer
+from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from typing import Any, Callable
+
+# Maximum request body size (10 MB). Requests exceeding this receive HTTP 413.
+MAX_BODY_SIZE = 10 * 1024 * 1024
 
 
 logger = logging.getLogger(__name__)
@@ -93,6 +96,7 @@ class BaseHandler(BaseHTTPRequestHandler):
 
     # Route registry, built lazily on first request
     _routes: dict[tuple[str, str], str] | None = None
+    _routes_lock: threading.Lock = threading.Lock()
 
     @classmethod
     def _build_routes(cls) -> dict[tuple[str, str], str]:
@@ -106,8 +110,11 @@ class BaseHandler(BaseHTTPRequestHandler):
 
     def _dispatch(self, http_method: str) -> None:
         """Dispatch request to matching route handler."""
+        # Double-checked locking: avoid lock contention after routes are built
         if self.__class__._routes is None:
-            self.__class__._routes = self._build_routes()
+            with self.__class__._routes_lock:
+                if self.__class__._routes is None:
+                    self.__class__._routes = self._build_routes()
 
         routes = self.__class__._routes
         path_no_query = self.path.split("?")[0]
@@ -116,6 +123,7 @@ class BaseHandler(BaseHTTPRequestHandler):
 
         if handler_name:
             if path_no_query != "/health":
+                # Atomic on CPython (GIL), lock for correctness on other runtimes
                 self.__class__.last_request_time = time.time()
             handler = getattr(self, handler_name)
             try:
@@ -183,12 +191,33 @@ class BaseHandler(BaseHTTPRequestHandler):
     def read_json(self) -> dict | None:
         """Read and parse JSON from request body.
 
+        Checks Content-Length BEFORE reading the stream to prevent
+        memory exhaustion from oversized payloads.
+
         Returns:
             Parsed dict, or None if body is missing/invalid (error already sent).
         """
-        content_length = int(self.headers.get("Content-Length", 0))
+        raw_length = self.headers.get("Content-Length", "0")
+        try:
+            content_length = int(raw_length)
+        except (ValueError, TypeError):
+            self.send_error_json(
+                f"Invalid Content-Length header: {raw_length!r}",
+                "INVALID_CONTENT_LENGTH", 400,
+            )
+            return None
         if content_length == 0:
             self.send_error_json("Request body is empty", "INVALID_JSON", 400)
+            return None
+        if content_length > MAX_BODY_SIZE:
+            self.send_error_json(
+                "Request body too large",
+                "PAYLOAD_TOO_LARGE", 413,
+                details={
+                    "max_bytes": MAX_BODY_SIZE,
+                    "received_bytes": content_length,
+                },
+            )
             return None
         try:
             body = self.rfile.read(content_length)
@@ -220,7 +249,7 @@ class BaseService:
         self.port = port
         self.handler = handler
         self.db_path = db_path
-        self.server: HTTPServer | None = None
+        self.server: ThreadingHTTPServer | None = None
         self._start_time = time.time()
 
         # Inject service metadata into handler class
@@ -315,8 +344,9 @@ class BaseService:
         if threading.current_thread() is threading.main_thread():
             signal.signal(signal.SIGTERM, self._handle_sigterm)
 
-        self.server = HTTPServer(("0.0.0.0", self.port), self.handler)
-        logger.info("Starting %s on port %d", self.name, self.port)
+        self.server = ThreadingHTTPServer(("0.0.0.0", self.port), self.handler)
+        self.server.daemon_threads = True
+        logger.info("Starting %s on port %d (threaded)", self.name, self.port)
 
         try:
             self.server.serve_forever()

@@ -608,6 +608,11 @@ def main() -> None:
     runner = PipelineRunner(config.db_path)
     OrchestratorHandler.runner = runner
 
+    # Clean up stuck pipeline runs from previous crashes
+    cleaned = runner.cleanup_stuck_runs()
+    if cleaned:
+        logger.warning("Cleaned %d stuck pipeline run(s) from previous crash", cleaned)
+
     # Create scheduler (if enabled)
     scheduler = create_scheduler(_cron_run)
 

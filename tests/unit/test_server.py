@@ -13,7 +13,9 @@ import urllib.request
 
 import pytest
 
-from shared.server import BaseHandler, BaseService, JsonFormatter, route
+from concurrent.futures import ThreadPoolExecutor, as_completed
+
+from shared.server import BaseHandler, BaseService, JsonFormatter, MAX_BODY_SIZE, route
 
 
 def _get_free_port():
@@ -279,3 +281,153 @@ class TestBaseServiceAndHTTP:
         BaseService("injected-name", port, CheckHandler)
         assert CheckHandler.service_name == "injected-name"
         assert CheckHandler.service_version == "0.1.0"
+
+
+class TestBodySizeLimit:
+    """Tests for CONC-02: 10MB request body size limit."""
+
+    @pytest.fixture(autouse=True)
+    def setup_server(self):
+        self.port = _get_free_port()
+
+        class EchoHandler(BaseHandler):
+            @route("POST", "/echo")
+            def handle_echo(self, data):
+                return {"size": len(json.dumps(data))}
+
+        self.service = BaseService("body-limit-test", self.port, EchoHandler)
+        self.thread = threading.Thread(target=self.service.run, daemon=True)
+        self.thread.start()
+        time.sleep(0.3)
+        yield
+        if self.service.server:
+            self.service.server.shutdown()
+
+    def test_body_size_limit_returns_413(self):
+        """Request with Content-Length > 10MB gets HTTP 413 without reading body."""
+        fake_length = MAX_BODY_SIZE + 1
+        req = urllib.request.Request(
+            f"http://localhost:{self.port}/echo",
+            data=b'{"x": 1}',
+            headers={
+                "Content-Type": "application/json",
+                "Content-Length": str(fake_length),
+            },
+        )
+        with pytest.raises(urllib.error.HTTPError) as exc_info:
+            urllib.request.urlopen(req)
+        assert exc_info.value.code == 413
+        resp = json.loads(exc_info.value.read())
+        assert resp["code"] == "PAYLOAD_TOO_LARGE"
+        assert resp["details"]["max_bytes"] == MAX_BODY_SIZE
+
+    def test_server_continues_after_413(self):
+        """Server still accepts normal requests after rejecting oversized one."""
+        # First, send oversized request
+        fake_length = MAX_BODY_SIZE + 1
+        req = urllib.request.Request(
+            f"http://localhost:{self.port}/echo",
+            data=b'{"x": 1}',
+            headers={
+                "Content-Type": "application/json",
+                "Content-Length": str(fake_length),
+            },
+        )
+        with pytest.raises(urllib.error.HTTPError):
+            urllib.request.urlopen(req)
+
+        # Then, send a normal request
+        body = json.dumps({"hello": "world"}).encode()
+        req = urllib.request.Request(
+            f"http://localhost:{self.port}/echo",
+            data=body,
+            headers={"Content-Type": "application/json"},
+        )
+        resp = urllib.request.urlopen(req)
+        data = json.loads(resp.read())
+        assert "size" in data
+
+    def test_invalid_content_length_returns_400(self):
+        """Non-integer Content-Length header gets HTTP 400."""
+        req = urllib.request.Request(
+            f"http://localhost:{self.port}/echo",
+            data=b'{"x": 1}',
+            headers={
+                "Content-Type": "application/json",
+                "Content-Length": "not-a-number",
+            },
+        )
+        with pytest.raises(urllib.error.HTTPError) as exc_info:
+            urllib.request.urlopen(req)
+        assert exc_info.value.code == 400
+        resp = json.loads(exc_info.value.read())
+        assert resp["code"] == "INVALID_CONTENT_LENGTH"
+
+
+class TestConcurrentRequests:
+    """Tests for CONC-01: ThreadingHTTPServer concurrent request handling."""
+
+    @pytest.fixture(autouse=True)
+    def setup_server(self):
+        self.port = _get_free_port()
+
+        class SlowHandler(BaseHandler):
+            @route("POST", "/slow")
+            def handle_slow(self, data):
+                delay = data.get("delay", 0.5)
+                time.sleep(delay)
+                return {"delayed": delay, "thread": threading.current_thread().name}
+
+            @route("GET", "/fast")
+            def handle_fast(self):
+                return {"fast": True}
+
+        self.service = BaseService("concurrency-test", self.port, SlowHandler)
+        self.thread = threading.Thread(target=self.service.run, daemon=True)
+        self.thread.start()
+        time.sleep(0.3)
+        yield
+        if self.service.server:
+            self.service.server.shutdown()
+
+    def test_concurrent_requests_both_succeed(self):
+        """Two concurrent requests both get correct responses (not serialized)."""
+        def make_request(delay):
+            body = json.dumps({"delay": delay}).encode()
+            req = urllib.request.Request(
+                f"http://localhost:{self.port}/slow",
+                data=body,
+                headers={"Content-Type": "application/json"},
+            )
+            resp = urllib.request.urlopen(req)
+            return json.loads(resp.read())
+
+        start = time.time()
+        with ThreadPoolExecutor(max_workers=2) as pool:
+            futures = [pool.submit(make_request, 0.5) for _ in range(2)]
+            results = [f.result() for f in as_completed(futures)]
+        elapsed = time.time() - start
+
+        assert len(results) == 2
+        for r in results:
+            assert r["delayed"] == 0.5
+        # If truly concurrent, total time should be ~0.5s not ~1.0s
+        assert elapsed < 1.0, f"Requests were serialized: {elapsed:.2f}s"
+
+    def test_thread_safe_last_request_time(self):
+        """Concurrent requests don't crash on shared last_request_time."""
+        def make_request(_):
+            body = json.dumps({"delay": 0.05}).encode()
+            req = urllib.request.Request(
+                f"http://localhost:{self.port}/slow",
+                data=body,
+                headers={"Content-Type": "application/json"},
+            )
+            resp = urllib.request.urlopen(req)
+            return json.loads(resp.read())
+
+        with ThreadPoolExecutor(max_workers=5) as pool:
+            futures = [pool.submit(make_request, i) for i in range(10)]
+            results = [f.result() for f in as_completed(futures)]
+
+        assert len(results) == 10
