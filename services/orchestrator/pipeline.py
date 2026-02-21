@@ -24,6 +24,15 @@ import requests
 
 from shared.db import transaction
 
+from services.orchestrator.metrics import (
+    FORMULAS_VALIDATED,
+    PAPERS_PROCESSED,
+    PIPELINE_RUN_DURATION,
+    PIPELINE_RUNS_ACTIVE,
+    STAGE_COMPLETED,
+    STAGE_DURATION,
+)
+
 logger = logging.getLogger(__name__)
 
 # Stage order: (name, port)
@@ -108,6 +117,7 @@ class PipelineRunner:
         if run_id is None:
             run_id = self._generate_run_id()
         start = time.time()
+        PIPELINE_RUNS_ACTIVE.inc()
 
         params = {
             "query": query,
@@ -135,60 +145,84 @@ class PipelineRunner:
         BATCH_STAGES = {"validator", "codegen"}
         MAX_BATCH_ITERATIONS = 100
 
-        for stage_name, port in stage_list:
-            stage_params = self._build_stage_params(stage_name, params)
+        try:
+            for stage_name, port in stage_list:
+                stage_params = self._build_stage_params(stage_name, params)
 
-            if not stage_params:
-                # Skip stages with no applicable params (e.g., Discovery without query)
-                logger.info("Skipping %s: no applicable params", stage_name)
-                continue
+                if not stage_params:
+                    # Skip stages with no applicable params (e.g., Discovery without query)
+                    logger.info("Skipping %s: no applicable params", stage_name)
+                    STAGE_COMPLETED.labels(stage=stage_name, result="skipped").inc()
+                    continue
 
-            logger.info("Dispatching stage: %s (port %d)", stage_name, port)
-            stage_start = time.time()
+                logger.info("Dispatching stage: %s (port %d)", stage_name, port)
+                stage_start = time.time()
 
-            stage_timeout = self.STAGE_TIMEOUTS.get(stage_name, self.timeout)
-            try:
-                if stage_name in BATCH_STAGES:
-                    # Iterate until all formulas are processed
-                    batch_results: list[dict] = []
-                    for iteration in range(1, MAX_BATCH_ITERATIONS + 1):
+                stage_timeout = self.STAGE_TIMEOUTS.get(stage_name, self.timeout)
+                try:
+                    if stage_name in BATCH_STAGES:
+                        # Iterate until all formulas are processed
+                        batch_results: list[dict] = []
+                        for iteration in range(1, MAX_BATCH_ITERATIONS + 1):
+                            result = self._call_service_with_retry(
+                                f"http://localhost:{port}/process", stage_params,
+                                timeout=stage_timeout,
+                            )
+                            batch_results.append(result)
+                            processed = result.get("formulas_processed", 0)
+                            if processed == 0:
+                                break
+                            logger.info(
+                                "Stage %s iteration %d: %d formulas processed",
+                                stage_name, iteration, processed,
+                            )
+                        # Merge batch results
+                        result = self._merge_batch_results(batch_results, stage_name)
+                    else:
                         result = self._call_service_with_retry(
                             f"http://localhost:{port}/process", stage_params,
                             timeout=stage_timeout,
                         )
-                        batch_results.append(result)
-                        processed = result.get("formulas_processed", 0)
-                        if processed == 0:
-                            break
-                        logger.info(
-                            "Stage %s iteration %d: %d formulas processed",
-                            stage_name, iteration, processed,
-                        )
-                    # Merge batch results
-                    result = self._merge_batch_results(batch_results, stage_name)
-                else:
-                    result = self._call_service_with_retry(
-                        f"http://localhost:{port}/process", stage_params,
-                        timeout=stage_timeout,
+
+                    stage_duration = time.time() - stage_start
+                    stage_ms = int(stage_duration * 1000)
+                    result["time_ms"] = stage_ms
+                    results[stage_name] = result
+                    stages_completed += 1
+                    STAGE_DURATION.labels(stage=stage_name).observe(stage_duration)
+                    STAGE_COMPLETED.labels(stage=stage_name, result="success").inc()
+                    logger.info(
+                        "Stage %s completed in %dms", stage_name, stage_ms
                     )
+                except ServiceError as e:
+                    stage_duration = time.time() - stage_start
+                    stage_ms = int(stage_duration * 1000)
+                    error_msg = f"{stage_name}: {e}"
+                    errors.append(error_msg)
+                    results[stage_name] = {"error": str(e), "time_ms": stage_ms}
+                    has_failure = True
+                    STAGE_DURATION.labels(stage=stage_name).observe(stage_duration)
+                    STAGE_COMPLETED.labels(stage=stage_name, result="failure").inc()
+                    logger.error("Stage %s failed: %s", stage_name, e)
+                    # Continue to next stage — other papers may be processable
 
-                stage_ms = int((time.time() - stage_start) * 1000)
-                result["time_ms"] = stage_ms
-                results[stage_name] = result
-                stages_completed += 1
-                logger.info(
-                    "Stage %s completed in %dms", stage_name, stage_ms
-                )
-            except ServiceError as e:
-                stage_ms = int((time.time() - stage_start) * 1000)
-                error_msg = f"{stage_name}: {e}"
-                errors.append(error_msg)
-                results[stage_name] = {"error": str(e), "time_ms": stage_ms}
-                has_failure = True
-                logger.error("Stage %s failed: %s", stage_name, e)
-                # Continue to next stage — other papers may be processable
+            # Extract paper/formula counts from stage results for Prometheus
+            papers_found = results.get("discovery", {}).get("papers_found", 0)
+            if papers_found:
+                PAPERS_PROCESSED.inc(papers_found)
 
-        elapsed_ms = int((time.time() - start) * 1000)
+            formulas_processed = results.get("validator", {}).get(
+                "formulas_processed", 0
+            )
+            if formulas_processed:
+                FORMULAS_VALIDATED.inc(formulas_processed)
+
+        finally:
+            elapsed = time.time() - start
+            PIPELINE_RUN_DURATION.observe(elapsed)
+            PIPELINE_RUNS_ACTIVE.dec()
+
+        elapsed_ms = int(elapsed * 1000)
 
         status = "completed"
         if has_failure:
