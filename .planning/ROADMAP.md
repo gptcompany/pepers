@@ -166,7 +166,7 @@ None
   2. A request with >10MB body to any service receives HTTP 413 and the server continues operating
   3. Each service thread gets its own SQLite connection -- no "ProgrammingError: SQLite objects created in a thread can only be used in that same thread" errors under concurrent load
   4. After killing orchestrator mid-pipeline-run and restarting, the stuck "running" record shows as "failed" with a reason string
-**Plans**: TBD
+**Plans**: 2 plans
 
 Plans:
 - [x] 43-01: ThreadingHTTPServer + body size limit + SQLite thread safety in shared/server.py and shared/db.py
@@ -180,10 +180,10 @@ Plans:
   1. GET /metrics on any service (ports 8770-8776) returns Prometheus text format with request_count, request_duration_seconds histogram, and error_count
   2. GET /metrics on orchestrator (8775) additionally returns papers_processed_total, formulas_validated_total, and pipeline_run_duration_seconds
   3. Metrics increment correctly after processing requests (not stuck at zero)
-**Plans**: TBD
+**Plans**: 1 plan
 
 Plans:
-- [ ] 44-01: Prometheus metrics middleware in shared/server.py + orchestrator pipeline metrics + tests
+- [ ] 44-01-PLAN.md — Prometheus metrics middleware in shared/server.py + orchestrator pipeline metrics + tests
 
 ### Phase 45: Docker Production Hardening
 **Goal**: PePeRS Docker deployment is production-grade -- survives reboots, limits resource usage, rotates logs, and shuts down cleanly
