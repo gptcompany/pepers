@@ -22,11 +22,25 @@ Reliable, N8N-free academic paper processing pipeline that discovers papers from
 - ✓ Codegen service: LLM plain-language explanation + C99/Rust/Python codegen via SymPy — v6.0
 
 ### Active
-- [ ] Monitoring integration: process-exporter config, Prometheus alert rules, Grafana dashboard
-- [ ] Production deployment: `docker compose up` on Workstation
-- [ ] Server concurrency: ThreadingHTTPServer or async framework for multi-client MCP
-- [ ] Request body size limits for DoS prevention
-- [ ] Pipeline run stuck-state cleanup (running → failed on crash)
+
+<!-- Current scope: v13.0 Production Hardening -->
+
+- [ ] Monitoring integration: process-exporter config, Prometheus alert rules, Grafana dashboard (pipeline health — services up/down, papers/day, errors, response times per stage)
+- [ ] Production deployment: Docker Compose stable on Workstation — restart policies, log rotation, auto-start at boot
+- [ ] Server concurrency: ThreadingHTTPServer or async for MCP server (:8776) — multiple concurrent MCP clients
+- [ ] Request body size limits for DoS prevention on all services
+- [ ] Pipeline run stuck-state cleanup (running → failed on crash/restart)
+
+## Current Milestone: v13.0 Production Hardening
+
+**Goal:** Harden PePeRS for stable production use — monitoring, deployment, concurrency, and resilience.
+
+**Target features:**
+- Grafana dashboard with pipeline health metrics (services, papers/day, errors, response times)
+- Prometheus alert rules for service failures and pipeline anomalies
+- Docker Compose production deployment with restart policies and auto-start
+- MCP server concurrent request handling for multiple clients
+- Request body size limits and stuck-state pipeline cleanup
 
 ### Validated (v1.0-v12.0)
 
@@ -159,4 +173,4 @@ Reliable, N8N-free academic paper processing pipeline that discovers papers from
 | MATLAB first engine + fallback | MATLAB available, graceful degradation if down (>=2 agree → consensus) | — Pending |
 
 ---
-*Last updated: 2026-02-21 after v12.0 milestone archived*
+*Last updated: 2026-02-21 after v13.0 milestone started*

@@ -2,17 +2,17 @@
 
 ## Project Reference
 
-See: .planning/PROJECT.md (updated 2026-02-15)
+See: .planning/PROJECT.md (updated 2026-02-21)
 
 **Core value:** Reliable, N8N-free academic paper processing pipeline
-**Current focus:** v12.0 Distribution & Branding — COMPLETE
+**Current focus:** v13.0 Production Hardening
 
 ## Current Position
 
-Phase: 42 of 42 (Multi-Source Discovery — OpenAlex)
-Plan: 42-01 complete
-Status: Complete
-Last activity: 2026-02-20 — Phase 42 complete: OpenAlex API client, schema v5, cross-source dedup, 1301 LOC added, 790 tests passing
+Phase: Not started (defining requirements)
+Plan: —
+Status: Defining requirements
+Last activity: 2026-02-21 — Milestone v13.0 started
 
 Progress: 12/12 milestones shipped (v1.0-v12.0)
 
