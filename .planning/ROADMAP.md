@@ -22,6 +22,7 @@ None
 - [✅ v10.0 Production Hardening](milestones/v10.0-ROADMAP.md) (Phases 32-34) — SHIPPED 2026-02-17
 - [✅ v11.0 CLI Providers + Batch Explain + API + Async](milestones/v11.0-ROADMAP.md) (Phases 35-37) — SHIPPED 2026-02-18
 - [✅ v12.0 Distribution & Branding](milestones/v12.0-ROADMAP.md) (Phases 38-42) — SHIPPED 2026-02-20
+- 🚧 **v13.0 Production Hardening** — Phases 43-46 (in progress)
 
 ## Phases
 
@@ -83,57 +84,19 @@ None
 <details>
 <summary>✅ v7.0 Orchestrator + Deploy (Phases 20-22) — SHIPPED 2026-02-14</summary>
 
-#### Phase 20: Orchestrator Research & Design
-
-**Goal**: Architecture design for orchestrator service — API contract, cron scheduling, stage coordination, error handling/retry, Docker compose layout
-**Depends on**: v6.0 complete (all 5 services built)
-**Research**: Likely (Docker compose orchestration patterns, cron integration, microservice coordination)
-**Research topics**: Docker compose for multi-service Python apps, APScheduler vs cron for Python scheduling, retry/backoff patterns for HTTP microservice chains
-**Plans**: 1/1 complete
-
-Plans:
-- [x] 20-01: Design orchestrator architecture + Docker deployment (DESIGN.md + PROJECT.md)
-
-#### Phase 21: Orchestrator Implementation + Docker Deploy
-
-**Goal**: Implement orchestrator service with /run endpoint + cron scheduler, Dockerfile and docker-compose.yml for all services
-**Depends on**: Phase 20
-**Research**: Unlikely (follows design from Phase 20)
-**Plans**: 1/1 complete
-
-Plans:
-- [x] 21-01: Implement orchestrator service + Dockerfile + docker-compose.yml
-
-#### Phase 22: Testing & Integration
-
-**Goal**: Unit, integration, and E2E tests for orchestrator + full pipeline flow through all 5 services in Docker
-**Depends on**: Phase 21
-**Research**: Unlikely (established testing patterns from 6 milestones)
-**Plans**: 1/1 complete
-
-Plans:
-- [x] 22-01: Unit, integration, and E2E tests for orchestrator (63 tests, 816 LOC)
+- [x] **Phase 20: Orchestrator Research & Design** (1/1 plans) — completed 2026-02-14
+- [x] **Phase 21: Orchestrator Implementation + Docker Deploy** (1/1 plans) — completed 2026-02-14
+- [x] **Phase 22: Testing & Integration** (1/1 plans) — completed 2026-02-14
 
 </details>
 
-### ✅ Phase 23: E2E Smoke Test (Real Papers)
+<details>
+<summary>✅ Standalone Phases 23-24 — SHIPPED 2026-02-15</summary>
 
-**Goal**: Full pipeline smoke test with real arXiv papers — verify every service works end-to-end, honest assessment of bugs/performance/gaps
-**Depends on**: v7.0 complete + all external services running
-**Plans**: 1/1 complete
+- [x] **Phase 23: E2E Smoke Test (Real Papers)** (1/1 plans) — completed 2026-02-15
+- [x] **Phase 24: Skill Alignment + GET Endpoints** (1/1 plans) — completed 2026-02-15
 
-Plans:
-- [x] 23-01: Full pipeline E2E smoke test with real papers — 6 bugs fixed, 5/6 services validated
-
-### ✅ Phase 24: Skill Alignment + GET Endpoints (Retroactive)
-
-**Goal**: Align /research and /research-papers skills to pipeline microservices, add GET /papers and GET /formulas query endpoints to orchestrator
-**Depends on**: Phase 23
-**Research**: Unlikely (internal patterns)
-**Plans**: 1/1 complete
-
-Plans:
-- [x] 24-01: GET endpoints + skill alignment + E2E re-test (11 new integration tests, 0 bugs)
+</details>
 
 <details>
 <summary>✅ v8.0 GitHub Discovery + Gemini Analysis (Phases 25-27) — SHIPPED 2026-02-15</summary>
@@ -145,22 +108,14 @@ Plans:
 </details>
 
 <details>
-<summary>✅ v9.0 Pipeline Hardening — Post-E2E Fixes (Phases 28-30) — SHIPPED 2026-02-16</summary>
+<summary>✅ v9.0 Pipeline Hardening — Post-E2E Fixes (Phases 28-31) — SHIPPED 2026-02-16</summary>
 
 - [x] **Phase 28: Fix Stage Transitions + Batch Overflow** (1/1 plans) — completed 2026-02-16
 - [x] **Phase 29: LaTeX Filtering + Cleanup** (1/1 plans) — completed 2026-02-16
 - [x] **Phase 30: Test E2E Hardening** (1/1 plans) — completed 2026-02-16
+- [x] **Phase 31: E2E Smoke Test CLI (Real Data)** (1/1 plans) — completed 2026-02-16
 
 </details>
-
-### ✅ Phase 31: E2E Smoke Test CLI (Real Data)
-
-**Goal**: Standalone smoke test CLI that runs the full 5-service pipeline on a real arXiv paper, verifies stage progression in DB, reports formula statistics
-**Depends on**: v9.0 complete
-**Plans**: 1/1 complete
-
-Plans:
-- [x] 31-01: Smoke test CLI + pytest wrapper (scripts/smoke_test.py 452 LOC, tests/e2e/test_smoke_real.py 90 LOC) — PASS on paper 2003.02743 (133 formulas, 107 codegen, 399 generated_code rows)
 
 <details>
 <summary>✅ v10.0 Production Hardening (Phases 32-34) — SHIPPED 2026-02-17</summary>
@@ -171,13 +126,17 @@ Plans:
 
 </details>
 
-### ✅ v11.0 CLI Providers + Batch Explain + API + Async (Phases 35-37) — SHIPPED 2026-02-18
+<details>
+<summary>✅ v11.0 CLI Providers + Batch Explain + API + Async (Phases 35-37) — SHIPPED 2026-02-18</summary>
 
 - [x] **Phase 35: CLI Providers + Batch Explain** (1/1 plans) — completed 2026-02-18
 - [x] **Phase 36: GET /generated-code + Async /run** (1/1 plans) — completed 2026-02-18
 - [x] **Phase 37: E2E Testing + Documentation** (1/1 plans) — completed 2026-02-18
 
-### ✅ v12.0 Distribution & Branding (Phases 38-42) — SHIPPED 2026-02-20
+</details>
+
+<details>
+<summary>✅ v12.0 Distribution & Branding (Phases 38-42) — SHIPPED 2026-02-20</summary>
 
 - [x] **Phase 38: Branding & Naming** (1/1 plans) — completed 2026-02-19
 - [x] **Phase 39: RAGAnything context_only** (1/1 plans) — completed 2026-02-19
@@ -185,7 +144,80 @@ Plans:
 - [x] **Phase 41: One-Click Install** (1/1 plans) — completed 2026-02-19
 - [x] **Phase 42: Multi-Source Discovery (OpenAlex)** (1/1 plans) — completed 2026-02-20
 
+</details>
+
+### v13.0 Production Hardening (In Progress)
+
+**Milestone Goal:** Harden PePeRS for stable production use -- concurrent request handling, Prometheus observability, Docker production deployment, and pipeline resilience.
+
+- [ ] **Phase 43: Server Concurrency + Resilience** - ThreadingHTTPServer, body size limits, SQLite thread safety, stuck-state cleanup
+- [ ] **Phase 44: Prometheus Metrics** - /metrics endpoints on all services with request/pipeline counters
+- [ ] **Phase 45: Docker Production Hardening** - Log rotation, memory limits, auto-start, graceful shutdown
+- [ ] **Phase 46: Monitoring Integration** - process-exporter, Prometheus scrape, Grafana dashboard, alert rules
+
+## Phase Details
+
+### Phase 43: Server Concurrency + Resilience
+**Goal**: All PePeRS services handle concurrent requests safely, reject oversized payloads, and recover from stuck pipeline states on restart
+**Depends on**: Phase 42 (v12.0 complete)
+**Requirements**: CONC-01, CONC-02, CONC-03, RES-01
+**Success Criteria** (what must be TRUE):
+  1. Two concurrent HTTP requests to any service both receive correct responses (no blocking, no crashes)
+  2. A request with >10MB body to any service receives HTTP 413 and the server continues operating
+  3. Each service thread gets its own SQLite connection -- no "ProgrammingError: SQLite objects created in a thread can only be used in that same thread" errors under concurrent load
+  4. After killing orchestrator mid-pipeline-run and restarting, the stuck "running" record shows as "failed" with a reason string
+**Plans**: TBD
+
+Plans:
+- [ ] 43-01: ThreadingHTTPServer + body size limit + SQLite thread safety in shared/server.py and shared/db.py
+- [ ] 43-02: Stuck-state cleanup in orchestrator startup + tests for all Phase 43 changes
+
+### Phase 44: Prometheus Metrics
+**Goal**: Every PePeRS service exposes machine-readable performance metrics that Prometheus can scrape
+**Depends on**: Phase 43
+**Requirements**: MON-01, MON-02
+**Success Criteria** (what must be TRUE):
+  1. GET /metrics on any service (ports 8770-8776) returns Prometheus text format with request_count, request_duration_seconds histogram, and error_count
+  2. GET /metrics on orchestrator (8775) additionally returns papers_processed_total, formulas_validated_total, and pipeline_run_duration_seconds
+  3. Metrics increment correctly after processing requests (not stuck at zero)
+**Plans**: TBD
+
+Plans:
+- [ ] 44-01: Prometheus metrics middleware in shared/server.py + orchestrator pipeline metrics + tests
+
+### Phase 45: Docker Production Hardening
+**Goal**: PePeRS Docker deployment is production-grade -- survives reboots, limits resource usage, rotates logs, and shuts down cleanly
+**Depends on**: Phase 43 (code changes must be stable before Docker config)
+**Requirements**: DEP-01, DEP-02, DEP-03, DEP-04
+**Success Criteria** (what must be TRUE):
+  1. After 24h of operation, no single container log file exceeds 10MB (json-file driver, 3 rotated files)
+  2. A container that allocates excessive memory is killed by Docker (512MB limit per service, 1GB for orchestrator)
+  3. After Workstation reboot, `docker ps` shows all PePeRS containers running without manual intervention
+  4. `docker compose down` completes within 30 seconds with no orphaned processes
+**Plans**: TBD
+
+Plans:
+- [ ] 45-01: docker-compose.yml hardening (log rotation, memory limits, stop_grace_period) + systemd unit for auto-start
+
+### Phase 46: Monitoring Integration
+**Goal**: PePeRS pipeline health is visible in Grafana with automatic alerts on failures
+**Depends on**: Phase 44 (requires /metrics endpoints)
+**Requirements**: MON-03, MON-04, MON-05, MON-06
+**Success Criteria** (what must be TRUE):
+  1. process-exporter shows each PePeRS service as a distinct named group (not generic "python") in Prometheus
+  2. Prometheus targets page (http://localhost:9090/targets) shows all PePeRS services as UP
+  3. Grafana dashboard displays 6 panels: service health, throughput (papers/day), latency per stage, error rates, formula validation results, active pipeline runs
+  4. Prometheus alert fires within 3 minutes when a PePeRS service is stopped, and another fires if no papers are processed for 24 hours
+**Plans**: TBD
+
+Plans:
+- [ ] 46-01: process-exporter config + Prometheus scrape job + alert rules
+- [ ] 46-02: Grafana dashboard JSON (6 panels) + E2E monitoring validation
+
 ## Progress
+
+**Execution Order:**
+Phases execute in numeric order: 43 → 44 → 45 → 46
 
 | Phase | Milestone | Plans Complete | Status | Completed |
 |-------|-----------|----------------|--------|-----------|
@@ -231,3 +263,7 @@ Plans:
 | 40. MCP Server SSE | v12.0 | 1/1 | Complete | 2026-02-19 |
 | 41. One-Click Install | v12.0 | 1/1 | Complete | 2026-02-19 |
 | 42. Multi-Source Discovery (OpenAlex) | v12.0 | 1/1 | Complete | 2026-02-20 |
+| 43. Server Concurrency + Resilience | v13.0 | 0/2 | Not started | - |
+| 44. Prometheus Metrics | v13.0 | 0/1 | Not started | - |
+| 45. Docker Production Hardening | v13.0 | 0/1 | Not started | - |
+| 46. Monitoring Integration | v13.0 | 0/2 | Not started | - |

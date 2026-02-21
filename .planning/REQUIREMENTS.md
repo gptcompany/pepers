@@ -61,26 +61,26 @@ Requirements for production hardening. Each maps to roadmap phases.
 
 | Requirement | Phase | Status |
 |-------------|-------|--------|
-| CONC-01 | — | Pending |
-| CONC-02 | — | Pending |
-| CONC-03 | — | Pending |
-| MON-01 | — | Pending |
-| MON-02 | — | Pending |
-| MON-03 | — | Pending |
-| MON-04 | — | Pending |
-| MON-05 | — | Pending |
-| MON-06 | — | Pending |
-| DEP-01 | — | Pending |
-| DEP-02 | — | Pending |
-| DEP-03 | — | Pending |
-| DEP-04 | — | Pending |
-| RES-01 | — | Pending |
+| CONC-01 | Phase 43 | Pending |
+| CONC-02 | Phase 43 | Pending |
+| CONC-03 | Phase 43 | Pending |
+| MON-01 | Phase 44 | Pending |
+| MON-02 | Phase 44 | Pending |
+| MON-03 | Phase 46 | Pending |
+| MON-04 | Phase 46 | Pending |
+| MON-05 | Phase 46 | Pending |
+| MON-06 | Phase 46 | Pending |
+| DEP-01 | Phase 45 | Pending |
+| DEP-02 | Phase 45 | Pending |
+| DEP-03 | Phase 45 | Pending |
+| DEP-04 | Phase 45 | Pending |
+| RES-01 | Phase 43 | Pending |
 
 **Coverage:**
 - v13.0 requirements: 14 total
-- Mapped to phases: 0
-- Unmapped: 14 ⚠️
+- Mapped to phases: 14
+- Unmapped: 0
 
 ---
 *Requirements defined: 2026-02-21*
-*Last updated: 2026-02-21 after initial definition*
+*Last updated: 2026-02-21 after roadmap creation*
