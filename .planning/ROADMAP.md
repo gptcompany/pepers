@@ -21,7 +21,7 @@ None
 - [✅ v9.0 Pipeline Hardening — Post-E2E Fixes](milestones/v9.0-ROADMAP.md) (Phases 28-30) — SHIPPED 2026-02-16
 - [✅ v10.0 Production Hardening](milestones/v10.0-ROADMAP.md) (Phases 32-34) — SHIPPED 2026-02-17
 - [✅ v11.0 CLI Providers + Batch Explain + API + Async](milestones/v11.0-ROADMAP.md) (Phases 35-37) — SHIPPED 2026-02-18
-- [🔄 v12.0 Distribution & Branding](milestones/v12.0-ROADMAP.md) (Phases 38-42) — IN PROGRESS
+- [✅ v12.0 Distribution & Branding](milestones/v12.0-ROADMAP.md) (Phases 38-42) — SHIPPED 2026-02-20
 
 ## Phases
 
@@ -177,13 +177,13 @@ Plans:
 - [x] **Phase 36: GET /generated-code + Async /run** (1/1 plans) — completed 2026-02-18
 - [x] **Phase 37: E2E Testing + Documentation** (1/1 plans) — completed 2026-02-18
 
-### 🔄 v12.0 Distribution & Branding (Phases 38-42) — IN PROGRESS
+### ✅ v12.0 Distribution & Branding (Phases 38-42) — SHIPPED 2026-02-20
 
 - [x] **Phase 38: Branding & Naming** (1/1 plans) — completed 2026-02-19
 - [x] **Phase 39: RAGAnything context_only** (1/1 plans) — completed 2026-02-19
 - [x] **Phase 40: MCP Server SSE** (1/1 plans) — completed 2026-02-19
 - [x] **Phase 41: One-Click Install** (1/1 plans) — completed 2026-02-19
-- [ ] **Phase 42: Multi-Source Discovery (OpenAlex)** (0/1 plans)
+- [x] **Phase 42: Multi-Source Discovery (OpenAlex)** (1/1 plans) — completed 2026-02-20
 
 ## Progress
 
@@ -230,4 +230,4 @@ Plans:
 | 39. RAGAnything context_only | v12.0 | 1/1 | Complete | 2026-02-19 |
 | 40. MCP Server SSE | v12.0 | 1/1 | Complete | 2026-02-19 |
 | 41. One-Click Install | v12.0 | 1/1 | Complete | 2026-02-19 |
-| 42. Multi-Source Discovery (OpenAlex) | v12.0 | 0/1 | Not started | — |
+| 42. Multi-Source Discovery (OpenAlex) | v12.0 | 1/1 | Complete | 2026-02-20 |

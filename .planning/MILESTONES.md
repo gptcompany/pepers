@@ -1,4 +1,32 @@
-# Project Milestones: Research Pipeline
+# Project Milestones: PePeRS
+
+## v12.0 Distribution & Branding (Shipped: 2026-02-20)
+
+**Delivered:** Project identity (PePeRS branding), MCP Server SSE with 8 tools and arcade flavor, RAGAnything context_only mode, one-click Docker/uv install, and OpenAlex multi-source discovery (200M+ works).
+
+**Phases completed:** 38-42 (5 plans total)
+
+**Key accomplishments:**
+
+- PePeRS branding: project renamed across 19 files, professional README with logo
+- RAGAnything context_only mode: chunk retrieval <2s (vs 60-90s with LLM synthesis)
+- MCP Server SSE: 8 tools on :8776 with SEXY BAR ARCADE flavor (Metal Slug style)
+- One-click install: Docker compose (pipeline + MCP) + `uv tool install pepers` + `pepers-mcp` CLI
+- OpenAlex discovery: 200M+ works API client, schema v5 (source + openalex_id), cross-source dedup
+- Adapter pattern: RP_DISCOVERY_SOURCES=arxiv,openalex env var for N-source configuration
+
+**Stats:**
+
+- 42 files changed, 3,599 insertions, 199 deletions
+- ~3,400 LOC added (production + tests)
+- 5 phases, 5 plans
+- 2 days (2026-02-19 to 2026-02-20)
+
+**Git range:** `a802eb9` → `00ae823`
+
+**What's next:** Next milestone TBD — possible directions: production hardening II, monitoring, user feedback
+
+---
 
 ## v9.0 Pipeline Hardening (Shipped: 2026-02-16)
 

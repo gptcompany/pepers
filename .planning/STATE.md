@@ -5,16 +5,16 @@
 See: .planning/PROJECT.md (updated 2026-02-15)
 
 **Core value:** Reliable, N8N-free academic paper processing pipeline
-**Current focus:** v12.0 Distribution & Branding — naming, MCP Server, packaging, OpenAlex
+**Current focus:** v12.0 Distribution & Branding — COMPLETE
 
 ## Current Position
 
-Phase: 41 of 42 (One-Click Install)
-Plan: 41-01 complete
+Phase: 42 of 42 (Multi-Source Discovery — OpenAlex)
+Plan: 42-01 complete
 Status: Complete
-Last activity: 2026-02-19 — Phase 41 complete: Docker compose + uv tool install + pepers-mcp CLI, 745 tests passing
+Last activity: 2026-02-20 — Phase 42 complete: OpenAlex API client, schema v5, cross-source dedup, 1301 LOC added, 790 tests passing
 
-Progress: 11/11 milestones shipped (v1.0-v11.0), v12.0 in progress
+Progress: 12/12 milestones shipped (v1.0-v12.0)
 
 ## Shipped Milestones
 
@@ -192,12 +192,46 @@ E2E pipeline test on paper 15 (1806.05293, Kelly criterion stock markets, 6 page
 - `docs/RUNBOOK.md`: CLI providers config, async /run examples, GET /generated-code
 - `.env`: RP_LLM_FALLBACK_ORDER=gemini_cli,codex_cli,claude_cli,openrouter,ollama
 
+## v12.0 Distribution & Branding
+
+### Phases
+
+| Phase | Goal | Status |
+|-------|------|--------|
+| 38. Branding & Naming | PePeRS naming, logo, professional README | Complete |
+| 39. RAGAnything context_only | Chunk retrieval <2s for MCP | Complete |
+| 40. MCP Server SSE | 8 tools via SSE on :8776 | Complete |
+| 41. One-Click Install | Docker compose + uv tool install + pepers-mcp CLI | Complete |
+| 42. Multi-Source Discovery (OpenAlex) | OpenAlex API, schema v5, cross-source dedup | Complete |
+
+### Phase 42 Deliverables
+
+- `services/discovery/openalex.py`: 269 LOC — OpenAlex API client (200M+ works, free, no API key)
+- `services/discovery/main.py`: +112 LOC — adapter pattern multi-source, RP_DISCOVERY_SOURCES env var
+- `shared/db.py`: +62 LOC — schema migration v5, source + openalex_id columns, arxiv_id nullable
+- `shared/models.py`: +7 LOC — source/openalex_id fields in Pydantic models
+- `tests/unit/test_openalex.py`: 436 LOC — unit tests
+- `tests/integration/test_openalex_db.py`: 224 LOC — integration tests
+- `tests/unit/test_db.py`: +189 LOC — migration v5 tests
+- ARCHITECTURE.md, README.md, RUNBOOK.md updated
+
+## Current Stats
+
+- **Total tests**: 790 (all passing)
+- **Total LOC**: ~14,300+ across 6 services + shared library + MCP server + Docker
+- **Services**: 6 microservices (ports 8770-8775) + MCP server (8776) + Docker Compose + systemd units
+- **Duration**: 11 days (2026-02-10 to 2026-02-21)
+- **CAS engines**: MATLAB + SymPy + Maxima with fallback consensus
+- **Schema version**: v5 (source + openalex_id columns)
+- **LLM determinism**: temperature=0, seed=42 on all configurable providers
+- **Discovery sources**: arXiv + OpenAlex (configurable via RP_DISCOVERY_SOURCES)
+
 ## Blockers/Concerns
 
-None — v11.0 complete.
+None — v12.0 complete. All 42 phases shipped.
 
 ## Session Continuity
 
-Last session: 2026-02-18
-Stopped at: v11.0 milestone complete — all 37 phases done
+Last session: 2026-02-21
+Stopped at: v12.0 milestone complete — all 42 phases done
 Resume file: None

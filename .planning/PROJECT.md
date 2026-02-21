@@ -2,11 +2,11 @@
 
 ## What This Is
 
-A set of 5 standalone Python microservices + 1 orchestrator that replaces the N8N W1-W5 research paper pipeline. Fetches academic papers from arXiv, enriches with citation data, analyzes with LLM, extracts formulas, validates with multi-CAS consensus, and generates Python/Rust code. Deployed via Docker Compose on Workstation, monitored by the existing monitoring-stack (Prometheus + Grafana + Loki).
+PePeRS — a set of 6 standalone Python microservices + 1 orchestrator + 1 MCP server that replaces the N8N W1-W5 research paper pipeline. Discovers academic papers from arXiv and OpenAlex (200M+ works), enriches with citation data, analyzes with LLM, extracts formulas, validates with multi-CAS consensus, and generates Python/Rust code. Exposed via MCP Server SSE (8 tools) for Claude Desktop/Cursor integration. Deployed via Docker Compose or `uv tool install pepers`.
 
 ## Core Value
 
-Reliable, N8N-free academic paper processing pipeline that discovers Kelly criterion papers, validates mathematical formulas with multiple CAS engines, and generates production code — all as independent, replaceable microservices.
+Reliable, N8N-free academic paper processing pipeline that discovers papers from arXiv + OpenAlex, validates mathematical formulas with multiple CAS engines, generates production code, and exposes everything via MCP tools — all as independent, replaceable microservices.
 
 ## Requirements
 
@@ -24,21 +24,31 @@ Reliable, N8N-free academic paper processing pipeline that discovers Kelly crite
 ### Active
 - [ ] Monitoring integration: process-exporter config, Prometheus alert rules, Grafana dashboard
 - [ ] Production deployment: `docker compose up` on Workstation
+- [ ] Server concurrency: ThreadingHTTPServer or async framework for multi-client MCP
+- [ ] Request body size limits for DoS prevention
+- [ ] Pipeline run stuck-state cleanup (running → failed on crash)
 
-### Validated
+### Validated (v1.0-v12.0)
 
 - ✓ Shared library: DB connection pool, Pydantic models, base HTTP server, config management — v1.0
 - ✓ Each service exposes /health, /status, /process endpoints — v1.0
 - ✓ dotenvx secret management aligned with SSOT at /media/sam/1TB/.env — v1.0
-- ✓ Discovery service: fetch arXiv papers by keywords + enrich via Semantic Scholar/CrossRef — v2.0
-- ✓ Analyzer service: LLM analysis (triple fallback) + 5-criteria relevance scoring + routing — v3.0
-- ✓ Extractor service: PDF download + RAGAnything text extraction + 5-pass LaTeX regex + formula storage — v4.0
-- ✓ Validator service: multi-CAS validation (SymPy + Maxima + MATLAB) with fallback consensus — v5.0
-- ✓ Codegen service: LLM plain-language explanation + C99/Rust/Python codegen via SymPy — v6.0
-- ✓ Orchestrator service (port 8775): HTTP trigger (POST /run) + configurable cron scheduling (APScheduler) — v7.0
-- ✓ Docker Compose deployment: all 6 services, shared SQLite volume, health checks, startup ordering — v7.0
-- ✓ GitHub Discovery: search GitHub repos for paper implementations, analyze with Gemini CLI — v8.0
-- ✓ Pipeline hardening: stage transitions, batch overflow, LaTeX filtering, regression tests — v9.0
+- ✓ Discovery service: arXiv + Semantic Scholar/CrossRef enrichment — v2.0
+- ✓ Analyzer service: LLM triple fallback + 5-criteria relevance scoring — v3.0
+- ✓ Extractor service: PDF download + RAGAnything + 5-pass LaTeX regex — v4.0
+- ✓ Validator service: multi-CAS validation (SymPy + Maxima + MATLAB) with consensus — v5.0
+- ✓ Codegen service: LLM explanation + C99/Rust/Python codegen via SymPy — v6.0
+- ✓ Orchestrator: HTTP trigger + cron scheduling + async /run — v7.0
+- ✓ Docker Compose deployment: all services, health checks, startup ordering — v7.0
+- ✓ GitHub Discovery: search repos + Gemini CLI analysis — v8.0
+- ✓ Pipeline hardening: stage transitions, batch overflow, LaTeX filtering — v9.0
+- ✓ Production hardening: systemd units, schema migrations, /health enhanced, LLM determinism — v10.0
+- ✓ CLI providers: data-driven registry, batch explain, async /run, GET /generated-code — v11.0
+- ✓ PePeRS branding: naming, logo, professional README — v12.0
+- ✓ RAGAnything context_only mode (<2s response) — v12.0
+- ✓ MCP Server SSE: 8 tools on :8776 with arcade flavor — v12.0
+- ✓ One-click install: Docker compose + uv tool install + pepers-mcp CLI — v12.0
+- ✓ OpenAlex multi-source discovery: 200M+ works, schema v5, cross-source dedup — v12.0
 
 ### Out of Scope
 
@@ -51,23 +61,22 @@ Reliable, N8N-free academic paper processing pipeline that discovers Kelly crite
 
 ## Context
 
-**Current state (v9.0 SHIPPED — 9 milestones complete, 30 phases):**
-- Shared library: 1,055 LOC Python across 5 modules (db.py, models.py, server.py, config.py, llm.py)
-- Discovery service: 448 LOC (arXiv + S2 + CrossRef)
-- Analyzer service: 600 LOC (LLM triple fallback + 5-criteria scoring)
-- Extractor service: 644 LOC (PDF download + RAGAnything client + LaTeX regex + is_nontrivial filter)
-- Validator service: 492 LOC (CAS client + fallback consensus + handler + stage update)
-- Codegen service: 567 LOC (SymPy C99/Rust/Python codegen + LLM explanation + clean_latex)
-- GitHub Discovery: 621 LOC (GitHub API search + Gemini CLI/SDK analysis + schema v2)
-- CAS microservice: 698 LOC (standalone at /media/sam/1TB/cas-service/, SymPy + Maxima + MATLAB)
-- SQLite schema: 7 tables (papers, formulas, validations, generated_code, github_repos, github_analyses, schema_version)
-- Orchestrator service: 850 LOC (pipeline dispatch, batch iteration loop, retry logic, cron scheduler)
-- 13 Pydantic models with JSON field validators
-- Base HTTP server with @route decorator, JSON logging, SIGTERM handling
-- Dockerfile (multi-stage) + docker-compose.yml (6 services, network_mode:host)
-- 600 non-e2e + 47 e2e = 647 total tests
-- ~16,000 LOC Python total
-- Tech stack: Python stdlib (http.server, sqlite3, logging, json) + Pydantic + google-genai + requests + SymPy
+**Current state (v12.0 SHIPPED — 12 milestones complete, 42 phases):**
+- Shared library: ~1,200 LOC Python (db.py, models.py, server.py, config.py, llm.py, cli_providers.json)
+- Discovery service: ~560 LOC (arXiv + OpenAlex + S2 + CrossRef, adapter pattern)
+- Analyzer service: ~600 LOC (LLM triple fallback + 5-criteria scoring)
+- Extractor service: ~644 LOC (PDF download + RAGAnything + 5-pass LaTeX regex)
+- Validator service: ~492 LOC (CAS client + fallback consensus + stage update)
+- Codegen service: ~650 LOC (SymPy codegen + batch explain + clean_latex)
+- GitHub Discovery: ~621 LOC (GitHub API + Gemini CLI/SDK analysis)
+- Orchestrator service: ~950 LOC (pipeline dispatch, async /run, batch iteration, notifications)
+- MCP Server: ~427 LOC (8 SSE tools, arcade flavor, pepers-mcp CLI)
+- CAS microservice: 698 LOC (standalone at /media/sam/1TB/cas-service/)
+- SQLite schema v5: 8 tables (papers, formulas, validations, generated_code, github_repos, github_analyses, pipeline_runs, schema_version)
+- 790 tests (all passing)
+- ~14,300 LOC Python total
+- Tech stack: Python stdlib + Pydantic + google-genai + requests + SymPy + mcp SDK + apprise
+- Distribution: Docker Compose + uv tool install + pepers-mcp CLI
 
 **Origin**: N8N crashed in Jan 2026, external team restored 88 workflows but lost all data. The W1-W5 pipeline (17 N8N workflows) never successfully processed a paper end-to-end — all tables empty, 0 executions. Rather than fix N8N, rebuilding as standalone microservices eliminates the single point of failure.
 
@@ -150,4 +159,4 @@ Reliable, N8N-free academic paper processing pipeline that discovers Kelly crite
 | MATLAB first engine + fallback | MATLAB available, graceful degradation if down (>=2 agree → consensus) | — Pending |
 
 ---
-*Last updated: 2026-02-16 after v9.0 milestone archived*
+*Last updated: 2026-02-21 after v12.0 milestone archived*
