@@ -16,7 +16,7 @@ Every PePeRS service exposes machine-readable performance metrics that Prometheu
 ### Label Granularity
 - Labels per metrica HTTP: `service`, `endpoint`, `method`, `status_code`
 - `service` = nome logico (discovery, analyzer, extractor, validator, codegen, orchestrator) — non porta
-- `endpoint` = path HTTP completo (es. `/discover`, `/analyze`, `/metrics`)
+- `endpoint` = path HTTP completo (es. `/discover`, `/analyze`, `/metrics`). Tutti gli endpoint PePeRS sono statici (nessun parametro dinamico nel path), quindi nessun rischio di cardinalita' esplosiva
 - Namespace prefix: `pepers_` su tutte le metriche (es. `pepers_request_count`, `pepers_request_duration_seconds`)
 
 ### Pipeline Stage Breakdown
@@ -28,8 +28,8 @@ Every PePeRS service exposes machine-readable performance metrics that Prometheu
 
 ### Histogram Buckets
 - Request HTTP (singoli servizi): default prometheus-client (0.005 - 10s)
-- Pipeline run duration: custom buckets (10, 30, 60, 120, 300, 600, 1800, 3600s) per coprire durate da 1 min a 1 ora
-- Stage duration: custom buckets da definire in base ai tempi tipici per stage
+- Pipeline run duration: custom buckets (10, 30, 60, 120, 300, 600, 900, 1200, 1800, 3600s) per coprire durate da 10s a 1 ora con buona risoluzione intermedia
+- Stage duration: custom buckets (1, 5, 10, 30, 60, 120, 300, 600s) — stage individuali sono piu' brevi della pipeline totale
 
 ### Claude's Discretion
 - Error classification approach (per-type labels vs contatore unico vs status-code-only)
