@@ -4,7 +4,10 @@ Usage:
     python -m services.mcp
 """
 
+import os
+
 from services.mcp.server import mcp
 
 if __name__ == "__main__":
-    mcp.run(transport="sse")
+    transport = os.environ.get("RP_MCP_TRANSPORT", "sse")
+    mcp.run(transport=transport)

@@ -24,15 +24,16 @@ class TestFlavorSystem:
         assert MCP_FLAVOR in ("arcade", "plain")
 
     def test_flavor_arcade_message(self):
-        """_flavor() returns arcade messages when flavor=arcade."""
-        from services.mcp.server import ARCADE_MESSAGES, PLAIN_MESSAGES, _flavor
+        """_flavor() returns one of the arcade+pepe variants when flavor=arcade."""
+        from services.mcp.server import ARCADE_MESSAGES, _flavor
 
         with patch("services.mcp.server.MCP_FLAVOR", "arcade"):
             msg = _flavor("search_found", n=5)
             assert "5" in msg
-            # Should match the arcade template
-            expected = ARCADE_MESSAGES["search_found"].format(n=5)
-            assert msg == expected
+            assert "🐸" in msg
+            # Should be one of the variants
+            possible = [v.format(n=5) for v in ARCADE_MESSAGES["search_found"]]
+            assert msg in possible
 
     def test_flavor_plain_message(self):
         """_flavor() returns plain messages when flavor=plain."""
@@ -44,13 +45,16 @@ class TestFlavorSystem:
             assert msg == expected
 
     def test_flavor_error_message(self):
-        """Error messages include the error text."""
-        from services.mcp.server import _flavor
+        """Error messages include the error text with pepe flair."""
+        from services.mcp.server import ARCADE_MESSAGES, _flavor
 
         with patch("services.mcp.server.MCP_FLAVOR", "arcade"):
             msg = _flavor("error", msg="connection refused")
             assert "connection refused" in msg
-            assert "GAME OVER" in msg
+            # All error variants contain 🐸
+            assert "🐸" in msg or "💀" in msg or "😤" in msg
+            possible = [v.format(msg="connection refused") for v in ARCADE_MESSAGES["error"]]
+            assert msg in possible
 
     def test_flavor_unknown_key_passthrough(self):
         """Unknown keys returned as-is."""
@@ -65,6 +69,23 @@ class TestFlavorSystem:
 
         for key in ARCADE_MESSAGES:
             assert key in PLAIN_MESSAGES, f"Missing plain message for key: {key}"
+
+    def test_all_arcade_variants_are_lists(self):
+        """Every arcade key maps to a non-empty list of variants."""
+        from services.mcp.server import ARCADE_MESSAGES
+
+        for key, variants in ARCADE_MESSAGES.items():
+            assert isinstance(variants, list), f"{key} is not a list"
+            assert len(variants) >= 2, f"{key} has fewer than 2 variants"
+
+    def test_arcade_randomness(self):
+        """_flavor() returns different variants over many calls (probabilistic)."""
+        from services.mcp.server import _flavor
+
+        with patch("services.mcp.server.MCP_FLAVOR", "arcade"):
+            results = {_flavor("search_found", n=1) for _ in range(50)}
+            # With 3 variants and 50 trials, extremely unlikely to get only 1
+            assert len(results) >= 2, "Random selection never varied in 50 calls"
 
 
 # ---------------------------------------------------------------------------

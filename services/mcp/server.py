@@ -18,6 +18,7 @@ from __future__ import annotations
 import json
 import logging
 import os
+import random
 import urllib.request
 import urllib.error
 
@@ -32,25 +33,89 @@ ORCHESTRATOR_URL = os.environ.get(
 )
 MCP_FLAVOR = os.environ.get("RP_MCP_FLAVOR", "arcade")
 
-# -- SEXY BAR ARCADE flavor (Metal Slug style!) --
+# -- ARCADE+PEPE flavor (Metal Slug × degen frog) --
 
-ARCADE_MESSAGES: dict[str, str] = {
-    "search_found": "HEAVY MACHINE GUN! {n} papers acquired. MISSION START!",
-    "search_empty": "NOTHING HERE... Radar empty. Try different keywords, soldier!",
-    "search_context": "SHOTGUN! {n} context chunks extracted. Intel ready!",
-    "list_papers": "ROCKET LAUNCHER! {n} papers loaded in arsenal.",
-    "get_paper": "ENEMY CHASER! Paper #{id} dossier retrieved.",
-    "get_paper_notfound": "PRISONER NOT FOUND! Paper #{id} is MIA.",
-    "formulas_found": "IRON LIZARD! {n} formulas decoded. Math arsenal ready!",
-    "formulas_empty": "EMPTY MAGAZINE! No formulas found for this paper.",
-    "run_start": "MISSION {id} START! GO GO GO! All units deployed!",
-    "run_status": "SITREP! Mission {id}: status={status}.",
-    "run_notfound": "MISSION {id} NOT FOUND! Check your intel, soldier!",
-    "github_found": "METAL SLUG! {n} repos spotted in the wild!",
-    "github_empty": "STEALTH MODE! No repos found. The code is hidden.",
-    "codegen_found": "SUPER GRENADE! {n} code artifacts generated!",
-    "codegen_empty": "NO AMMO! Run the pipeline first, soldier!",
-    "error": "GAME OVER! {msg}",
+ARCADE_MESSAGES: dict[str, list[str]] = {
+    "search_found": [
+        "🔫 HEAVY MACHINE GUN! {n} papers acquired, fren. LFG! 🐸💎",
+        "💎 {n} papers locked and loaded! Diamond hands on this intel, ser! 🐸🔫",
+        "🚀 COMBO x{n}! Papers acquired. We're so early, fren! 🐸",
+    ],
+    "search_empty": [
+        "💀 NOTHING HERE... Radar empty, ser. Touch grass and retry! 🐸",
+        "🐸 Zero hits, fren. The alpha is hiding. Try different keywords! 💀",
+        "😤 NO SIGNAL! Papers are playing dead. ngmi with this query! 🐸",
+    ],
+    "search_context": [
+        "🎯 SHOTGUN! {n} context chunks extracted. Intel is based! 🐸🚀",
+        "💎 {n} chunks of pure alpha extracted! Knowledge goes brrr! 🐸🎯",
+        "🔫 LASER GUN! {n} context fragments locked. based intel, ser! 🐸",
+    ],
+    "list_papers": [
+        "🚀 ROCKET LAUNCHER! {n} papers loaded in arsenal. wagmi! 🐸",
+        "🐸 {n} papers in the bag! That's a full magazine, ser! 💎🚀",
+        "💥 ARSENAL CHECK! {n} papers armed and ready. LFG! 🐸",
+    ],
+    "get_paper": [
+        "🐸 ENEMY CHASER! Paper #{id} dossier retrieved. based intel, ser!",
+        "💎 Paper #{id} acquired! Dossier is fire, fren! 🐸🔥",
+        "🎯 BULLSEYE! Paper #{id} locked. This is the way, ser! 🐸",
+    ],
+    "get_paper_notfound": [
+        "😤 PRISONER NOT FOUND! Paper #{id} is MIA. ngmi! 🐸",
+        "💀 Paper #{id} rugged us, ser. It's gone! 🐸",
+        "🐸 Paper #{id}? Never heard of her, fren. ngmi! 😤",
+    ],
+    "formulas_found": [
+        "💎 IRON LIZARD! {n} formulas decoded. Math goes brrr! 🐸🔥",
+        "🔥 {n} formulas extracted! Pure math alpha, ser! 🐸💎",
+        "🚀 SUPER SHELL! {n} formulas cracked. We're all gonna make it! 🐸",
+    ],
+    "formulas_empty": [
+        "📭 EMPTY MAGAZINE! No formulas found. wen formulas, ser? 🐸",
+        "🐸 Zero formulas, fren. The math is hiding. wen extraction? 📭",
+        "💀 NO FORMULAS! Paper needs more cooking, ser! 🐸",
+    ],
+    "run_start": [
+        "🚀 MISSION {id} START! GO GO GO! All units deployed! LFG! 🐸💎",
+        "🐸 MISSION {id} LAUNCHED! Full send, no brakes! wagmi! 🚀",
+        "💥 DEPLOY DEPLOY DEPLOY! Mission {id} is live! LFG fren! 🐸🔥",
+    ],
+    "run_status": [
+        "📡 SITREP! Mission {id}: status={status}. hodl, fren! 🐸",
+        "🐸 Mission {id} update: {status}. Stay diamond, ser! 📡💎",
+        "🎯 INTEL REPORT! Mission {id} → {status}. hodl the line! 🐸",
+    ],
+    "run_notfound": [
+        "❓ MISSION {id} NOT FOUND! Check your intel, ser! 🐸",
+        "🐸 Mission {id}? That op doesn't exist, fren! ngmi! ❓",
+        "💀 Mission {id} is a ghost. Wrong coordinates, ser! 🐸",
+    ],
+    "github_found": [
+        "🐸 METAL SLUG! {n} repos spotted in the wild! based code! 💎",
+        "💎 {n} repos found! Open source alpha, fren! 🐸🚀",
+        "🔫 HEAVY BARREL! {n} code repos acquired. based devs! 🐸",
+    ],
+    "github_empty": [
+        "👻 STEALTH MODE! No repos found. The code is hidden, ser! 🐸",
+        "🐸 Zero repos, fren. The devs are in stealth mode! 👻",
+        "💀 NO CODE! Devs are still building, ser. wen open source? 🐸",
+    ],
+    "codegen_found": [
+        "💥 SUPER GRENADE! {n} code artifacts generated! wagmi! 🐸🚀",
+        "🐸 {n} code drops! Fresh artifacts from the forge! LFG! 💥",
+        "🔥 CODE BARRAGE! {n} artifacts ready to deploy, ser! 🐸💎",
+    ],
+    "codegen_empty": [
+        "🐸 NO AMMO! Run the pipeline first, degen! wen codegen?",
+        "💀 Zero code artifacts, fren. Pipeline hasn't cooked yet! 🐸",
+        "📭 EMPTY CLIP! No codegen output. Run the pipeline, ser! 🐸",
+    ],
+    "error": [
+        "💀 GAME OVER! {msg} ngmi! 🐸",
+        "🐸 REKT! {msg} We'll get 'em next time, ser! 💀",
+        "😤 CRITICAL HIT! {msg} ngmi fren! 🐸",
+    ],
 }
 
 PLAIN_MESSAGES: dict[str, str] = {
@@ -74,9 +139,13 @@ PLAIN_MESSAGES: dict[str, str] = {
 
 
 def _flavor(key: str, **kwargs) -> str:
-    """Return a flavored message string."""
-    messages = ARCADE_MESSAGES if MCP_FLAVOR == "arcade" else PLAIN_MESSAGES
-    template = messages.get(key, key)
+    """Return a flavored message string (random variant for arcade)."""
+    if MCP_FLAVOR == "arcade":
+        variants = ARCADE_MESSAGES.get(key)
+        if variants:
+            return random.choice(variants).format(**kwargs)
+        return key
+    template = PLAIN_MESSAGES.get(key, key)
     return template.format(**kwargs)
 
 

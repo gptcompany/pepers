@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import argparse
 import json
 from http.server import HTTPServer, BaseHTTPRequestHandler
 import threading
@@ -114,6 +115,40 @@ class TestMcpToolRegistration:
             "run_pipeline", "get_run_status", "search_github", "get_generated_code",
         }
         assert expected.issubset(tool_names), f"Missing tools: {expected - tool_names}"
+
+
+class TestCliTransportArg:
+    """Verify CLI --transport argument parsing."""
+
+    def _parse(self, *args: str) -> argparse.Namespace:
+        """Parse CLI args without running the server."""
+        import os
+        import argparse as ap
+        parser = ap.ArgumentParser()
+        parser.add_argument("--port", type=int, default=8776)
+        parser.add_argument("--flavor", choices=["arcade", "plain"], default="arcade")
+        parser.add_argument("--orchestrator-url", default="http://localhost:8775")
+        parser.add_argument(
+            "--transport", choices=["sse", "streamable-http"],
+            default=os.environ.get("RP_MCP_TRANSPORT", "sse"),
+        )
+        return parser.parse_args(list(args))
+
+    def test_default_transport_is_sse(self):
+        ns = self._parse()
+        assert ns.transport == "sse"
+
+    def test_streamable_http_accepted(self):
+        ns = self._parse("--transport", "streamable-http")
+        assert ns.transport == "streamable-http"
+
+    def test_sse_explicit(self):
+        ns = self._parse("--transport", "sse")
+        assert ns.transport == "sse"
+
+    def test_invalid_transport_rejected(self):
+        with pytest.raises(SystemExit):
+            self._parse("--transport", "websocket")
 
 
 class TestMcpIntegration:

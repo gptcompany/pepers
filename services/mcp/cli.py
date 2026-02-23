@@ -3,9 +3,10 @@
 Used by `uv tool install pepers` to provide the `pepers-mcp` command.
 
 Usage:
-    pepers-mcp                    # Start MCP server with SSE transport
-    pepers-mcp --port 8776        # Custom port
-    pepers-mcp --flavor plain     # Disable arcade messages
+    pepers-mcp                              # Start MCP server with SSE transport
+    pepers-mcp --port 8776                  # Custom port
+    pepers-mcp --flavor plain               # Disable arcade messages
+    pepers-mcp --transport streamable-http  # Use Streamable HTTP transport
 """
 
 from __future__ import annotations
@@ -35,6 +36,11 @@ def main() -> None:
         default=os.environ.get("RP_ORCHESTRATOR_URL", "http://localhost:8775"),
         help="Orchestrator URL (default: http://localhost:8775)",
     )
+    parser.add_argument(
+        "--transport", choices=["sse", "streamable-http"],
+        default=os.environ.get("RP_MCP_TRANSPORT", "sse"),
+        help="Transport: sse (default) or streamable-http",
+    )
     args = parser.parse_args()
 
     # Set env vars before importing server (reads them at import time)
@@ -45,8 +51,8 @@ def main() -> None:
     # Import after setting env vars
     from services.mcp.server import mcp
 
-    print(f"MISSION START! PePeRS MCP Server on :{args.port} (flavor={args.flavor})")
-    mcp.run(transport="sse")
+    print(f"\U0001f438\U0001f52b MISSION START! PePeRS MCP Server on :{args.port} — LFG!")
+    mcp.run(transport=args.transport)
 
 
 if __name__ == "__main__":
