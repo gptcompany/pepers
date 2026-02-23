@@ -1,5 +1,21 @@
 name: pepers
 
+x-logging: &default-logging
+  driver: json-file
+  options:
+    max-size: "10m"
+    max-file: "3"
+
+x-deploy-service: &default-deploy
+  resources:
+    limits:
+      memory: 512m
+
+x-deploy-orchestrator: &orchestrator-deploy
+  resources:
+    limits:
+      memory: 1g
+
 services:
   discovery:
     build:
@@ -7,6 +23,7 @@ services:
       dockerfile: Dockerfile
       args:
         SERVICE: discovery
+    init: true
     network_mode: host
     environment:
       - RP_DISCOVERY_PORT=8770
@@ -17,6 +34,9 @@ services:
       - ./data:/data
     user: "1000:1000"
     restart: unless-stopped
+    logging: *default-logging
+    deploy: *default-deploy
+    stop_grace_period: 10s
     healthcheck:
       test: ["CMD", "python", "-c",
         "import urllib.request; urllib.request.urlopen('http://localhost:8770/health')"]
@@ -31,6 +51,7 @@ services:
       dockerfile: Dockerfile
       args:
         SERVICE: analyzer
+    init: true
     network_mode: host
     environment:
       - RP_ANALYZER_PORT=8771
@@ -48,6 +69,9 @@ services:
       - /usr/bin/node:/usr/bin/node:ro
     user: "1000:1000"
     restart: unless-stopped
+    logging: *default-logging
+    deploy: *default-deploy
+    stop_grace_period: 10s
     healthcheck:
       test: ["CMD", "python", "-c",
         "import urllib.request; urllib.request.urlopen('http://localhost:8771/health')"]
@@ -66,6 +90,7 @@ services:
       dockerfile: Dockerfile
       args:
         SERVICE: extractor
+    init: true
     network_mode: host
     environment:
       - RP_EXTRACTOR_PORT=8772
@@ -81,6 +106,9 @@ services:
       - /media/sam/1TB/rag-service/data:/rag-data:ro
     user: "1000:1000"
     restart: unless-stopped
+    logging: *default-logging
+    deploy: *default-deploy
+    stop_grace_period: 10s
     healthcheck:
       test: ["CMD", "python", "-c",
         "import urllib.request; urllib.request.urlopen('http://localhost:8772/health')"]
@@ -99,6 +127,7 @@ services:
       dockerfile: Dockerfile
       args:
         SERVICE: validator
+    init: true
     network_mode: host
     environment:
       - RP_VALIDATOR_PORT=8773
@@ -112,6 +141,9 @@ services:
       - ./data:/data
     user: "1000:1000"
     restart: unless-stopped
+    logging: *default-logging
+    deploy: *default-deploy
+    stop_grace_period: 10s
     healthcheck:
       test: ["CMD", "python", "-c",
         "import urllib.request; urllib.request.urlopen('http://localhost:8773/health')"]
@@ -130,6 +162,7 @@ services:
       dockerfile: Dockerfile
       args:
         SERVICE: codegen
+    init: true
     network_mode: host
     environment:
       - RP_CODEGEN_PORT=8774
@@ -147,6 +180,9 @@ services:
       - /usr/bin/node:/usr/bin/node:ro
     user: "1000:1000"
     restart: unless-stopped
+    logging: *default-logging
+    deploy: *default-deploy
+    stop_grace_period: 10s
     healthcheck:
       test: ["CMD", "python", "-c",
         "import urllib.request; urllib.request.urlopen('http://localhost:8774/health')"]
@@ -165,6 +201,7 @@ services:
       dockerfile: Dockerfile
       args:
         SERVICE: orchestrator
+    init: true
     network_mode: host
     environment:
       - RP_ORCHESTRATOR_PORT=8775
@@ -184,6 +221,9 @@ services:
       - ./data:/data
     user: "1000:1000"
     restart: unless-stopped
+    logging: *default-logging
+    deploy: *orchestrator-deploy
+    stop_grace_period: 20s
     healthcheck:
       test: ["CMD", "python", "-c",
         "import urllib.request; urllib.request.urlopen('http://localhost:8775/health')"]
@@ -202,6 +242,7 @@ services:
       dockerfile: Dockerfile
       args:
         SERVICE: mcp
+    init: true
     network_mode: host
     environment:
       - RP_MCP_PORT=8776
@@ -212,6 +253,9 @@ services:
       - ./data:/data
     user: "1000:1000"
     restart: unless-stopped
+    logging: *default-logging
+    deploy: *default-deploy
+    stop_grace_period: 10s
     command: ["python", "-m", "services.mcp"]
     healthcheck:
       test: ["CMD", "python", "-c",
