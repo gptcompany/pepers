@@ -23,26 +23,11 @@ Reliable, N8N-free academic paper processing pipeline that discovers papers from
 
 ### Active
 
-<!-- Current scope: v13.0 Production Hardening -->
+<!-- No active milestone — next milestone TBD -->
 
-- [ ] Monitoring integration: process-exporter config, Prometheus alert rules, Grafana dashboard (pipeline health — services up/down, papers/day, errors, response times per stage)
-- [ ] Production deployment: Docker Compose stable on Workstation — restart policies, log rotation, auto-start at boot
-- [ ] Server concurrency: ThreadingHTTPServer or async for MCP server (:8776) — multiple concurrent MCP clients
-- [ ] Request body size limits for DoS prevention on all services
-- [ ] Pipeline run stuck-state cleanup (running → failed on crash/restart)
+(None — all v13.0 requirements shipped. Define next milestone with `/gsd:new-milestone`.)
 
-## Current Milestone: v13.0 Production Hardening
-
-**Goal:** Harden PePeRS for stable production use — monitoring, deployment, concurrency, and resilience.
-
-**Target features:**
-- Grafana dashboard with pipeline health metrics (services, papers/day, errors, response times)
-- Prometheus alert rules for service failures and pipeline anomalies
-- Docker Compose production deployment with restart policies and auto-start
-- MCP server concurrent request handling for multiple clients
-- Request body size limits and stuck-state pipeline cleanup
-
-### Validated (v1.0-v12.0)
+### Validated (v1.0-v13.0)
 
 - ✓ Shared library: DB connection pool, Pydantic models, base HTTP server, config management — v1.0
 - ✓ Each service exposes /health, /status, /process endpoints — v1.0
@@ -63,6 +48,11 @@ Reliable, N8N-free academic paper processing pipeline that discovers papers from
 - ✓ MCP Server SSE: 8 tools on :8776 with arcade flavor — v12.0
 - ✓ One-click install: Docker compose + uv tool install + pepers-mcp CLI — v12.0
 - ✓ OpenAlex multi-source discovery: 200M+ works, schema v5, cross-source dedup — v12.0
+- ✓ ThreadingHTTPServer + 10MB body limit + SQLite thread safety on all services — v13.0
+- ✓ Stuck pipeline run cleanup at orchestrator startup — v13.0
+- ✓ Prometheus /metrics on all services (request counters, histograms, error counts, pipeline metrics) — v13.0
+- ✓ Docker production hardening: log rotation, memory limits, init:true, graceful shutdown — v13.0
+- ✓ Monitoring integration: process-exporter, VictoriaMetrics scrape, Grafana dashboard (6 panels), alert rules — v13.0
 
 ### Out of Scope
 
@@ -75,22 +65,23 @@ Reliable, N8N-free academic paper processing pipeline that discovers papers from
 
 ## Context
 
-**Current state (v12.0 SHIPPED — 12 milestones complete, 42 phases):**
-- Shared library: ~1,200 LOC Python (db.py, models.py, server.py, config.py, llm.py, cli_providers.json)
+**Current state (v13.0 SHIPPED — 13 milestones complete, 46 phases):**
+- Shared library: ~1,300 LOC Python (db.py, models.py, server.py, config.py, llm.py, metrics.py, cli_providers.json)
 - Discovery service: ~560 LOC (arXiv + OpenAlex + S2 + CrossRef, adapter pattern)
 - Analyzer service: ~600 LOC (LLM triple fallback + 5-criteria scoring)
 - Extractor service: ~644 LOC (PDF download + RAGAnything + 5-pass LaTeX regex)
 - Validator service: ~492 LOC (CAS client + fallback consensus + stage update)
 - Codegen service: ~650 LOC (SymPy codegen + batch explain + clean_latex)
 - GitHub Discovery: ~621 LOC (GitHub API + Gemini CLI/SDK analysis)
-- Orchestrator service: ~950 LOC (pipeline dispatch, async /run, batch iteration, notifications)
+- Orchestrator service: ~1,000 LOC (pipeline dispatch, async /run, batch iteration, notifications, pipeline metrics)
 - MCP Server: ~427 LOC (8 SSE tools, arcade flavor, pepers-mcp CLI)
 - CAS microservice: 698 LOC (standalone at /media/sam/1TB/cas-service/)
 - SQLite schema v5: 8 tables (papers, formulas, validations, generated_code, github_repos, github_analyses, pipeline_runs, schema_version)
-- 790 tests (all passing)
-- ~14,300 LOC Python total
-- Tech stack: Python stdlib + Pydantic + google-genai + requests + SymPy + mcp SDK + apprise
+- 828 tests (all passing)
+- ~15,500 LOC Python total
+- Tech stack: Python stdlib + Pydantic + google-genai + requests + SymPy + mcp SDK + apprise + prometheus-client
 - Distribution: Docker Compose + uv tool install + pepers-mcp CLI
+- Monitoring: VictoriaMetrics scrape (6 targets), Grafana dashboard (6 panels), alert rules (service-down + no-papers)
 
 **Origin**: N8N crashed in Jan 2026, external team restored 88 workflows but lost all data. The W1-W5 pipeline (17 N8N workflows) never successfully processed a paper end-to-end — all tables empty, 0 executions. Rather than fix N8N, rebuilding as standalone microservices eliminates the single point of failure.
 
@@ -101,8 +92,8 @@ Reliable, N8N-free academic paper processing pipeline that discovers papers from
 - PostgreSQL — N8N's postgres container (n8n-postgres-1), tables in public schema
 
 **Monitoring stack** (`/media/sam/1TB/monitoring-stack/`):
-- Prometheus (:9090) + node_exporter + process-exporter + alertmanager
-- Grafana (:3000) with 3 dashboards + Grafana Cloud for critical alerts
+- VictoriaMetrics (:8428) + node_exporter + process-exporter + alertmanager
+- Grafana (:3000) with dashboards (System, Hyperliquid, PePeRS Pipeline) + provisioned alert rules
 - Loki (:3100) + Promtail — centralized logs (local only)
 - QuestDB (:9000) — cron job metrics
 - Discord webhook alerts
@@ -171,6 +162,13 @@ Reliable, N8N-free academic paper processing pipeline that discovers papers from
 | Shared SQLite volume | Sequential pipeline = no concurrent writers, WAL mode safe | — Pending |
 
 | MATLAB first engine + fallback | MATLAB available, graceful degradation if down (>=2 agree → consensus) | — Pending |
+| ThreadingHTTPServer over async | stdlib, zero deps, matches existing pattern, sufficient for ~10 papers/day | ✓ Good |
+| prometheus-client library | Only new dependency (~60KB), standard Prometheus text format | ✓ Good |
+| shared/server.py as single change point | Threading + body limits + metrics middleware in one place | ✓ Good |
+| YAML extension fields for Docker config | x-logging, x-deploy-* for DRY compose config | ✓ Good |
+| init:true on all containers | Proper signal forwarding, zombie process reaping | ✓ Good |
+| honor_labels:true in scrape config | Preserve PePeRS' own service label vs scrape job label | ✓ Good |
+| Grafana provisioned alerting over Prometheus rules | VictoriaMetrics has no vmalert component, Grafana evaluates rules | ✓ Good |
 
 ---
-*Last updated: 2026-02-21 after v13.0 milestone started*
+*Last updated: 2026-02-23 after v13.0 milestone shipped*

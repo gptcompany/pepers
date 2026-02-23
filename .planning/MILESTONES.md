@@ -275,3 +275,32 @@
 **What's next:** v2.0 — First microservice implementations (Discovery, Analyzer, etc.)
 
 ---
+
+## v13.0 Production Hardening (Shipped: 2026-02-23)
+
+**Delivered:** Server concurrency with ThreadingHTTPServer, Prometheus /metrics on all 6 services, Docker production hardening (log rotation, memory limits, init, graceful shutdown), and full monitoring integration (VictoriaMetrics scrape, Grafana dashboard, alert rules).
+
+**Phases completed:** 43-46 (6 plans total)
+
+**Key accomplishments:**
+
+- ThreadingHTTPServer + 10MB body size limit + SQLite thread safety on all 6 services
+- Stuck pipeline run cleanup at orchestrator startup (running → failed with reason)
+- Prometheus /metrics on ports 8770-8776: request counters, duration histograms, error counts, pipeline metrics
+- Docker production hardening: json-file log rotation (10MB/3 files), memory limits (512MB/1GB), init:true, stop_grace_period
+- process-exporter regex for 6 PePeRS services + VictoriaMetrics scrape config with honor_labels
+- Grafana dashboard (6 panels: service health, throughput, latency, errors, formulas, active runs) + provisioned alert rules
+
+**Stats:**
+
+- 13 files changed, 1,274 insertions, 75 deletions
+- ~1,200 LOC added (production + tests)
+- 4 phases, 6 plans
+- 3 days (2026-02-21 to 2026-02-23)
+
+**Git range:** `d2cb1b7` → `397a0ac`
+
+**What's next:** TBD — monitoring extensions, performance optimization, or new features
+
+---
+
