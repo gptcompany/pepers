@@ -5,21 +5,21 @@
 See: .planning/PROJECT.md (updated 2026-02-21)
 
 **Core value:** Reliable, N8N-free academic paper processing pipeline
-**Current focus:** v13.0 Production Hardening — Phase 45
+**Current focus:** v13.0 Production Hardening — COMPLETE
 
 ## Current Position
 
-Phase: 45 of 46 (Docker Production Hardening)
-Plan: 1 of 1 in current phase
-Status: Phase complete
-Last activity: 2026-02-23 — Phase 45 plan 1 completed
+Phase: 46 of 46 (Monitoring Integration)
+Plan: 2 of 2 in current phase
+Status: Milestone complete
+Last activity: 2026-02-23 — Phase 46 plans 1-2 completed
 
-Progress: [███████░░░] 67% (4/6 plans)
+Progress: [██████████] 100% (6/6 plans)
 
 ## Performance Metrics
 
 **Velocity:**
-- Total plans completed: 4 (v13.0)
+- Total plans completed: 6 (v13.0)
 - Average duration: ~11min
 - Total execution time: ~11min (measured)
 
@@ -30,9 +30,10 @@ Progress: [███████░░░] 67% (4/6 plans)
 | 43 | 2/2 | — | — |
 | 44 | 1/1 | 11min | 11min |
 | 45 | 1/1 | — | — |
+| 46 | 2/2 | — | — |
 
 **Recent Trend:**
-- Last 5 plans: 43-01, 43-02, 44-01, 45-01
+- Last 5 plans: 44-01, 45-01, 46-01, 46-02
 - Trend: stable
 
 *Updated after each plan completion*
@@ -56,19 +57,23 @@ Recent decisions affecting current work:
 - [Phase 45]: YAML extension fields for DRY Docker config (x-logging, x-deploy-*)
 - [Phase 45]: No systemd unit needed — Docker daemon already systemd-enabled
 - [Phase 45]: init: true on all containers for proper signal forwarding
+- [Phase 46]: honor_labels: true in Prometheus scrape config to preserve PePeRS service labels
+- [Phase 46]: Grafana provisioned alerting instead of Prometheus rules (VictoriaMetrics has no vmalert)
+- [Phase 46]: Dashboard provisioned from monitoring-stack/grafana/dashboards/ via pepers.yaml
 
 ### Pending Todos
 
-None yet.
+None.
 
 ### Blockers/Concerns
 
 - SQLite thread safety: VERIFIED — get_connection() creates new connection per call in all services
 - Prometheus label cardinality: NEVER use paper_id/formula_id as labels
 - Docker log rotation requires --force-recreate on existing containers
+- VictoriaMetrics does not evaluate alert rules (no vmalert) — using Grafana provisioned alerting
 
 ## Session Continuity
 
 Last session: 2026-02-23
-Stopped at: Completed 45-01 (Docker Production Hardening)
+Stopped at: Milestone v13.0 complete (all 6 plans across 4 phases)
 Resume file: None

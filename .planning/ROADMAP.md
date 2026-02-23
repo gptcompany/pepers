@@ -22,7 +22,7 @@ None
 - [✅ v10.0 Production Hardening](milestones/v10.0-ROADMAP.md) (Phases 32-34) — SHIPPED 2026-02-17
 - [✅ v11.0 CLI Providers + Batch Explain + API + Async](milestones/v11.0-ROADMAP.md) (Phases 35-37) — SHIPPED 2026-02-18
 - [✅ v12.0 Distribution & Branding](milestones/v12.0-ROADMAP.md) (Phases 38-42) — SHIPPED 2026-02-20
-- 🚧 **v13.0 Production Hardening** — Phases 43-46 (in progress)
+- [✅ v13.0 Production Hardening](milestones/v13.0-ROADMAP.md) (Phases 43-46) — SHIPPED 2026-02-23
 
 ## Phases
 
@@ -153,7 +153,7 @@ None
 - [x] **Phase 43: Server Concurrency + Resilience** - ThreadingHTTPServer, body size limits, SQLite thread safety, stuck-state cleanup — completed 2026-02-21
 - [x] **Phase 44: Prometheus Metrics** - /metrics endpoints on all services with request/pipeline counters (completed 2026-02-21)
 - [x] **Phase 45: Docker Production Hardening** - Log rotation, memory limits, init, graceful shutdown (completed 2026-02-23)
-- [ ] **Phase 46: Monitoring Integration** - process-exporter, Prometheus scrape, Grafana dashboard, alert rules
+- [x] **Phase 46: Monitoring Integration** - process-exporter, Prometheus scrape, Grafana dashboard, alert rules (completed 2026-02-23)
 
 ## Phase Details
 
@@ -208,11 +208,11 @@ Plans:
   2. Prometheus targets page (http://localhost:9090/targets) shows all PePeRS services as UP
   3. Grafana dashboard displays 6 panels: service health, throughput (papers/day), latency per stage, error rates, formula validation results, active pipeline runs
   4. Prometheus alert fires within 3 minutes when a PePeRS service is stopped, and another fires if no papers are processed for 24 hours
-**Plans**: TBD
+**Plans**: 2/2 complete
 
 Plans:
-- [ ] 46-01: process-exporter config + Prometheus scrape job + alert rules
-- [ ] 46-02: Grafana dashboard JSON (6 panels) + E2E monitoring validation
+- [x] 46-01: process-exporter config + Prometheus scrape job + alert rules
+- [x] 46-02: Grafana dashboard JSON (6 panels) + dashboard provisioning
 
 ## Progress
 
@@ -266,4 +266,4 @@ Phases execute in numeric order: 43 → 44 → 45 → 46
 | 43. Server Concurrency + Resilience | v13.0 | 2/2 | Complete | 2026-02-21 |
 | 44. Prometheus Metrics | 1/1 | Complete   | 2026-02-21 | - |
 | 45. Docker Production Hardening | v13.0 | 1/1 | Complete | 2026-02-23 |
-| 46. Monitoring Integration | v13.0 | 0/2 | Not started | - |
+| 46. Monitoring Integration | v13.0 | 2/2 | Complete | 2026-02-23 |
