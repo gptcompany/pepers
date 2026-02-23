@@ -29,3 +29,12 @@ htmlcov/
 .pytest_cache/
 .mypy_cache/
 .ruff_cache/
+
+# Auto-generated / IDE
+.claude-flow/
+.claude/
+.swarm/
+.mcp-download.lock
+
+# Internal dev docs (contain infrastructure references)
+.planning/

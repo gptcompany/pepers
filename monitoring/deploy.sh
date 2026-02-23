@@ -3,7 +3,7 @@
 # Run with sudo: sudo ./monitoring/deploy.sh
 set -euo pipefail
 
-MONITORING_STACK="/media/sam/1TB/monitoring-stack"
+MONITORING_STACK="${MONITORING_STACK:-/opt/monitoring-stack}"
 PROM_DEST="/etc/prometheus"
 GRAFANA_PROV="/etc/grafana/provisioning"
 
@@ -33,7 +33,7 @@ providers:
     disableDeletion: false
     updateIntervalSeconds: 30
     options:
-      path: /media/sam/1TB/monitoring-stack/grafana/dashboards
+      path: $MONITORING_STACK/grafana/dashboards
 EOF
 echo "  -> $GRAFANA_PROV/dashboards/pepers.yaml"
 

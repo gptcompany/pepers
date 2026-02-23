@@ -1,14 +1,15 @@
 [Unit]
 Description=PePeRS - Orchestrator Service
+# Adjust /opt/pepers paths below to match your installation directory
 After=network.target
 PartOf=rp-pipeline.target
 
 [Service]
 Type=simple
-WorkingDirectory=/media/sam/1TB/pepers
+WorkingDirectory=/opt/pepers
 Environment=RP_DB_PATH=data/research.db
 Environment=RP_ORCHESTRATOR_PORT=8775
-ExecStart=/media/sam/1TB/pepers/.venv/bin/python -m services.orchestrator.main
+ExecStart=/opt/pepers/.venv/bin/python -m services.orchestrator.main
 Restart=always
 RestartSec=5
 WatchdogSec=60
@@ -16,7 +17,7 @@ WatchdogSec=60
 PrivateTmp=true
 NoNewPrivileges=true
 ProtectSystem=strict
-ReadWritePaths=/media/sam/1TB/pepers/data
+ReadWritePaths=/opt/pepers/data
 
 [Install]
 WantedBy=rp-pipeline.target

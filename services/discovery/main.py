@@ -44,7 +44,8 @@ S2_DELAY = 1.0  # seconds between requests (conservative)
 
 # CrossRef API
 CR_BASE = "https://api.crossref.org/works"
-CR_USER_AGENT = "ResearchPipeline/1.0 (mailto:gptprojectmanager@gmail.com)"
+_CONTACT_EMAIL = os.environ.get("RP_CONTACT_EMAIL", "pepers-bot@users.noreply.github.com")
+CR_USER_AGENT = f"PePeRS/1.0 (mailto:{_CONTACT_EMAIL})"
 CR_DELAY = 0.1  # seconds between requests (polite pool)
 
 # DataCite DOI prefix (arXiv-assigned, NOT in CrossRef)

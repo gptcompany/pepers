@@ -6,6 +6,8 @@ by parsing the resolved Docker Compose config.
 
 import subprocess
 import json
+from pathlib import Path
+
 import pytest
 
 SERVICES = ["discovery", "analyzer", "extractor", "validator", "codegen", "orchestrator", "mcp"]
@@ -29,7 +31,8 @@ def compose_config():
     """Parse resolved docker-compose.yml via docker compose config."""
     result = subprocess.run(
         ["docker", "compose", "config", "--format", "json"],
-        capture_output=True, text=True, cwd="/media/sam/1TB/pepers",
+        capture_output=True, text=True,
+        cwd=str(Path(__file__).resolve().parent.parent.parent),
     )
     assert result.returncode == 0, f"docker compose config failed: {result.stderr}"
     return json.loads(result.stdout)

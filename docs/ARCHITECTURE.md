@@ -71,7 +71,7 @@ pepers/
 ### Component: Shared Library (`shared/`)
 
 **Purpose**: Common infrastructure for all 6 microservices. Eliminates duplication and enforces consistent patterns across the pipeline.
-**Location**: `/media/sam/1TB/pepers/shared/`
+**Location**: `./shared/`
 **LOC**: 816 lines across 5 files
 
 #### `shared/db.py` -- SQLite Database Layer (170 LOC)
@@ -175,7 +175,7 @@ service.run()
 ```
 RP_DISCOVERY_PORT=8770
 RP_ANALYZER_PORT=8771
-RP_DB_PATH=/media/sam/1TB/pepers/data/research.db
+RP_DB_PATH=./data/research.db
 RP_LOG_LEVEL=INFO
 ```
 
@@ -184,7 +184,7 @@ RP_LOG_LEVEL=INFO
 ### Component: Services
 
 **Purpose**: Individual microservices that implement the paper processing pipeline.
-**Location**: `/media/sam/1TB/pepers/services/`
+**Location**: `./services/`
 **Status**: All 6 services implemented and running in production.
 
 | Service | Port | Purpose | External Dependencies |
@@ -224,7 +224,7 @@ LaTeX→code conversion uses 5 cumulative layers to maximize success rate:
 ### Component: Test Suite (`tests/`)
 
 **Purpose**: Validates all services with unit, integration, e2e, and smoke tests.
-**Location**: `/media/sam/1TB/pepers/tests/`
+**Location**: `./tests/`
 **Results**: 685+ tests pass, 0 failures
 
 **Structure**:
@@ -300,7 +300,7 @@ Returns 200 always (if service is running). Used by Prometheus and Grafana.
 {
   "service": "discovery",
   "version": "0.1.0",
-  "db_path": "/media/sam/1TB/pepers/data/research.db",
+  "db_path": "./data/research.db",
   "uptime_seconds": 3600.5
 }
 ```

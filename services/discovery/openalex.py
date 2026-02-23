@@ -17,6 +17,7 @@ from __future__ import annotations
 
 import json
 import logging
+import os
 import re
 from typing import Any
 
@@ -28,7 +29,7 @@ logger = logging.getLogger(__name__)
 
 # OpenAlex API
 OA_BASE = "https://api.openalex.org/works"
-OA_MAILTO = "gptprojectmanager@gmail.com"  # polite pool
+OA_MAILTO = os.environ.get("RP_CONTACT_EMAIL", "pepers-bot@users.noreply.github.com")  # polite pool
 
 
 def _reconstruct_abstract(inverted_index: dict[str, list[int]] | None) -> str | None:

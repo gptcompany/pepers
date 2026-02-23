@@ -1,22 +1,23 @@
 [Unit]
 Description=PePeRS - MCP Server (SSE)
+# Adjust /opt/pepers paths below to match your installation directory
 After=network.target rp-orchestrator.service
 PartOf=rp-pipeline.target
 
 [Service]
 Type=simple
-WorkingDirectory=/media/sam/1TB/pepers
+WorkingDirectory=/opt/pepers
 Environment=RP_MCP_PORT=8776
 Environment=RP_ORCHESTRATOR_URL=http://localhost:8775
 Environment=RP_MCP_FLAVOR=arcade
-ExecStart=/media/sam/1TB/pepers/.venv/bin/python -m services.mcp
+ExecStart=/opt/pepers/.venv/bin/python -m services.mcp
 Restart=always
 RestartSec=5
 
 PrivateTmp=true
 NoNewPrivileges=true
 ProtectSystem=strict
-ReadWritePaths=/media/sam/1TB/pepers/data
+ReadWritePaths=/opt/pepers/data
 
 [Install]
 WantedBy=rp-pipeline.target

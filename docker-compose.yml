@@ -65,8 +65,8 @@ services:
     env_file: .env
     volumes:
       - ./data:/data
-      - /home/sam/.npm-global:/host-npm:ro
-      - /usr/bin/node:/usr/bin/node:ro
+      - ${NPM_GLOBAL:-/usr/lib/node_modules}:/host-npm:ro
+      - ${NODE_BIN:-/usr/bin/node}:/usr/bin/node:ro
     user: "1000:1000"
     restart: unless-stopped
     logging: *default-logging
@@ -97,13 +97,14 @@ services:
       - RP_DB_PATH=/data/research.db
       - RP_EXTRACTOR_MAX_PAPERS=10
       - RP_EXTRACTOR_PDF_DIR=/data/pdfs
-      - RP_EXTRACTOR_PDF_HOST_DIR=/media/sam/1TB/pepers/data/pdfs
+      - RP_EXTRACTOR_PDF_HOST_DIR=${PEPERS_ROOT:-./}/data/pdfs
       - RP_EXTRACTOR_RAG_URL=http://localhost:8767
+      - RP_EXTRACTOR_RAG_DATA_HOST=${RAG_DATA_HOST:-}
       - RP_LOG_LEVEL=INFO
     env_file: .env
     volumes:
       - ./data:/data
-      - /media/sam/1TB/rag-service/data:/rag-data:ro
+      - ${RAG_DATA_PATH:-./data}:/rag-data:ro
     user: "1000:1000"
     restart: unless-stopped
     logging: *default-logging
@@ -176,8 +177,8 @@ services:
     env_file: .env
     volumes:
       - ./data:/data
-      - /home/sam/.npm-global:/host-npm:ro
-      - /usr/bin/node:/usr/bin/node:ro
+      - ${NPM_GLOBAL:-/usr/lib/node_modules}:/host-npm:ro
+      - ${NODE_BIN:-/usr/bin/node}:/usr/bin/node:ro
     user: "1000:1000"
     restart: unless-stopped
     logging: *default-logging

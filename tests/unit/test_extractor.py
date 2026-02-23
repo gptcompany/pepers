@@ -362,7 +362,7 @@ class TestReadMarkdown:
         host_dir.mkdir(parents=True)
         (host_dir / "output.md").write_text("# Extracted text")
 
-        # read_markdown maps /workspace/1TB/ → /media/sam/1TB/
+        # read_markdown tries path as-is first
         result = read_markdown(str(host_dir))
         assert "Extracted text" in result
 

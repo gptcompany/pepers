@@ -67,14 +67,14 @@ sudo systemctl start rp-orchestrator
 **Option B: Docker Compose**
 
 ```bash
-cd /media/sam/1TB/pepers
+cd /path/to/pepers
 docker compose up -d
 ```
 
 **Option C: Manual (development)**
 
 ```bash
-cd /media/sam/1TB/pepers
+cd /path/to/pepers
 python -m services.discovery.main &
 python -m services.analyzer.main &
 python -m services.extractor.main &

@@ -260,7 +260,8 @@ class TestSearchOpenalex:
 
         search_openalex("test", max_results=10)
         call_kwargs = mock_get.call_args
-        assert call_kwargs[1]["params"]["mailto"] == "gptprojectmanager@gmail.com"
+        from services.discovery.openalex import OA_MAILTO
+        assert call_kwargs[1]["params"]["mailto"] == OA_MAILTO
 
     @patch("services.discovery.openalex.requests.get")
     def test_max_results_caps_per_page(self, mock_get):

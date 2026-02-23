@@ -123,14 +123,18 @@ def read_markdown(output_dir: str) -> str:
         FileNotFoundError: If no markdown files found.
     """
     # Path mappings to try (RAGAnything output → accessible path)
-    candidates = [
-        output_dir,
-        output_dir.replace("/workspace/1TB/", "/media/sam/1TB/"),
-        output_dir.replace("/workspace/3TB-WDC/", "/media/sam/3TB-WDC/"),
-        # Docker container: RAG data mounted at /rag-data
-        output_dir.replace("/media/sam/1TB/rag-service/data", "/rag-data"),
-        output_dir.replace("/workspace/1TB/rag-service/data", "/rag-data"),
-    ]
+    # Configure via RP_EXTRACTOR_PATH_MAPPINGS="src1:dst1,src2:dst2"
+    candidates = [output_dir]
+    custom = os.environ.get("RP_EXTRACTOR_PATH_MAPPINGS", "")
+    if custom:
+        for mapping in custom.split(","):
+            if ":" in mapping:
+                src, dst = mapping.split(":", 1)
+                candidates.append(output_dir.replace(src, dst))
+    # Docker container: RAG data mounted at /rag-data
+    rag_data_host = os.environ.get("RP_EXTRACTOR_RAG_DATA_HOST", "")
+    if rag_data_host:
+        candidates.append(output_dir.replace(rag_data_host, "/rag-data"))
 
     for candidate in candidates:
         path = Path(candidate)
