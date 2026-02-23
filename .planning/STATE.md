@@ -5,21 +5,21 @@
 See: .planning/PROJECT.md (updated 2026-02-21)
 
 **Core value:** Reliable, N8N-free academic paper processing pipeline
-**Current focus:** v13.0 Production Hardening — Phase 44
+**Current focus:** v13.0 Production Hardening — Phase 45
 
 ## Current Position
 
-Phase: 44 of 46 (Prometheus Metrics)
+Phase: 45 of 46 (Docker Production Hardening)
 Plan: 1 of 1 in current phase
 Status: Phase complete
-Last activity: 2026-02-21 — Phase 44 plan 1 completed
+Last activity: 2026-02-23 — Phase 45 plan 1 completed
 
-Progress: [█████░░░░░] 50% (3/6 plans)
+Progress: [███████░░░] 67% (4/6 plans)
 
 ## Performance Metrics
 
 **Velocity:**
-- Total plans completed: 3 (v13.0)
+- Total plans completed: 4 (v13.0)
 - Average duration: ~11min
 - Total execution time: ~11min (measured)
 
@@ -29,9 +29,10 @@ Progress: [█████░░░░░] 50% (3/6 plans)
 |-------|-------|-------|----------|
 | 43 | 2/2 | — | — |
 | 44 | 1/1 | 11min | 11min |
+| 45 | 1/1 | — | — |
 
 **Recent Trend:**
-- Last 5 plans: 43-01, 43-02, 44-01
+- Last 5 plans: 43-01, 43-02, 44-01, 45-01
 - Trend: stable
 
 *Updated after each plan completion*
@@ -52,6 +53,9 @@ Recent decisions affecting current work:
 - [Phase 43]: daemon_threads=True on ThreadingHTTPServer for clean shutdown
 - [Phase 44]: Counter names omit _total suffix (prometheus-client appends automatically)
 - [Phase 44]: /metrics and /health excluded from request counting to prevent self-counting noise
+- [Phase 45]: YAML extension fields for DRY Docker config (x-logging, x-deploy-*)
+- [Phase 45]: No systemd unit needed — Docker daemon already systemd-enabled
+- [Phase 45]: init: true on all containers for proper signal forwarding
 
 ### Pending Todos
 
@@ -65,6 +69,6 @@ None yet.
 
 ## Session Continuity
 
-Last session: 2026-02-21
-Stopped at: Completed 44-01-PLAN.md
+Last session: 2026-02-23
+Stopped at: Completed 45-01 (Docker Production Hardening)
 Resume file: None

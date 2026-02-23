@@ -152,7 +152,7 @@ None
 
 - [x] **Phase 43: Server Concurrency + Resilience** - ThreadingHTTPServer, body size limits, SQLite thread safety, stuck-state cleanup — completed 2026-02-21
 - [x] **Phase 44: Prometheus Metrics** - /metrics endpoints on all services with request/pipeline counters (completed 2026-02-21)
-- [ ] **Phase 45: Docker Production Hardening** - Log rotation, memory limits, auto-start, graceful shutdown
+- [x] **Phase 45: Docker Production Hardening** - Log rotation, memory limits, init, graceful shutdown (completed 2026-02-23)
 - [ ] **Phase 46: Monitoring Integration** - process-exporter, Prometheus scrape, Grafana dashboard, alert rules
 
 ## Phase Details
@@ -194,10 +194,10 @@ Plans:
   2. A container that allocates excessive memory is killed by Docker (512MB limit per service, 1GB for orchestrator)
   3. After Workstation reboot, `docker ps` shows all PePeRS containers running without manual intervention
   4. `docker compose down` completes within 30 seconds with no orphaned processes
-**Plans**: TBD
+**Plans**: 1/1 complete
 
 Plans:
-- [ ] 45-01: docker-compose.yml hardening (log rotation, memory limits, stop_grace_period) + systemd unit for auto-start
+- [x] 45-01: docker-compose.yml hardening (log rotation, memory limits, stop_grace_period, init) + 10 integration tests
 
 ### Phase 46: Monitoring Integration
 **Goal**: PePeRS pipeline health is visible in Grafana with automatic alerts on failures
@@ -265,5 +265,5 @@ Phases execute in numeric order: 43 → 44 → 45 → 46
 | 42. Multi-Source Discovery (OpenAlex) | v12.0 | 1/1 | Complete | 2026-02-20 |
 | 43. Server Concurrency + Resilience | v13.0 | 2/2 | Complete | 2026-02-21 |
 | 44. Prometheus Metrics | 1/1 | Complete   | 2026-02-21 | - |
-| 45. Docker Production Hardening | v13.0 | 0/1 | Not started | - |
+| 45. Docker Production Hardening | v13.0 | 1/1 | Complete | 2026-02-23 |
 | 46. Monitoring Integration | v13.0 | 0/2 | Not started | - |
