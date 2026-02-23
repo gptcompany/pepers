@@ -48,7 +48,20 @@ arXiv/OpenAlex  -->  LLM Analysis  -->  PDF Extraction  -->  CAS Validation  -->
 
 ## Install
 
-### Option 1: Docker (recommended)
+### Option 1: Setup Wizard (recommended)
+
+```bash
+git clone https://github.com/gptcompany/pepers.git
+cd pepers
+uv sync --extra setup
+pepers-setup          # Interactive guided setup
+```
+
+The wizard checks prerequisites, configures `.env`, verifies external services, and optionally starts Docker Compose.
+
+Subcommands: `pepers-setup check | config | services | docker | verify`
+
+### Option 2: Docker
 
 ```bash
 git clone https://github.com/gptcompany/pepers.git
@@ -57,14 +70,14 @@ cp .env.example .env  # Configure API keys
 docker compose up -d  # Starts all 7 services + MCP server
 ```
 
-### Option 2: uv (standalone MCP server)
+### Option 3: uv (standalone MCP server)
 
 ```bash
 uv tool install git+https://github.com/gptcompany/pepers.git
 pepers-mcp --port 8776 --flavor arcade
 ```
 
-### Option 3: Development
+### Option 4: Development
 
 ```bash
 git clone https://github.com/gptcompany/pepers.git
@@ -76,6 +89,9 @@ python3 -c "from shared.db import init_db; init_db('data/research.db')"
 ## Quick Start
 
 ```bash
+# Run the setup wizard first
+pepers-setup
+
 # Run all services (Docker)
 docker compose up -d
 
@@ -119,7 +135,7 @@ pepers/
 │   ├── codegen/         # Code gen + batch explain (:8774)
 │   ├── orchestrator/    # Pipeline + API + cron (:8775)
 │   └── mcp/             # MCP Server SSE (:8776)
-├── tests/               # 745+ tests (unit, integration, e2e)
+├── tests/               # 850+ tests (unit, integration, e2e)
 ├── deploy/              # 7 systemd .service + .target
 ├── docker-compose.yml   # All services, host networking
 └── Dockerfile           # Multi-stage build
@@ -137,7 +153,8 @@ All config via environment variables with `RP_` prefix:
 | `RP_LLM_TEMPERATURE` | `0.0` | LLM temperature (determinism) |
 | `RP_NOTIFY_URLS` | — | Apprise notification URLs (CSV) |
 | `RP_ORCHESTRATOR_CRON` | `0 8 * * *` | Daily pipeline schedule |
-| `RP_DISCOVERY_SOURCES` | `arxiv` | Paper sources (future: openalex) |
+| `RP_DISCOVERY_SOURCES` | `arxiv` | Paper sources: `arxiv`, `openalex` (comma-separated) |
+| `RP_ORCHESTRATOR_CRON_ENABLED` | `false` | Enable cron scheduler (disabled by default) |
 | `RP_MCP_PORT` | `8776` | MCP Server SSE port |
 | `RP_MCP_FLAVOR` | `arcade` | MCP output flavor: `arcade` or `plain` |
 
@@ -183,7 +200,7 @@ See [docs/RUNBOOK.md](docs/RUNBOOK.md) for full configuration reference.
 
 ## Tech Stack
 
-- **Python 3.11+** — stdlib-first (`http.server`, `sqlite3`, `logging`)
+- **Python 3.10+** — stdlib-first (`http.server`, `sqlite3`, `logging`)
 - **SQLite WAL** — shared database, schema v4, 7 tables
 - **Pydantic v2** — 13 data models with validation
 - **SymPy** — CAS engine + C99/Rust/Python codegen
@@ -195,20 +212,22 @@ No web frameworks. No ORMs. No message queues.
 
 ## Stats
 
-- **13,000+ LOC** Python across 7 services + shared library
-- **745+ tests** (unit, integration, e2e) — all passing
-- **11 milestones** shipped (v1.0-v11.0)
+- **8,500+ LOC** Python across 7 services + shared library
+- **850+ tests** (unit, integration, e2e) — all passing
+- **13 milestones** shipped (v1.0-v13.0)
 - **6 LLM providers** with configurable fallback chain
 - **3 CAS engines** for mathematical consensus
 - **3 codegen languages** (Python, C99, Rust)
 
 ## External Dependencies
 
-| Service | Port | Required |
-|---------|------|----------|
-| RAGAnything | 8767 | For PDF extraction + semantic search |
-| CAS Microservice | 8769 | For formula validation (SymPy + Maxima + MATLAB) |
-| Ollama | 11434 | For local LLM (optional, fallback chain) |
+| Service | Port | Required | Setup |
+|---------|------|----------|-------|
+| RAGAnything | 8767 | For PDF extraction + semantic search | `cd rag-service && rag-setup` |
+| CAS Microservice | 8769 | For formula validation (SymPy + Maxima + MATLAB) | `cd cas-service && cas-setup` |
+| Ollama | 11434 | For local LLM (optional, fallback chain) | `curl -fsSL https://ollama.ai/install.sh \| sh` |
+
+Each external service has its own setup wizard. Run `pepers-setup services` to check their availability.
 
 ## License
 

@@ -1,4 +1,31 @@
 __pycache__/
+*.pyc
+*.pyo
+
+# Data
 data/
+*.db
+*.db-journal
+
+# Secrets
 .env
 .env.keys
+*.pem
+*.key
+
+# Virtual environment
+.venv/
+
+# Build artifacts
+dist/
+build/
+*.egg-info/
+
+# Coverage
+.coverage
+htmlcov/
+
+# Caches
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/

@@ -18,12 +18,17 @@ dependencies = [
 
 [project.scripts]
 pepers-mcp = "services.mcp.cli:main"
+pepers-setup = "services.setup.main:main"
 
 [project.optional-dependencies]
 dev = [
     "pytest>=8.0",
     "pytest-asyncio>=0.23",
     "pytest-cov>=5.0",
+]
+setup = [
+    "questionary>=2.0",
+    "rich>=13.0",
 ]
 
 [build-system]
