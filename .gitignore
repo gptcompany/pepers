@@ -38,3 +38,6 @@ htmlcov/
 
 # Internal dev docs (contain infrastructure references)
 .planning/
+*.zip
+*.md
+*.j2
