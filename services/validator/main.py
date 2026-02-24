@@ -11,7 +11,8 @@ Environment:
     RP_VALIDATOR_PORT=8773                    # Service port (default: 8773)
     RP_VALIDATOR_CAS_URL=http://localhost:8769 # CAS microservice URL
     RP_VALIDATOR_MAX_FORMULAS=50              # Default batch size
-    RP_VALIDATOR_ENGINES=matlab,sympy,maxima   # Comma-separated engine list
+    RP_VALIDATOR_ENGINES=                       # Override: comma-separated (auto-discovered from CAS if empty)
+    RP_VALIDATOR_MAX_WORKERS=4               # Parallel workers (1=sequential)
     RP_DB_PATH=data/research.db              # SQLite database path
     RP_LOG_LEVEL=INFO                        # Log level
 """
@@ -21,6 +22,8 @@ from __future__ import annotations
 import logging
 import os
 import time
+from concurrent.futures import ThreadPoolExecutor, as_completed
+from dataclasses import dataclass
 
 from shared.config import load_config
 from shared.db import get_connection, init_db, transaction
@@ -34,6 +37,80 @@ from services.validator.consensus import (
 )
 
 logger = logging.getLogger(__name__)
+
+
+@dataclass
+class _FormulaResult:
+    """Result of validating a single formula. Thread-safe: no shared state."""
+
+    formula_id: int
+    outcome: str | None = None
+    error: str | None = None
+    detail: dict | None = None
+    skipped: bool = False
+
+
+def _validate_one(
+    client: CASClient,
+    db_path: str,
+    formula_row: dict,
+    engines: list[str],
+    include_details: bool,
+) -> _FormulaResult:
+    """Validate a single formula via CAS. Thread-safe — no shared mutable state."""
+    fid = formula_row["id"]
+    latex = formula_row["latex"]
+
+    if not latex or not latex.strip():
+        logger.warning("Formula %d has empty LaTeX, skipping", fid)
+        return _FormulaResult(formula_id=fid, skipped=True)
+
+    try:
+        cas_response = client.validate(latex, engines)
+        _store_validations(db_path, fid, cas_response.results)
+        consensus = apply_consensus(cas_response.results)
+        _update_formula_stage(db_path, fid, consensus)
+
+        detail = None
+        if include_details:
+            engine_detail = {}
+            for r in cas_response.results:
+                engine_detail[r.engine] = {
+                    "success": r.success,
+                    "is_valid": r.is_valid,
+                    "time_ms": r.time_ms,
+                }
+            detail = {
+                "formula_id": fid,
+                "latex_hash": formula_row.get("latex_hash", ""),
+                "consensus": consensus.outcome.value,
+                "engines": engine_detail,
+            }
+
+        logger.info(
+            "Formula %d: consensus=%s (%s)",
+            fid, consensus.outcome.value, consensus.detail,
+        )
+
+        return _FormulaResult(
+            formula_id=fid,
+            outcome=consensus.outcome.value,
+            detail=detail,
+        )
+
+    except CASServiceError as e:
+        logger.error("CAS error for formula %d: %s", fid, e)
+        _mark_formula_failed(db_path, fid, str(e))
+        return _FormulaResult(
+            formula_id=fid, outcome="failed", error=f"formula {fid}: {e}",
+        )
+
+    except Exception as e:
+        logger.error("Unexpected error for formula %d: %s", fid, e)
+        _mark_formula_failed(db_path, fid, str(e))
+        return _FormulaResult(
+            formula_id=fid, outcome="failed", error=f"formula {fid}: {e}",
+        )
 
 
 def _check_consistency(db_path: str) -> None:
@@ -67,7 +144,7 @@ class ValidatorHandler(BaseHandler):
     cas_url: str = "http://localhost:8769"
     cas_timeout: int = 120
     max_formulas_default: int = 50
-    engines: list[str] = ["matlab", "sympy", "maxima"]
+    engines: list[str] = []  # Auto-discovered from CAS /engines at startup
 
     @route("POST", "/process")
     def handle_process(self, data: dict) -> dict | None:
@@ -79,7 +156,7 @@ class ValidatorHandler(BaseHandler):
                 "formula_id": 456,
                 "max_formulas": 50,
                 "force": false,
-                "engines": ["matlab", "sympy", "maxima"]
+                "engines": ["..."]  (optional override, auto-discovered from CAS)
             }
         """
         start = time.time()
@@ -89,6 +166,12 @@ class ValidatorHandler(BaseHandler):
         max_formulas: int = data.get("max_formulas", self.max_formulas_default)
         force = data.get("force", False)
         engines = data.get("engines", self.engines)
+        if not engines:
+            self.send_error_json(
+                "No CAS engines configured. Check CAS service or set "
+                "RP_VALIDATOR_ENGINES", "NO_ENGINES", 503,
+            )
+            return None
 
         assert self.db_path is not None, "db_path must be set"
         db_path: str = self.db_path
@@ -118,6 +201,33 @@ class ValidatorHandler(BaseHandler):
             )
             return None
 
+        max_workers = int(os.environ.get("RP_VALIDATOR_MAX_WORKERS", "4"))
+        include_details = len(formulas) <= 10
+
+        if max_workers <= 1 or len(formulas) <= 1:
+            formula_results = [
+                _validate_one(client, db_path, f, engines, include_details)
+                for f in formulas
+            ]
+        else:
+            effective_workers = min(max_workers, len(formulas))
+            logger.info(
+                "Parallel validation: %d formulas with %d workers",
+                len(formulas), effective_workers,
+            )
+            with ThreadPoolExecutor(max_workers=effective_workers) as pool:
+                futures = {
+                    pool.submit(
+                        _validate_one, client, db_path, f, engines,
+                        include_details,
+                    ): f["id"]
+                    for f in formulas
+                }
+                formula_results = [
+                    fut.result() for fut in as_completed(futures)
+                ]
+
+        # Aggregate results (single-threaded, no locks needed)
         errors: list[str] = []
         counts = {
             "valid": 0,
@@ -128,54 +238,19 @@ class ValidatorHandler(BaseHandler):
         }
         details: list[dict] = []
 
-        for formula_row in formulas:
-            fid = formula_row["id"]
-            latex = formula_row["latex"]
-
-            if not latex or not latex.strip():
-                logger.warning("Formula %d has empty LaTeX, skipping", fid)
+        for fr in formula_results:
+            if fr.skipped:
                 continue
-
-            try:
-                cas_response = client.validate(latex, engines)
-                _store_validations(db_path, fid, cas_response.results)
-                consensus = apply_consensus(cas_response.results)
-                _update_formula_stage(db_path, fid, consensus)
-
-                counts[consensus.outcome.value] += 1
-
-                # Include details for small batches
-                if len(formulas) <= 10:
-                    engine_detail = {}
-                    for r in cas_response.results:
-                        engine_detail[r.engine] = {
-                            "success": r.success,
-                            "is_valid": r.is_valid,
-                            "time_ms": r.time_ms,
-                        }
-                    details.append({
-                        "formula_id": fid,
-                        "latex_hash": formula_row.get("latex_hash", ""),
-                        "consensus": consensus.outcome.value,
-                        "engines": engine_detail,
-                    })
-
-                logger.info(
-                    "Formula %d: consensus=%s (%s)",
-                    fid, consensus.outcome.value, consensus.detail,
-                )
-
-            except CASServiceError as e:
-                logger.error("CAS error for formula %d: %s", fid, e)
-                errors.append(f"formula {fid}: {e}")
-                _mark_formula_failed(db_path, fid, str(e))
+            if fr.error:
+                errors.append(fr.error)
                 counts["failed"] += 1
+            elif fr.outcome:
+                counts[fr.outcome] += 1
+            if fr.detail:
+                details.append(fr.detail)
 
-            except Exception as e:
-                logger.error("Unexpected error for formula %d: %s", fid, e)
-                errors.append(f"formula {fid}: {e}")
-                _mark_formula_failed(db_path, fid, str(e))
-                counts["failed"] += 1
+        if details:
+            details.sort(key=lambda d: d["formula_id"])
 
         elapsed_ms = int((time.time() - start) * 1000)
         processed = sum(counts.values())
@@ -326,8 +401,26 @@ def main() -> None:
     ValidatorHandler.max_formulas_default = int(
         os.environ.get("RP_VALIDATOR_MAX_FORMULAS", "50")
     )
-    engines_str = os.environ.get("RP_VALIDATOR_ENGINES", "matlab,sympy,maxima")
-    ValidatorHandler.engines = [e.strip() for e in engines_str.split(",")]
+
+    # Auto-discover engines from CAS; env var override if set
+    engines_override = os.environ.get("RP_VALIDATOR_ENGINES", "").strip()
+    if engines_override:
+        ValidatorHandler.engines = [e.strip() for e in engines_override.split(",") if e.strip()]
+        logger.info("Using engine override from env: %s", ValidatorHandler.engines)
+    else:
+        client = CASClient(base_url=ValidatorHandler.cas_url)
+        discovered = client.discover_engines()
+        if discovered:
+            ValidatorHandler.engines = [
+                e["name"] for e in discovered
+                if "validate" in e.get("capabilities", [])
+            ]
+            logger.info("Discovered CAS engines: %s", ValidatorHandler.engines)
+        else:
+            logger.warning(
+                "CAS engine discovery failed and RP_VALIDATOR_ENGINES not set. "
+                "Validation requests will fail until CAS is reachable."
+            )
 
     service = BaseService(
         "validator", config.port, ValidatorHandler, str(config.db_path)

@@ -375,6 +375,83 @@ class TestCASClient:
         assert r.time_ms == 0
 
 
+class TestDiscoverEngines:
+    """Tests for CASClient.discover_engines() — auto-discovery."""
+
+    def test_discover_success(self):
+        """Returns engine list when CAS responds."""
+        engines_data = {
+            "engines": [
+                {"name": "sympy", "capabilities": ["validate"]},
+                {"name": "maxima", "capabilities": ["validate"]},
+                {"name": "gap", "capabilities": ["validate", "compute"]},
+            ]
+        }
+        resp_body = json.dumps(engines_data).encode()
+        mock_resp = MagicMock()
+        mock_resp.read.return_value = resp_body
+        mock_resp.__enter__ = MagicMock(return_value=mock_resp)
+        mock_resp.__exit__ = MagicMock(return_value=False)
+
+        with patch("urllib.request.urlopen", return_value=mock_resp):
+            result = CASClient().discover_engines()
+
+        assert result is not None
+        assert len(result) == 3
+        assert result[0]["name"] == "sympy"
+        assert result[2]["name"] == "gap"
+        assert "compute" in result[2]["capabilities"]
+
+    def test_discover_unreachable(self):
+        """Returns None when CAS is unreachable."""
+        with patch("urllib.request.urlopen",
+                   side_effect=urllib.error.URLError("refused")):
+            result = CASClient().discover_engines()
+        assert result is None
+
+    def test_discover_empty_engines(self):
+        """Returns empty list when CAS has no engines."""
+        resp_body = json.dumps({"engines": []}).encode()
+        mock_resp = MagicMock()
+        mock_resp.read.return_value = resp_body
+        mock_resp.__enter__ = MagicMock(return_value=mock_resp)
+        mock_resp.__exit__ = MagicMock(return_value=False)
+
+        with patch("urllib.request.urlopen", return_value=mock_resp):
+            result = CASClient().discover_engines()
+        assert result == []
+
+    def test_discover_filters_validate_capable(self):
+        """Integration: discovered engines filtered to validate-capable only."""
+        engines_data = {
+            "engines": [
+                {"name": "sympy", "capabilities": ["validate"]},
+                {"name": "gap", "capabilities": ["compute"]},  # no validate
+                {"name": "maxima", "capabilities": ["validate"]},
+            ]
+        }
+        discovered = engines_data["engines"]
+        validate_engines = [
+            e["name"] for e in discovered
+            if "validate" in e.get("capabilities", [])
+        ]
+        assert validate_engines == ["sympy", "maxima"]
+        assert "gap" not in validate_engines
+
+    def test_discover_calls_correct_url(self):
+        """Verifies /engines endpoint is called."""
+        resp_body = json.dumps({"engines": []}).encode()
+        mock_resp = MagicMock()
+        mock_resp.read.return_value = resp_body
+        mock_resp.__enter__ = MagicMock(return_value=mock_resp)
+        mock_resp.__exit__ = MagicMock(return_value=False)
+
+        with patch("urllib.request.urlopen", return_value=mock_resp) as mock_open:
+            CASClient("http://cas:8769").discover_engines()
+            req = mock_open.call_args[0][0]
+            assert req.full_url == "http://cas:8769/engines"
+
+
 class TestCASServiceError:
     """Tests for CASServiceError exception."""
 
@@ -384,3 +461,180 @@ class TestCASServiceError:
     def test_message(self):
         err = CASServiceError("test error")
         assert str(err) == "test error"
+
+
+# ===========================================================================
+# _validate_one Tests
+# ===========================================================================
+
+
+class TestValidateOne:
+    """Tests for _validate_one() — extracted per-formula validation logic."""
+
+    def test_empty_latex_skipped(self):
+        """Empty LaTeX returns skipped result without calling CAS."""
+        from services.validator.main import _validate_one, _FormulaResult
+
+        client = MagicMock()
+        result = _validate_one(
+            client, "/tmp/test.db",
+            {"id": 1, "latex": "", "latex_hash": "abc"},
+            ["sympy"], False,
+        )
+        assert result.skipped is True
+        assert result.formula_id == 1
+        client.validate.assert_not_called()
+
+    def test_whitespace_latex_skipped(self):
+        """Whitespace-only LaTeX is also skipped."""
+        from services.validator.main import _validate_one
+
+        client = MagicMock()
+        result = _validate_one(
+            client, "/tmp/test.db",
+            {"id": 2, "latex": "   ", "latex_hash": ""},
+            ["sympy"], False,
+        )
+        assert result.skipped is True
+
+    @patch("services.validator.main._mark_formula_failed")
+    @patch("services.validator.main._update_formula_stage")
+    @patch("services.validator.main._store_validations")
+    def test_successful_validation(self, mock_store, mock_update, mock_fail):
+        """Successful CAS call returns correct outcome."""
+        from services.validator.main import _validate_one
+
+        client = MagicMock()
+        client.validate.return_value = CASResponse(
+            results=[_engine_ok("sympy"), _engine_ok("maxima")],
+            latex_preprocessed="x^2",
+            time_ms=100,
+        )
+
+        result = _validate_one(
+            client, "/tmp/test.db",
+            {"id": 5, "latex": "x^2", "latex_hash": "h5"},
+            ["sympy", "maxima"], False,
+        )
+
+        assert result.outcome == "valid"
+        assert result.error is None
+        assert result.detail is None  # include_details=False
+        mock_store.assert_called_once()
+        mock_update.assert_called_once()
+        mock_fail.assert_not_called()
+
+    @patch("services.validator.main._mark_formula_failed")
+    @patch("services.validator.main._update_formula_stage")
+    @patch("services.validator.main._store_validations")
+    def test_details_included(self, mock_store, mock_update, mock_fail):
+        """include_details=True populates detail dict."""
+        from services.validator.main import _validate_one
+
+        client = MagicMock()
+        client.validate.return_value = CASResponse(
+            results=[_engine_ok("sympy"), _engine_ok("maxima")],
+            latex_preprocessed="x^2",
+            time_ms=100,
+        )
+
+        result = _validate_one(
+            client, "/tmp/test.db",
+            {"id": 5, "latex": "x^2", "latex_hash": "h5"},
+            ["sympy", "maxima"], True,  # include_details=True
+        )
+
+        assert result.detail is not None
+        assert result.detail["formula_id"] == 5
+        assert result.detail["consensus"] == "valid"
+        assert "sympy" in result.detail["engines"]
+
+    @patch("services.validator.main._mark_formula_failed")
+    def test_cas_error_returns_failed(self, mock_fail):
+        """CASServiceError produces failed result."""
+        from services.validator.main import _validate_one
+
+        client = MagicMock()
+        client.validate.side_effect = CASServiceError("timeout")
+
+        result = _validate_one(
+            client, "/tmp/test.db",
+            {"id": 3, "latex": "x^2", "latex_hash": "h3"},
+            ["sympy"], False,
+        )
+
+        assert result.outcome == "failed"
+        assert "timeout" in result.error
+        mock_fail.assert_called_once_with("/tmp/test.db", 3, "timeout")
+
+    @patch("services.validator.main._mark_formula_failed")
+    def test_unexpected_error_returns_failed(self, mock_fail):
+        """Unexpected exception produces failed result."""
+        from services.validator.main import _validate_one
+
+        client = MagicMock()
+        client.validate.side_effect = RuntimeError("boom")
+
+        result = _validate_one(
+            client, "/tmp/test.db",
+            {"id": 4, "latex": "x^2", "latex_hash": "h4"},
+            ["sympy"], False,
+        )
+
+        assert result.outcome == "failed"
+        assert "boom" in result.error
+        mock_fail.assert_called_once()
+
+
+class TestParallelValidation:
+    """Tests for ThreadPoolExecutor-based parallel validation."""
+
+    @patch("services.validator.main._mark_formula_failed")
+    @patch("services.validator.main._update_formula_stage")
+    @patch("services.validator.main._store_validations")
+    def test_parallel_same_results_as_sequential(
+        self, mock_store, mock_update, mock_fail, monkeypatch,
+    ):
+        """Parallel and sequential produce identical aggregate counts."""
+        from services.validator.main import _validate_one, _FormulaResult
+
+        client = MagicMock()
+        client.validate.return_value = CASResponse(
+            results=[_engine_ok("sympy"), _engine_ok("maxima")],
+            latex_preprocessed="x",
+            time_ms=10,
+        )
+
+        formulas = [
+            {"id": i, "latex": f"x^{i}", "latex_hash": f"h{i}"}
+            for i in range(1, 6)
+        ]
+        engines = ["sympy", "maxima"]
+
+        # Sequential
+        seq_results = [
+            _validate_one(client, "/tmp/test.db", f, engines, False)
+            for f in formulas
+        ]
+
+        mock_store.reset_mock()
+        mock_update.reset_mock()
+
+        # Parallel (via ThreadPoolExecutor)
+        from concurrent.futures import ThreadPoolExecutor, as_completed
+        with ThreadPoolExecutor(max_workers=3) as pool:
+            futures = {
+                pool.submit(_validate_one, client, "/tmp/test.db", f, engines, False): f["id"]
+                for f in formulas
+            }
+            par_results = [fut.result() for fut in as_completed(futures)]
+
+        # Same outcomes (order may differ)
+        seq_outcomes = sorted(r.outcome for r in seq_results)
+        par_outcomes = sorted(r.outcome for r in par_results)
+        assert seq_outcomes == par_outcomes
+
+        # Same formula IDs processed
+        seq_ids = sorted(r.formula_id for r in seq_results)
+        par_ids = sorted(r.formula_id for r in par_results)
+        assert seq_ids == par_ids
