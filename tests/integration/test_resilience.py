@@ -11,7 +11,6 @@ import threading
 import time
 import urllib.request
 
-import pytest
 
 from shared.db import get_connection, init_db
 from shared.server import BaseHandler, BaseService, route
@@ -61,7 +60,6 @@ class TestHealthEndpoint:
 
     def test_health_degraded_on_bad_db(self, tmp_path):
         port = _get_free_port()
-        bad_path = str(tmp_path / "nonexistent" / "dir" / "bad.db")
         # Don't create parent dir — DB open should fail
         svc = BaseService("test", port, _TestHandler, "/dev/null/impossible.db")
         t = threading.Thread(target=svc.run, daemon=True)

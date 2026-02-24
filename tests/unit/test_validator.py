@@ -473,7 +473,7 @@ class TestValidateOne:
 
     def test_empty_latex_skipped(self):
         """Empty LaTeX returns skipped result without calling CAS."""
-        from services.validator.main import _validate_one, _FormulaResult
+        from services.validator.main import _validate_one
 
         client = MagicMock()
         result = _validate_one(
@@ -596,7 +596,7 @@ class TestParallelValidation:
         self, mock_store, mock_update, mock_fail, monkeypatch,
     ):
         """Parallel and sequential produce identical aggregate counts."""
-        from services.validator.main import _validate_one, _FormulaResult
+        from services.validator.main import _validate_one
 
         client = MagicMock()
         client.validate.return_value = CASResponse(

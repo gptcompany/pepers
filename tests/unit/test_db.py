@@ -6,7 +6,7 @@ import sqlite3
 
 import pytest
 
-from shared.db import MIGRATIONS, _run_migrations, get_connection, init_db, transaction
+from shared.db import get_connection, init_db, transaction
 
 
 class TestGetConnection:

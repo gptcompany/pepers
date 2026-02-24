@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 import json
-import os
 from unittest.mock import MagicMock, patch
 
 import pytest
@@ -352,7 +351,7 @@ class TestRunPipeline:
         from services.mcp.server import run_pipeline
 
         mock_call.return_value = {"run_id": "run-xyz", "status": "running"}
-        result = run_pipeline(paper_id=42, stages=3)
+        run_pipeline(paper_id=42, stages=3)
         payload = mock_call.call_args[0][2]
         assert payload["paper_id"] == 42
         assert payload["stages"] == 3

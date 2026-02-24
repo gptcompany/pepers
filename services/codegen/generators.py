@@ -11,7 +11,6 @@ Per-language error isolation: one failure doesn't block others.
 
 from __future__ import annotations
 
-import json
 import logging
 import os
 import re
@@ -109,7 +108,7 @@ def _split_multiline(latex: str) -> str:
     """
     # Split on literal \\ (line breaks in align/gather environments)
     if r'\\' in latex:
-        lines = [l.strip() for l in re.split(r'\\\\', latex) if l.strip()]
+        lines = [line.strip() for line in re.split(r'\\\\', latex) if line.strip()]
         if lines:
             latex = lines[-1]  # take last equation (usually the result)
 

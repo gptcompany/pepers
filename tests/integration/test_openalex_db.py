@@ -6,7 +6,7 @@ import json
 from unittest.mock import MagicMock, patch
 
 from shared.db import transaction
-from services.discovery.openalex import search_openalex, upsert_openalex_paper
+from services.discovery.openalex import upsert_openalex_paper
 from services.discovery.main import upsert_paper
 
 

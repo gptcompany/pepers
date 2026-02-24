@@ -12,10 +12,10 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 
-from shared.db import get_connection, transaction
+from shared.db import transaction
 from shared.server import BaseService
 from services.orchestrator.main import OrchestratorHandler
-from services.orchestrator.pipeline import PipelineRunner, ServiceError
+from services.orchestrator.pipeline import PipelineRunner
 
 
 def _get_free_port():

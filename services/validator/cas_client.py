@@ -105,3 +105,18 @@ class CASClient:
                 return body.get("status") == "ok"
         except Exception:
             return False
+
+    def discover_engines(self) -> list[dict] | None:
+        """Query CAS /engines to discover available engines + capabilities.
+
+        Returns list of engine dicts or None if CAS unreachable.
+        Each dict has at least 'name' and 'capabilities' keys.
+        """
+        try:
+            req = urllib.request.Request(f"{self.base_url}/engines")
+            with urllib.request.urlopen(req, timeout=10) as resp:
+                body = json.loads(resp.read())
+                return body.get("engines", [])
+        except Exception:
+            logger.warning("CAS /engines discovery failed, using static config")
+            return None

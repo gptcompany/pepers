@@ -25,6 +25,32 @@ def _check_http(url: str, timeout: float = 3.0) -> bool:
         return False
 
 
+def _discover_cas_details(base_url: str) -> str:
+    """Query CAS /engines to get engine names and count."""
+    try:
+        resp = requests.get(f"{base_url}/engines", timeout=5)
+        data = resp.json()
+        engines = data.get("engines", [])
+        names = [e.get("name", "?") for e in engines]
+        return f"{', '.join(names)} ({len(names)} eng.)"
+    except Exception:
+        return ""
+
+
+def _discover_rag_details(base_url: str) -> str:
+    """Query RAG /status to get queue and circuit breaker info."""
+    try:
+        resp = requests.get(f"{base_url}/status", timeout=5)
+        data = resp.json()
+        cb = data.get("circuit_breaker", {}).get("state", "?")
+        queue = data.get("queue", {})
+        active = queue.get("active", "?")
+        max_q = queue.get("max", "?")
+        return f"queue: {active}/{max_q}, CB: {cb}"
+    except Exception:
+        return ""
+
+
 class AggregatedHealthCheck:
     name = "Aggregated health check"
 
@@ -37,6 +63,7 @@ class AggregatedHealthCheck:
         table.add_column("Service", style="bold")
         table.add_column("URL")
         table.add_column("Status")
+        table.add_column("Details", style="dim")
 
         all_ok = True
 
@@ -47,17 +74,25 @@ class AggregatedHealthCheck:
             url = f"http://localhost:{actual_port}/health"
             ok = _check_http(url)
             status = "[green]✅ OK[/]" if ok else "[red]❌ Down[/]"
-            table.add_row(svc_name.capitalize(), url, status)
+            table.add_row(svc_name.capitalize(), url, status, f":{actual_port}")
             if not ok:
                 all_ok = False
 
-        # External services
+        # External services with capability discovery
         for name, (env_key, default_url, path) in _EXTERNAL.items():
             base = os.environ.get(env_key, default_url)
             url = base.rstrip("/") + path
             ok = _check_http(url)
             status = "[green]✅ OK[/]" if ok else "[red]❌ Down[/]"
-            table.add_row(name, url, status)
+
+            details = ""
+            if ok:
+                if name == "CAS Service":
+                    details = _discover_cas_details(base.rstrip("/"))
+                elif name == "RAG Service":
+                    details = _discover_rag_details(base.rstrip("/"))
+
+            table.add_row(name, url, status, details)
             if not ok:
                 all_ok = False
 

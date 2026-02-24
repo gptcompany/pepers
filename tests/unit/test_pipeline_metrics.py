@@ -12,7 +12,6 @@ from __future__ import annotations
 
 from unittest.mock import patch
 
-import pytest
 from prometheus_client import REGISTRY
 
 from services.orchestrator.pipeline import PipelineRunner, ServiceError

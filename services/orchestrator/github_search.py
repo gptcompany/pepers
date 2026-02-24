@@ -97,7 +97,7 @@ def search_github(
     """
     if languages is None:
         lang_str = os.environ.get("RP_GITHUB_LANGUAGES", "python,rust,cpp")
-        languages = [l.strip() for l in lang_str.split(",")]
+        languages = [lang.strip() for lang in lang_str.split(",")]
 
     headers = _get_github_headers()
     all_repos: dict[str, dict] = {}

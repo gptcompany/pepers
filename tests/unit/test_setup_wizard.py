@@ -178,6 +178,40 @@ class TestAggregatedHealthCheck:
         step = AggregatedHealthCheck()
         assert step.verify() is True
 
+    @patch("services.setup._verify._discover_rag_details", return_value="")
+    @patch("services.setup._verify._discover_cas_details",
+           return_value="sympy, maxima, gap (3 eng.)")
+    @patch("services.setup._verify._check_http", return_value=True)
+    def test_install_shows_cas_details_when_up(self, mock_http, mock_cas, mock_rag):
+        """When CAS is up, details column shows discovered engines."""
+        step = AggregatedHealthCheck()
+        console = MagicMock()
+        step.install(console)
+        # Table was printed to console
+        console.print.assert_called()
+        mock_cas.assert_called_once()
+
+    @patch("services.setup._verify._discover_rag_details",
+           return_value="queue: 0/12, CB: closed")
+    @patch("services.setup._verify._discover_cas_details", return_value="")
+    @patch("services.setup._verify._check_http", return_value=True)
+    def test_install_shows_rag_details_when_up(self, mock_http, mock_cas, mock_rag):
+        """When RAG is up, details column shows queue/CB info."""
+        step = AggregatedHealthCheck()
+        console = MagicMock()
+        step.install(console)
+        console.print.assert_called()
+        mock_rag.assert_called_once()
+
+    @patch("services.setup._verify._discover_cas_details")
+    @patch("services.setup._verify._check_http", return_value=False)
+    def test_install_skips_discovery_when_down(self, mock_http, mock_cas):
+        """When service is down, skip capability discovery."""
+        step = AggregatedHealthCheck()
+        console = MagicMock()
+        step.install(console)
+        mock_cas.assert_not_called()
+
 
 # ── Runner ───────────────────────────────────────────────────
 

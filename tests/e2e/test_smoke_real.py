@@ -20,7 +20,7 @@ _PROJECT_ROOT = Path(__file__).resolve().parent.parent.parent
 if str(_PROJECT_ROOT) not in sys.path:
     sys.path.insert(0, str(_PROJECT_ROOT))
 
-from scripts.smoke_test import SmokeReport, check_all_services, run_smoke_test
+from scripts.smoke_test import SmokeReport, check_all_services, run_smoke_test  # noqa: E402
 
 pytestmark = pytest.mark.e2e
 

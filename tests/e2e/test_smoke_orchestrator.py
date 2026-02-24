@@ -29,11 +29,11 @@ _PROJECT_ROOT = Path(__file__).resolve().parent.parent.parent
 if str(_PROJECT_ROOT) not in sys.path:
     sys.path.insert(0, str(_PROJECT_ROOT))
 
-from shared.db import init_db, transaction
-from shared.server import BaseService
-from services.orchestrator.main import OrchestratorHandler
-from services.orchestrator.pipeline import PipelineRunner
-from scripts.smoke_test import (
+from shared.db import init_db, transaction  # noqa: E402
+from shared.server import BaseService  # noqa: E402
+from services.orchestrator.main import OrchestratorHandler  # noqa: E402
+from services.orchestrator.pipeline import PipelineRunner  # noqa: E402
+from scripts.smoke_test import (  # noqa: E402
     SmokeReport,
     check_all_services,
     run_smoke_test_via_orchestrator,
