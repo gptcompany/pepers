@@ -10,7 +10,7 @@ from rich.console import Console
 _EXTERNAL_SERVICES = [
     {
         "name": "CAS Service",
-        "env_url": "RP_CAS_URL",
+        "env_urls": ["RP_VALIDATOR_CAS_URL", "RP_CAS_URL"],
         "default_url": "http://localhost:8769",
         "health_path": "/health",
         "setup_hint": (
@@ -21,7 +21,7 @@ _EXTERNAL_SERVICES = [
     },
     {
         "name": "RAG Service",
-        "env_url": "RP_RAG_URL",
+        "env_urls": ["RP_EXTRACTOR_RAG_URL", "RP_RAG_QUERY_URL", "RP_RAG_URL"],
         "default_url": "http://localhost:8767",
         "health_path": "/health",
         "setup_hint": (
@@ -32,7 +32,7 @@ _EXTERNAL_SERVICES = [
     },
     {
         "name": "Ollama",
-        "env_url": "RP_OLLAMA_URL",
+        "env_urls": ["RP_CODEGEN_OLLAMA_URL", "RP_OLLAMA_URL"],
         "default_url": "http://localhost:11434",
         "health_path": "/",
         "setup_hint": (
@@ -52,7 +52,18 @@ class ExternalServiceCheck:
         self.name = svc["name"]
 
     def _url(self) -> str:
-        return os.environ.get(self._svc["env_url"], self._svc["default_url"])
+        env_urls = self._svc.get("env_urls")
+        if isinstance(env_urls, list):
+            for key in env_urls:
+                val = os.environ.get(key, "").strip()
+                if val:
+                    return val
+        env_url = self._svc.get("env_url")
+        if isinstance(env_url, str):
+            val = os.environ.get(env_url, "").strip()
+            if val:
+                return val
+        return self._svc["default_url"]
 
     def check(self) -> bool:
         url = self._url().rstrip("/") + self._svc["health_path"]

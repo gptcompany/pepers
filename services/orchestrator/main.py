@@ -68,6 +68,10 @@ class OrchestratorHandler(BaseHandler):
 
     runner: PipelineRunner | None = None
 
+    def _db_path_required(self) -> str:
+        assert self.db_path is not None, "Database path not configured"
+        return self.db_path
+
     @route("POST", "/run")
     def handle_run(self, data: dict) -> dict | None:
         """Trigger an async pipeline run.
@@ -212,7 +216,7 @@ class OrchestratorHandler(BaseHandler):
 
         where = ("WHERE " + " AND ".join(clauses)) if clauses else ""
 
-        with transaction(self.db_path) as conn:
+        with transaction(self._db_path_required()) as conn:
             rows = conn.execute(
                 f"SELECT f.* FROM formulas f {where} "  # noqa: S608
                 f"ORDER BY f.id DESC LIMIT ?",
@@ -256,7 +260,7 @@ class OrchestratorHandler(BaseHandler):
 
         where = "WHERE " + " AND ".join(clauses)
 
-        with transaction(self.db_path) as conn:
+        with transaction(self._db_path_required()) as conn:
             rows = conn.execute(
                 f"SELECT g.*, f.latex, f.description "  # noqa: S608
                 f"FROM generated_code g "
@@ -320,7 +324,7 @@ class OrchestratorHandler(BaseHandler):
 
         result = search_and_analyze(
             paper_id=paper_id,
-            db_path=self.db_path,
+            db_path=self._db_path_required(),
             max_repos=data.get("max_repos"),
             languages=data.get("languages"),
             min_stars=data.get("min_stars"),
@@ -358,7 +362,7 @@ class OrchestratorHandler(BaseHandler):
 
         where = "WHERE " + " AND ".join(clauses)
 
-        with transaction(self.db_path) as conn:
+        with transaction(self._db_path_required()) as conn:
             rows = conn.execute(
                 f"SELECT r.*, a.relevance_score, a.quality_score, "  # noqa: S608
                 f"a.formula_matches, a.summary, a.recommendation, "
@@ -463,7 +467,7 @@ class OrchestratorHandler(BaseHandler):
     def _search_fallback(self, query: str) -> dict:
         """Fallback: substring match on title/abstract in SQLite."""
         terms = query.lower().split()
-        with transaction(self.db_path) as conn:
+        with transaction(self._db_path_required()) as conn:
             rows = conn.execute(
                 "SELECT * FROM papers ORDER BY created_at DESC LIMIT 200"
             ).fetchall()
@@ -498,7 +502,7 @@ class OrchestratorHandler(BaseHandler):
 
         where = ("WHERE " + " AND ".join(clauses)) if clauses else ""
 
-        with transaction(self.db_path) as conn:
+        with transaction(self._db_path_required()) as conn:
             rows = conn.execute(
                 f"SELECT p.* FROM papers p {where} "  # noqa: S608
                 f"ORDER BY p.created_at DESC LIMIT ?",
@@ -507,7 +511,7 @@ class OrchestratorHandler(BaseHandler):
         return [Paper(**dict(r)).model_dump(mode="json") for r in rows]
 
     def _get_paper_detail(self, paper_id: int) -> dict | None:
-        with transaction(self.db_path) as conn:
+        with transaction(self._db_path_required()) as conn:
             row = conn.execute(
                 "SELECT * FROM papers WHERE id = ?", [paper_id]
             ).fetchone()

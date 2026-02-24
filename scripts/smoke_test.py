@@ -230,7 +230,7 @@ def run_smoke_test(
 
     # -- Clean stale state -----------------------------------------------
     _existing_id, _existing_stage = _get_paper(db_path, arxiv_id)
-    if _existing_stage in ("rejected", "failed"):
+    if _existing_stage in ("rejected", "failed") and _existing_id is not None:
         _reset_paper(db_path, _existing_id)
 
     # -- Step 1: discovery ----------------------------------------------
@@ -460,7 +460,7 @@ def run_smoke_test_via_orchestrator(
 
     # -- Clean stale state -------------------------------------------------
     _existing_id, _existing_stage = _get_paper(db_path, arxiv_id)
-    if _existing_stage in ("rejected", "failed"):
+    if _existing_stage in ("rejected", "failed") and _existing_id is not None:
         _reset_paper(db_path, _existing_id)
 
     paper_id_for_run, stage_before = _get_paper(db_path, arxiv_id)

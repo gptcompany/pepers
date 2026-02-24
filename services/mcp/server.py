@@ -220,6 +220,9 @@ def search_papers(
     except RuntimeError as e:
         return _flavor("error", msg=str(e))
 
+    if not isinstance(result, dict):
+        return _flavor("error", msg="Invalid orchestrator response type")
+
     if context_only:
         context = result.get("context", "")
         chunks = context.split("\n\n") if context else []
@@ -373,6 +376,9 @@ def run_pipeline(
         result = _call_orchestrator("POST", "/run", payload, timeout=10)
     except RuntimeError as e:
         return _flavor("error", msg=str(e))
+
+    if not isinstance(result, dict):
+        return _flavor("error", msg="Invalid orchestrator response type")
 
     run_id = result.get("run_id", "unknown")
     return _flavor("run_start", id=run_id)

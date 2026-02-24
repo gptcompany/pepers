@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import os
 import sqlite3
 from unittest.mock import MagicMock, patch
 
@@ -13,9 +14,10 @@ from services.setup._checks import (
     UvCheck,
     VenvCheck,
 )
-from services.setup._config import EnvConfig
-from services.setup._services import ExternalServiceCheck
-from services.setup._verify import AggregatedHealthCheck
+from services.setup import main as setup_main
+from services.setup._config import _CONFIG_VARS, _read_env_values, EnvConfig
+from services.setup._services import _EXTERNAL_SERVICES, ExternalServiceCheck
+from services.setup._verify import _EXTERNAL, AggregatedHealthCheck
 
 
 # ── PythonCheck ──────────────────────────────────────────────
@@ -117,7 +119,11 @@ class TestEnvConfig:
     def test_check_passes_with_valid_env(self, tmp_path):
         env_file = tmp_path / ".env"
         env_file.write_text(
-            "RP_DB_PATH=/tmp/test.db\nRP_DISCOVERY_PORT=8770\n"
+            "RP_DB_PATH=/tmp/test.db\n"
+            "RP_DISCOVERY_PORT=8770\n"
+            "RP_VALIDATOR_CAS_URL=http://localhost:8769\n"
+            "RP_EXTRACTOR_RAG_URL=http://localhost:8767\n"
+            "RP_CODEGEN_OLLAMA_URL=http://localhost:11434\n"
         )
         step = EnvConfig(tmp_path)
         assert step.check() is True
@@ -128,6 +134,33 @@ class TestEnvConfig:
         env_file = tmp_path / ".env"
         env_file.write_text("something")
         assert step.verify() is True
+
+    def test_read_env_values_parses_simple_env_file(self, tmp_path):
+        env_file = tmp_path / ".env"
+        env_file.write_text(
+            "# comment\nRP_DB_PATH=data/research.db\nRP_LOG_LEVEL=INFO\nINVALID\n"
+        )
+        values = _read_env_values(env_file)
+        assert values["RP_DB_PATH"] == "data/research.db"
+        assert values["RP_LOG_LEVEL"] == "INFO"
+        assert "INVALID" not in values
+
+    def test_config_vars_use_service_specific_external_env_names(self):
+        keys = {name for name, *_ in _CONFIG_VARS}
+        assert "RP_DISCOVERY_SOURCES" in keys
+        assert "RP_VALIDATOR_MAX_FORMULAS" in keys
+        assert "RP_CODEGEN_MAX_FORMULAS" in keys
+        assert "RP_ORCHESTRATOR_CRON" in keys
+        assert "RP_ORCHESTRATOR_STAGES_PER_RUN" in keys
+        assert "RP_ORCHESTRATOR_DEFAULT_QUERY" in keys
+        assert "RP_MCP_FLAVOR" in keys
+        assert "RP_VALIDATOR_CAS_URL" in keys
+        assert "RP_EXTRACTOR_RAG_URL" in keys
+        assert "RP_RAG_QUERY_URL" in keys
+        assert "RP_CODEGEN_OLLAMA_URL" in keys
+        assert "RP_CAS_URL" not in keys
+        assert "RP_RAG_URL" not in keys
+        assert "RP_OLLAMA_URL" not in keys
 
 
 # ── ExternalServiceCheck ─────────────────────────────────────
@@ -158,6 +191,31 @@ class TestExternalServiceCheck:
         result = step.install(console)
         assert result is False
         console.print.assert_called()  # showed hint
+
+    @patch("requests.get")
+    def test_check_prefers_new_env_key_over_legacy(self, mock_get):
+        mock_get.return_value.status_code = 200
+        svc = {
+            "name": "CAS Service",
+            "env_urls": ["RP_VALIDATOR_CAS_URL", "RP_CAS_URL"],
+            "default_url": "http://localhost:8769",
+            "health_path": "/health",
+            "setup_hint": "Install test service",
+        }
+        with patch.dict(
+            os.environ,
+            {"RP_CAS_URL": "http://legacy:1", "RP_VALIDATOR_CAS_URL": "http://new:2"},
+            clear=False,
+        ):
+            step = ExternalServiceCheck(svc)
+            assert step.check() is True
+        mock_get.assert_called_once_with("http://new:2/health", timeout=5)
+
+    def test_external_service_constants_are_aligned(self):
+        by_name = {svc["name"]: svc for svc in _EXTERNAL_SERVICES}
+        assert by_name["CAS Service"]["env_urls"][0] == "RP_VALIDATOR_CAS_URL"
+        assert by_name["RAG Service"]["env_urls"][0] == "RP_EXTRACTOR_RAG_URL"
+        assert by_name["Ollama"]["env_urls"][0] == "RP_CODEGEN_OLLAMA_URL"
 
 
 # ── AggregatedHealthCheck ────────────────────────────────────
@@ -211,6 +269,47 @@ class TestAggregatedHealthCheck:
         console = MagicMock()
         step.install(console)
         mock_cas.assert_not_called()
+
+    @patch("services.setup._verify._discover_rag_details", return_value="")
+    @patch("services.setup._verify._discover_cas_details", return_value="")
+    @patch("services.setup._verify._check_http", return_value=True)
+    def test_install_uses_service_specific_external_env_keys(self, mock_http, mock_cas, mock_rag):
+        step = AggregatedHealthCheck()
+        console = MagicMock()
+        with patch.dict(
+            os.environ,
+            {
+                "RP_VALIDATOR_CAS_URL": "http://cas.local:9991",
+                "RP_EXTRACTOR_RAG_URL": "http://rag.local:9992",
+                "RP_CODEGEN_OLLAMA_URL": "http://ollama.local:9993",
+            },
+            clear=False,
+        ):
+            step.install(console)
+
+        called_urls = [call.args[0] for call in mock_http.call_args_list]
+        assert "http://cas.local:9991/health" in called_urls
+        assert "http://rag.local:9992/health" in called_urls
+        assert "http://ollama.local:9993/" in called_urls
+
+    def test_verify_constants_keep_legacy_fallbacks(self):
+        cas_envs, _, _ = _EXTERNAL["CAS Service"]
+        rag_envs, _, _ = _EXTERNAL["RAG Service"]
+        ollama_envs, _, _ = _EXTERNAL["Ollama"]
+        assert "RP_CAS_URL" in cas_envs
+        assert "RP_RAG_URL" in rag_envs
+        assert "RP_OLLAMA_URL" in ollama_envs
+
+    @patch("services.setup._verify._discover_rag_details", return_value="")
+    @patch("services.setup._verify._discover_cas_details", return_value="")
+    @patch("services.setup._verify._check_http", return_value=True)
+    def test_install_uses_mcp_sse_endpoint(self, mock_http, mock_cas, mock_rag):
+        step = AggregatedHealthCheck()
+        console = MagicMock()
+        step.install(console)
+
+        called_urls = [call.args[0] for call in mock_http.call_args_list]
+        assert "http://localhost:8776/sse" in called_urls
 
 
 # ── Runner ───────────────────────────────────────────────────
@@ -270,3 +369,14 @@ class TestRunner:
         result = run_steps([step], console)
         assert result is True
         step.install.assert_not_called()
+
+
+# ── CLI main() ────────────────────────────────────────────────
+
+class TestSetupMainCli:
+    @patch("services.setup.main.Console")
+    def test_help_flag_returns_zero(self, mock_console_cls):
+        rc = setup_main.main(["--help"])
+        assert rc == 0
+        console = mock_console_cls.return_value
+        console.print.assert_called()

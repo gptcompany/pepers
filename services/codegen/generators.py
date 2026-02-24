@@ -297,6 +297,13 @@ def generate_all(latex: str, formula_id: int) -> list[dict]:
     if isinstance(expr, sympy.Equality):
         expr = expr.rhs
 
+    if not isinstance(expr, sympy.Expr):
+        return [
+            {"language": lang, "code": "", "metadata": None,
+             "error": f"unsupported_expr_type: {type(expr).__name__}"}
+            for lang in ("c99", "rust", "python")
+        ]
+
     results = []
 
     for lang, gen_func in [("c99", generate_c99), ("rust", generate_rust)]:

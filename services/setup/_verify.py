@@ -10,11 +10,27 @@ from rich.table import Table
 
 from shared.config import SERVICE_PORTS
 
-_EXTERNAL = {
-    "CAS Service": ("RP_CAS_URL", "http://localhost:8769", "/health"),
-    "RAG Service": ("RP_RAG_URL", "http://localhost:8767", "/health"),
-    "Ollama": ("RP_OLLAMA_URL", "http://localhost:11434", "/"),
+_INTERNAL_HEALTH_PATHS = {
+    "mcp": "/sse",
 }
+
+_EXTERNAL = {
+    "CAS Service": (("RP_VALIDATOR_CAS_URL", "RP_CAS_URL"), "http://localhost:8769", "/health"),
+    "RAG Service": (
+        ("RP_EXTRACTOR_RAG_URL", "RP_RAG_QUERY_URL", "RP_RAG_URL"),
+        "http://localhost:8767",
+        "/health",
+    ),
+    "Ollama": (("RP_CODEGEN_OLLAMA_URL", "RP_OLLAMA_URL"), "http://localhost:11434", "/"),
+}
+
+
+def _env_first(keys: tuple[str, ...], default: str) -> str:
+    for key in keys:
+        value = os.environ.get(key, "").strip()
+        if value:
+            return value
+    return default
 
 
 def _check_http(url: str, timeout: float = 3.0) -> bool:
@@ -71,7 +87,8 @@ class AggregatedHealthCheck:
         for svc_name, port in SERVICE_PORTS.items():
             env_key = f"RP_{svc_name.upper()}_PORT"
             actual_port = int(os.environ.get(env_key, str(port)))
-            url = f"http://localhost:{actual_port}/health"
+            health_path = _INTERNAL_HEALTH_PATHS.get(svc_name, "/health")
+            url = f"http://localhost:{actual_port}{health_path}"
             ok = _check_http(url)
             status = "[green]✅ OK[/]" if ok else "[red]❌ Down[/]"
             table.add_row(svc_name.capitalize(), url, status, f":{actual_port}")
@@ -79,8 +96,8 @@ class AggregatedHealthCheck:
                 all_ok = False
 
         # External services with capability discovery
-        for name, (env_key, default_url, path) in _EXTERNAL.items():
-            base = os.environ.get(env_key, default_url)
+        for name, (env_keys, default_url, path) in _EXTERNAL.items():
+            base = _env_first(env_keys, default_url)
             url = base.rstrip("/") + path
             ok = _check_http(url)
             status = "[green]✅ OK[/]" if ok else "[red]❌ Down[/]"

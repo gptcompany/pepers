@@ -71,7 +71,7 @@ def download_pdf(
         session = create_session()
 
     url = get_pdf_url(paper)
-    safe_name = paper.arxiv_id.replace("/", "_")
+    safe_name = (paper.arxiv_id or f"paper-{paper.id or 'unknown'}").replace("/", "_")
     dest_path = dest_dir / f"{safe_name}.pdf"
 
     # Cache check
