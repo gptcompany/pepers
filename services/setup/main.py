@@ -25,6 +25,13 @@ BANNER = r"""
 """
 
 
+def _print_usage(console: Console) -> None:
+    console.print(
+        "Usage: pepers-setup [all|check|config|services|docker|verify|help]",
+        markup=False,
+    )
+
+
 def _project_root() -> Path:
     """Find the project root (directory containing pyproject.toml)."""
     here = Path(__file__).resolve().parent
@@ -43,6 +50,9 @@ def main(argv: list[str] | None = None) -> int:
     console.print(f"[dim]Project root: {root}[/]\n")
 
     command = args[0] if args else "all"
+    if command in {"-h", "--help", "help"}:
+        _print_usage(console)
+        return 0
 
     from services.setup._runner import run_steps
 
@@ -77,7 +87,7 @@ def main(argv: list[str] | None = None) -> int:
         ]
     else:
         console.print(f"[red]Unknown command: {command}[/]")
-        console.print("Usage: pepers-setup [check|config|services|docker|verify]")
+        _print_usage(console)
         return 1
 
     ok = run_steps(steps, console)

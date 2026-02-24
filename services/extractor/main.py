@@ -124,6 +124,8 @@ class ExtractorHandler(BaseHandler):
                 )
 
                 # Step 2: RAGAnything processing
+                if paper.arxiv_id is None:
+                    raise ValueError("paper.arxiv_id is required for extraction")
                 markdown = rag_client.process_paper(
                     pdf_path, paper.arxiv_id, self.rag_url
                 )

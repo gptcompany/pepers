@@ -21,6 +21,14 @@ FROM python:3.12-slim
 
 WORKDIR /app
 
+# Node.js for CLI LLM providers (claude, codex, gemini)
+COPY --from=node:20-slim /usr/local/bin/node /usr/local/bin/node
+COPY --from=node:20-slim /usr/local/lib/node_modules /usr/local/lib/node_modules
+RUN ln -s /usr/local/lib/node_modules/npm/bin/npm-cli.js /usr/local/bin/npm \
+    && ln -s /usr/local/lib/node_modules/npm/bin/npx-cli.js /usr/local/bin/npx \
+    && npm install -g @anthropic-ai/claude-code @openai/codex @google/gemini-cli \
+    && npm cache clean --force
+
 COPY --from=builder /install /usr/local
 
 COPY shared/ shared/

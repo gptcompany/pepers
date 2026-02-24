@@ -5,9 +5,13 @@ Usage:
 """
 
 import os
+from typing import Literal, cast
 
 from services.mcp.server import mcp
 
 if __name__ == "__main__":
     transport = os.environ.get("RP_MCP_TRANSPORT", "sse")
-    mcp.run(transport=transport)
+    if transport not in {"stdio", "sse", "streamable-http"}:
+        transport = "sse"
+    transport_name = cast(Literal["stdio", "sse", "streamable-http"], transport)
+    mcp.run(transport=transport_name)

@@ -60,13 +60,9 @@ services:
       - RP_ANALYZER_MAX_PAPERS=10
       - RP_LOG_LEVEL=INFO
       - HOME=/tmp
-      - PATH=/usr/local/bin:/usr/bin:/bin:/host-npm/bin
-      - NODE_PATH=/host-npm/lib/node_modules
     env_file: .env
     volumes:
       - ./data:/data
-      - ${NPM_GLOBAL:-/usr/lib/node_modules}:/host-npm:ro
-      - ${NODE_BIN:-/usr/bin/node}:/usr/bin/node:ro
     user: "${PEPERS_UID:-1000}:${PEPERS_GID:-1000}"
     restart: unless-stopped
     logging: *default-logging
@@ -135,7 +131,6 @@ services:
       - RP_DB_PATH=/data/research.db
       - RP_VALIDATOR_CAS_URL=http://localhost:8769
       - RP_VALIDATOR_MAX_FORMULAS=50
-      - RP_VALIDATOR_ENGINES=matlab,sympy,maxima
       - RP_LOG_LEVEL=INFO
     env_file: .env
     volumes:
@@ -172,13 +167,9 @@ services:
       - RP_CODEGEN_MAX_FORMULAS=50
       - RP_LOG_LEVEL=INFO
       - HOME=/tmp
-      - PATH=/usr/local/bin:/usr/bin:/bin:/host-npm/bin
-      - NODE_PATH=/host-npm/lib/node_modules
     env_file: .env
     volumes:
       - ./data:/data
-      - ${NPM_GLOBAL:-/usr/lib/node_modules}:/host-npm:ro
-      - ${NODE_BIN:-/usr/bin/node}:/usr/bin/node:ro
     user: "${PEPERS_UID:-1000}:${PEPERS_GID:-1000}"
     restart: unless-stopped
     logging: *default-logging
