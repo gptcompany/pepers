@@ -4,7 +4,7 @@
 
 ## Overview
 
-PePeRS (Paper Extraction, Processing, Evaluation, Retrieval & Synthesis) is a set of 5 standalone Python microservices plus 1 orchestrator that replaces the failed N8N W1-W5 academic paper processing pipeline. It discovers Kelly criterion papers from arXiv, enriches them with citation data, analyzes relevance with LLM providers (Gemini, OpenRouter, Ollama), extracts LaTeX formulas, validates formulas against multiple Computer Algebra Systems, and generates production Python/Rust code. All services share a common library (`shared/`) and communicate via HTTP JSON. The system is managed by systemd and monitored by an existing Prometheus + Grafana + Loki stack. **Current database schema: v5**.
+PePeRS (Paper Extraction, Processing, Evaluation, Retrieval & Synthesis) is a set of 7 Python microservices that replaces the failed N8N W1-W5 academic paper processing pipeline. It discovers Kelly criterion papers from arXiv, enriches them with citation data, analyzes relevance with LLM providers (Gemini, OpenRouter, Ollama), extracts LaTeX formulas, validates formulas against multiple Computer Algebra Systems, and generates production Python/Rust code. All services share a common library (`shared/`) and communicate via HTTP JSON. The system is managed by systemd and monitored by an existing Prometheus + Grafana + Loki stack. **Current database schema: v5**.
 
 The project originated after N8N crashed in January 2026 and the restored 17 workflows had never successfully processed a single paper end-to-end (all tables empty, 0 executions). Rather than fix N8N, the pipeline is being rebuilt as independent, replaceable microservices.
 
