@@ -328,6 +328,13 @@ class TestGenerateAll:
             if r["metadata"]:
                 assert r["metadata"]["function_name"] == "formula_7"
 
+    def test_unsupported_type_returns_error(self):
+        # Inequalities (e.g. x > 1) are Relational/Boolean, not Expr in many SymPy versions
+        results = generate_all(r"x > 1", 1)
+        for r in results:
+            assert r["error"] is not None
+            assert "unsupported_expr_type" in r["error"]
+
 
 # ===========================================================================
 # Layer 1: Enhanced clean_latex() Tests

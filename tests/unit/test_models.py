@@ -100,11 +100,15 @@ class TestPaper:
             citation_count=42,
             open_access=True,
             crossref_data={"publisher": "Test"},
+            source="openalex",
+            openalex_id="W123456789",
             stage=PipelineStage.ANALYZED,
             score=0.85,
         )
         assert p.authors == ["Alice", "Bob"]
         assert p.crossref_data == {"publisher": "Test"}
+        assert p.source == "openalex"
+        assert p.openalex_id == "W123456789"
         assert p.score == 0.85
 
     def test_json_string_authors(self):
