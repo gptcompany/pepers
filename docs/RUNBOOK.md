@@ -12,9 +12,9 @@ Production operations guide for the 7-service research paper processing pipeline
 | validator | 8773 | CAS mathematical validation (multi-engine consensus) | CAS engine (:8769), SymPy |
 | codegen | 8774 | 5-layer LaTeX→code (C99/Rust/Python) + batch LLM explain | LLM fallback chain, SymPy |
 | orchestrator | 8775 | Pipeline coordination, batch iteration, status API | All above services |
-| mcp | 8776 | MCP Server (SSE) — 8 tools for Claude Desktop/Cursor | Orchestrator (:8775) |
+| mcp | 8776 | MCP Server (SSE) — 11 tools for Claude Desktop/Cursor | Orchestrator (:8775) |
 
-**Database**: SQLite (WAL mode), schema v5, shared across all services.
+**Database**: SQLite (WAL mode), schema v6, shared across all services.
 
 **Pipeline flow**: discovery -> analyzer -> extractor -> validator -> codegen
 
@@ -594,3 +594,35 @@ python scripts/smoke_test.py --via-orchestrator --max-formulas 5
 ```
 
 Exit code 0 = all stages passed, final stage = codegen.
+
+## 10. Custom Notations
+
+Custom LaTeX notations allow defining macros (e.g. `\Expect{X}`, `\KL{P}{Q}`) that are automatically expanded during formula extraction, before CAS validation.
+
+### Adding a notation
+
+```bash
+curl -X POST http://localhost:8775/notations \
+  -H 'Content-Type: application/json' \
+  -d '{"name":"Expect","body":"\\mathbb{E}\\left[#1\\right]","nargs":1,"description":"Expected value"}'
+```
+
+### Listing notations
+
+```bash
+curl http://localhost:8775/notations
+```
+
+### Removing a notation
+
+```bash
+curl -X POST http://localhost:8775/notations/delete \
+  -H 'Content-Type: application/json' \
+  -d '{"name":"Expect"}'
+```
+
+### Troubleshooting
+
+- **Notation not expanding**: Notations only apply to papers extracted *after* adding the notation. Already-extracted formulas are not re-processed.
+- **CAS still failing after notation**: Verify the `body` field produces valid LaTeX. Test with `curl http://localhost:8769/validate` on the expanded formula.
+- **Schema error on startup**: Ensure migration v6 has been applied (`GET /health` → `schema_version: 6`).

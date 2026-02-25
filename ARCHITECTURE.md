@@ -5,7 +5,7 @@
 
 ## Overview
 
-PePeRS (Paper Extraction, Processing, Evaluation, Retrieval & Synthesis) is a set of 7 Python microservices that replaces the failed N8N W1-W5 academic paper processing pipeline. It discovers Kelly criterion papers from arXiv, enriches them with citation data, analyzes relevance with LLM providers (Gemini, OpenRouter, Ollama), extracts LaTeX formulas, validates formulas against multiple Computer Algebra Systems, and generates production Python/Rust code. All services share a common library (`shared/`) and communicate via HTTP JSON. The system is managed by systemd and monitored by an existing Prometheus + Grafana + Loki stack. All services share a single SQLite database with **schema v5**.
+PePeRS (Paper Extraction, Processing, Evaluation, Retrieval & Synthesis) is a set of 7 Python microservices that replaces the failed N8N W1-W5 academic paper processing pipeline. It discovers Kelly criterion papers from arXiv, enriches them with citation data, analyzes relevance with LLM providers (Gemini, OpenRouter, Ollama), extracts LaTeX formulas, validates formulas against multiple Computer Algebra Systems, and generates production Python/Rust code. All services share a common library (`shared/`) and communicate via HTTP JSON. The system is managed by systemd and monitored by an existing Prometheus + Grafana + Loki stack. All services share a single SQLite database with **schema v6**.
 
 ## Tech Stack
 
@@ -51,7 +51,7 @@ pepers/
 │   │   ├── pipeline.py         # Stage dispatch + retry + run persistence (533 LOC)
 │   │   └── notifications.py    # Apprise multi-target notifications (68 LOC)
 │   └── mcp/                    # MCP Server (SSE transport)
-│       ├── server.py           # FastMCP server + 8 tools + arcade flavor (~260 LOC)
+│       ├── server.py           # FastMCP server + 11 tools + arcade flavor (~260 LOC)
 │       └── __main__.py         # Entry point: python -m services.mcp
 ├── tests/                      # 880+ tests
 │   ├── conftest.py             # Shared fixtures
@@ -83,7 +83,7 @@ pepers/
 
 | Module | LOC | Purpose |
 |--------|-----|---------|
-| `db.py` | 333 | SQLite connection (WAL mode, FK ON), `transaction()` context manager, `init_db()`, schema migrations (v1-v5) |
+| `db.py` | 333 | SQLite connection (WAL mode, FK ON), `transaction()` context manager, `init_db()`, schema migrations (v1-v6) |
 | `models.py` | 306 | Pydantic v2 data models + `PipelineStage` enum, JSON field auto-parsing |
 | `server.py` | 328 | `BaseHandler` + `BaseService` + `@route` decorator + `JsonFormatter` + `/health` endpoint |
 | `config.py` | 131 | `Config` dataclass, `load_config()` from `RP_*` env vars |
@@ -124,7 +124,7 @@ from shared.llm import fallback_chain, call_gemini_cli, call_openrouter, call_ol
 | Validator | 8773 | 339 | Multi-CAS formula validation with consensus | CAS (:8769), SymPy |
 | Codegen | 8774 | 339+311 | Python (SymPy) + Rust code gen + batch LLM explanations | LLM (Ollama/Gemini) |
 | Orchestrator | 8775 | 534+533 | Async pipeline runs, GET /generated-code, GET /runs, semantic search, retry, batch | All above + RAGAnything query + Apprise notifications |
-| MCP Server | 8776 | ~260 | MCP SSE interface — 8 tools wrapping orchestrator API for Claude Desktop/Cursor | MCP SDK, Orchestrator (:8775) |
+| MCP Server | 8776 | ~260 | MCP SSE interface — 11 tools wrapping orchestrator API for Claude Desktop/Cursor | MCP SDK, Orchestrator (:8775) |
 
 ### Component: LLM Providers (`shared/llm.py` + `shared/cli_providers.json`)
 
@@ -193,8 +193,9 @@ Daily 8AM timer triggers Orchestrator (:8775)
          |
          v
   Extractor (:8772)
-  +-- Send PDF to RAGAnything (:8767)
-  +-- LaTeX formula extraction
+  +-- Send PDF to RAGAnything (:8767) for text extraction
+  +-- Regex-based LaTeX formula extraction from text
+  +-- Expand custom LaTeX notations (from custom_notations table)
   +-- INSERT formulas -> SQLite [stage=extracted]
          |
          v
@@ -216,7 +217,7 @@ Daily 8AM timer triggers Orchestrator (:8775)
 
 ## Database Schema
 
-8 tables with foreign key relationships (schema version: v5):
+9 tables with foreign key relationships (schema version: v6):
 
 | Table | Purpose | Populated By |
 |-------|---------|-------------|
@@ -225,9 +226,10 @@ Daily 8AM timer triggers Orchestrator (:8775)
 | `validations` | CAS validation results per formula per engine | Validator |
 | `generated_code` | Generated Python/Rust code per formula | Codegen |
 | `pipeline_runs` | Async pipeline execution tracking (run_id, status, params, results) | Orchestrator |
-| `schema_version` | Migration tracking (current: v5) | init_db() |
 | `github_repos` | GitHub repository metadata from code search | GitHub Discovery |
 | `github_analyses` | Gemini analysis results for GitHub repos | GitHub Discovery |
+| `custom_notations` | Custom LaTeX macro definitions for expansion (v6) | Orchestrator |
+| `schema_version` | Migration tracking (current: v6) | init_db() |
 
 ## Key Technical Decisions
 
@@ -304,5 +306,5 @@ Daily 8AM timer triggers Orchestrator (:8775)
 ---
 
 *Architecture documented: 2026-02-25*
-*Last validated: 2026-02-25 (880+ tests pass, schema v5)*
+*Last validated: 2026-02-25 (880+ tests pass, schema v6)*
 *Auto-updated by architecture-validator agent*

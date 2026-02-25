@@ -77,7 +77,7 @@ pepers/
 - `transaction(db_path)` -- Context manager with auto-commit on success, rollback on exception
 - `init_db(db_path)` -- Idempotent schema creation and migration v1-v6
 
-**Schema** (8 tables):
+**Schema** (9 tables):
 
 | Table | Purpose | Populated By |
 |-------|---------|-------------|
@@ -182,7 +182,7 @@ RP_LOG_LEVEL=INFO
 | Validator | 8773 | Multi-CAS formula validation with consensus | CAS (:8769), SymPy |
 | Codegen | 8774 | 5-layer LaTeX→code (C99/Rust/Python) + batch LLM explain | SymPy, LLM fallback chain |
 | Orchestrator | 8775 | Pipeline coordination, per-stage timeouts, retry, and notifications | All above services, Apprise |
-| MCP Server | 8776 | SSE interface — 8 tools for Claude Desktop/Cursor | Orchestrator (:8775) |
+| MCP Server | 8776 | SSE interface — 11 tools for Claude Desktop/Cursor | Orchestrator (:8775) |
 
 #### Analyzer: Topic-Agnostic Scoring
 
@@ -246,6 +246,7 @@ Daily 8AM timer triggers Orchestrator (:8775)
   Extractor (:8772)
   +-- Send PDF to RAGAnything (:8767) for text extraction
   +-- Regex-based LaTeX formula extraction from text
+  +-- Expand custom LaTeX notations (from custom_notations table)
   +-- INSERT formulas -> SQLite [stage=extracted]
          |
          v

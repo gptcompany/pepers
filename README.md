@@ -38,7 +38,8 @@ arXiv/OpenAlex  -->  LLM Analysis  -->  PDF Extraction  -->  CAS Validation  -->
 | **GitHub Discovery** | Search GitHub for paper implementations, analyze with Gemini |
 | **Async Pipeline** | `POST /run` returns HTTP 202, poll `GET /runs` for progress |
 | **RAG Search** | Semantic search over processed papers via RAGAnything knowledge graph |
-| **MCP Server** | SSE interface with 8 tools for Claude Desktop/Cursor. Arcade flavor output! |
+| **Custom Notations** | Define custom LaTeX macros (e.g. `\Expect`, `\KL`) expanded before CAS validation |
+| **MCP Server** | SSE interface with 11 tools for Claude Desktop/Cursor. Arcade flavor output! |
 | **Notifications** | Apprise (90+ targets): Discord, Slack, Telegram, email, etc. |
 | **Deterministic LLM** | `temperature=0`, `seed=42` on all configurable providers |
 
@@ -119,7 +120,7 @@ curl -X POST http://localhost:8775/search \
 ```
 pepers/
 ├── shared/              # Common library (db, models, server, config, llm)
-│   ├── db.py            # SQLite WAL + migrations (schema v5)
+│   ├── db.py            # SQLite WAL + migrations (schema v6)
 │   ├── models.py        # 13 Pydantic models
 │   ├── server.py        # Base HTTP server + @route decorator
 │   ├── config.py        # RP_ env var loader
@@ -175,7 +176,7 @@ See [docs/RUNBOOK.md](docs/RUNBOOK.md) for full configuration reference.
 
 ### MCP Server (:8776)
 
-8 tools available via SSE transport for Claude Desktop, Cursor, and other MCP clients:
+11 tools available via SSE transport for Claude Desktop, Cursor, and other MCP clients:
 
 | Tool | Description |
 |------|-------------|
@@ -187,6 +188,9 @@ See [docs/RUNBOOK.md](docs/RUNBOOK.md) for full configuration reference.
 | `get_run_status` | Poll pipeline run status |
 | `search_github` | Search GitHub implementations |
 | `get_generated_code` | Get generated code artifacts |
+| `add_notation` | Add/update custom LaTeX notation |
+| `list_notations` | List all custom notations |
+| `remove_notation` | Remove a custom notation |
 
 ### All Services
 
@@ -199,7 +203,7 @@ See [docs/RUNBOOK.md](docs/RUNBOOK.md) for full configuration reference.
 ## Tech Stack
 
 - **Python 3.10+** — stdlib-first (`http.server`, `sqlite3`, `logging`)
-- **SQLite WAL** — shared database, schema v5, 7 tables
+- **SQLite WAL** — shared database, schema v6, 9 tables
 - **Pydantic v2** — 13 data models with validation
 - **SymPy** — CAS engine + C99/Rust/Python codegen
 - **MCP SDK** — FastMCP with SSE transport for tool integration
