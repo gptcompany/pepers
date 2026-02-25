@@ -24,7 +24,7 @@ arXiv/OpenAlex  -->  LLM Analysis  -->  PDF Extraction  -->  CAS Validation  -->
                                     for Claude Desktop / Cursor
 ```
 
-**Pipeline flow**: Paper discovery -> LLM relevance scoring -> PDF formula extraction -> Multi-CAS validation (SymPy + Maxima + MATLAB consensus) -> Code generation with batch LLM explanations.
+**Pipeline flow**: Paper discovery -> LLM relevance scoring -> PDF formula extraction -> Multi-CAS validation (SymPy + SageMath consensus; optional MATLAB, WolframAlpha) -> Code generation with batch LLM explanations.
 
 ## Features
 
@@ -33,7 +33,7 @@ arXiv/OpenAlex  -->  LLM Analysis  -->  PDF Extraction  -->  CAS Validation  -->
 | **Multi-source Discovery** | arXiv + OpenAlex (200M+ works) + Semantic Scholar + CrossRef enrichment |
 | **LLM Analysis** | 5-criteria relevance scoring with configurable fallback chain (Gemini, Claude, Codex, OpenRouter, Ollama) |
 | **Formula Extraction** | PDF -> RAGAnything text -> 5-pass LaTeX regex with complexity filtering |
-| **CAS Validation** | Multi-engine consensus: SymPy + Maxima + MATLAB. Both must agree = VALID |
+| **CAS Validation** | Multi-engine consensus: SymPy + SageMath (required); MATLAB + WolframAlpha (optional). All available engines must agree = VALID |
 | **Code Generation** | SymPy `codegen()` for C99/Rust/Python + batch LLM explanations |
 | **GitHub Discovery** | Search GitHub for paper implementations, analyze with Gemini |
 | **Async Pipeline** | `POST /run` returns HTTP 202, poll `GET /runs` for progress |
@@ -119,7 +119,7 @@ curl -X POST http://localhost:8775/search \
 ```
 pepers/
 ├── shared/              # Common library (db, models, server, config, llm)
-│   ├── db.py            # SQLite WAL + migrations (schema v4)
+│   ├── db.py            # SQLite WAL + migrations (schema v5)
 │   ├── models.py        # 13 Pydantic models
 │   ├── server.py        # Base HTTP server + @route decorator
 │   ├── config.py        # RP_ env var loader
@@ -133,7 +133,7 @@ pepers/
 │   ├── codegen/         # Code gen + batch explain (:8774)
 │   ├── orchestrator/    # Pipeline + API + cron (:8775)
 │   └── mcp/             # MCP Server SSE (:8776)
-├── tests/               # 850+ tests (unit, integration, e2e)
+├── tests/               # 880+ tests (unit, integration, e2e)
 ├── deploy/              # 7 systemd .service + .target
 ├── docker-compose.yml   # All services, host networking
 └── Dockerfile           # Multi-stage build
@@ -199,7 +199,7 @@ See [docs/RUNBOOK.md](docs/RUNBOOK.md) for full configuration reference.
 ## Tech Stack
 
 - **Python 3.10+** — stdlib-first (`http.server`, `sqlite3`, `logging`)
-- **SQLite WAL** — shared database, schema v4, 7 tables
+- **SQLite WAL** — shared database, schema v5, 7 tables
 - **Pydantic v2** — 13 data models with validation
 - **SymPy** — CAS engine + C99/Rust/Python codegen
 - **MCP SDK** — FastMCP with SSE transport for tool integration
@@ -211,10 +211,10 @@ No web frameworks. No ORMs. No message queues.
 ## Stats
 
 - **8,500+ LOC** Python across 7 services + shared library
-- **850+ tests** (unit, integration, e2e) — all passing
+- **880+ tests** (unit, integration, e2e) — all passing
 - **13 milestones** shipped (v1.0-v13.0)
 - **6 LLM providers** with configurable fallback chain
-- **3 CAS engines** for mathematical consensus
+- **4 CAS engines** for mathematical consensus (2 required + 2 optional)
 - **3 codegen languages** (Python, C99, Rust)
 
 ## External Dependencies
@@ -222,7 +222,7 @@ No web frameworks. No ORMs. No message queues.
 | Service | Port | Required | Setup |
 |---------|------|----------|-------|
 | RAGAnything | 8767 | For PDF extraction + semantic search | `cd rag-service && rag-setup` |
-| CAS Microservice | 8769 | For formula validation (SymPy + Maxima + MATLAB) | `cd cas-service && cas-setup` |
+| CAS Microservice | 8769 | For formula validation (SymPy + SageMath; optional MATLAB, WolframAlpha) | `cd cas-service && cas-setup` |
 | Ollama | 11434 | For local LLM (optional, fallback chain) | `curl -fsSL https://ollama.ai/install.sh \| sh` |
 
 Each external service has its own setup wizard. Run `pepers-setup services` to check their availability.

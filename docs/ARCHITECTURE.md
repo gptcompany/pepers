@@ -17,7 +17,7 @@ The project originated after N8N crashed in January 2026 and the restored 17 wor
 | Database | SQLite (WAL mode) | Shared data storage (`data/research.db`) |
 | Models | Pydantic v2 | Data validation, serialization, type safety |
 | LLM | Fallback chain (Gemini CLI/SDK, OpenRouter, Ollama, Claude CLI, Codex CLI) | Paper analysis, relevance scoring, codegen with fallback chain. **Bundled in Docker**. |
-| CAS Engines | SymPy + Maxima + MATLAB | Multi-engine formula validation (consensus) |
+| CAS Engines | SymPy + SageMath (required); MATLAB + WolframAlpha (optional) | Multi-engine formula validation (consensus via CAS microservice) |
 | PDF Processing | RAGAnything | Text extraction from paper PDFs |
 | Secrets | dotenvx (ECIES) | Encrypted env var management |
 | Process Mgmt | systemd | Service lifecycle, journald logging, watchdog |
@@ -251,9 +251,9 @@ Daily 8AM timer triggers Orchestrator (:8775)
   Validator (:8773)
   +-- For each formula:
   |   +-- Validate with SymPy (Python, local)
-  |   +-- Validate with Maxima via CAS (:8769)
-  |   +-- Validate with Wolfram Alpha API
-  |   +-- Consensus scoring (2/3 agree = valid)
+  |   +-- Validate with SageMath via CAS (:8769)
+  |   +-- Validate with MATLAB/WolframAlpha (optional, via CAS)
+  |   +-- Consensus scoring (all available engines must agree = valid)
   +-- UPDATE formulas [stage=validated]
          |
          v
@@ -319,7 +319,7 @@ Service-specific. Request/response extend `ProcessRequest`/`ProcessResponse`.
 | Port | Service | Status | Description |
 |------|---------|--------|-------------|
 | 8767 | RAGAnything | External (N8N_dev) | PDF processing |
-| 8769 | CAS Microservice | External (N8N_dev) | Formula validation (Maxima engine) |
+| 8769 | CAS Microservice | External | Formula validation (SymPy + SageMath; optional MATLAB, WolframAlpha) |
 | 8770 | Discovery | Running | arXiv + Semantic Scholar/CrossRef |
 | 8771 | Analyzer | Running | Topic-agnostic LLM scoring (fallback chain) |
 | 8772 | Extractor | Running | RAGAnything PDF + LaTeX regex |
