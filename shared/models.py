@@ -319,3 +319,17 @@ class SearchGitHubResponse(BaseModel):
     repos_analyzed: int
     results: list[dict] = []
     errors: list[str] = []
+
+
+class CustomNotation(BaseModel):
+    """Custom LaTeX notation for macro expansion before CAS validation."""
+
+    model_config = ConfigDict(from_attributes=True)
+
+    id: int | None = None
+    name: str
+    body: str
+    nargs: int = 0
+    description: str = ""
+    created_at: datetime | None = None
+    updated_at: datetime | None = None

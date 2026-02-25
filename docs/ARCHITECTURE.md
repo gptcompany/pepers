@@ -4,7 +4,7 @@
 
 ## Overview
 
-PePeRS (Paper Extraction, Processing, Evaluation, Retrieval & Synthesis) is a set of 7 Python microservices that replaces the failed N8N W1-W5 academic paper processing pipeline. It discovers Kelly criterion papers from arXiv, enriches them with citation data, analyzes relevance with LLM providers (Gemini, OpenRouter, Ollama), extracts LaTeX formulas, validates formulas against multiple Computer Algebra Systems, and generates production Python/Rust code. All services share a common library (`shared/`) and communicate via HTTP JSON. The system is managed by systemd and monitored by an existing Prometheus + Grafana + Loki stack. **Current database schema: v5**.
+PePeRS (Paper Extraction, Processing, Evaluation, Retrieval & Synthesis) is a set of 7 Python microservices that replaces the failed N8N W1-W5 academic paper processing pipeline. It discovers Kelly criterion papers from arXiv, enriches them with citation data, analyzes relevance with LLM providers (Gemini, OpenRouter, Ollama), extracts LaTeX formulas, validates formulas against multiple Computer Algebra Systems, and generates production Python/Rust code. All services share a common library (`shared/`) and communicate via HTTP JSON. The system is managed by systemd and monitored by an existing Prometheus + Grafana + Loki stack. **Current database schema: v6**.
 
 The project originated after N8N crashed in January 2026 and the restored 17 workflows had never successfully processed a single paper end-to-end (all tables empty, 0 executions). Rather than fix N8N, the pipeline is being rebuilt as independent, replaceable microservices.
 
@@ -75,9 +75,9 @@ pepers/
 **Key functions**:
 - `get_connection(db_path)` -- Creates a connection with WAL mode, foreign keys ON, and Row factory
 - `transaction(db_path)` -- Context manager with auto-commit on success, rollback on exception
-- `init_db(db_path)` -- Idempotent schema creation and migration v1-v5
+- `init_db(db_path)` -- Idempotent schema creation and migration v1-v6
 
-**Schema** (7 tables):
+**Schema** (8 tables):
 
 | Table | Purpose | Populated By |
 |-------|---------|-------------|
@@ -88,7 +88,8 @@ pepers/
 | `pipeline_runs` | Async run tracking and results (v4) | Orchestrator service |
 | `github_repos` | Discovered GitHub repositories for papers | Orchestrator service |
 | `github_analyses` | Gemini analysis of repository content | Orchestrator service |
-| `schema_version` | Migration tracking (current: v5) | init_db() |
+| `custom_notations` | Custom LaTeX macro definitions for expansion (v6) | Orchestrator (via MCP) |
+| `schema_version` | Migration tracking (current: v6) | init_db() |
 
 **Design decisions**:
 - WAL mode enables concurrent reads (orchestrator reads while a service writes)

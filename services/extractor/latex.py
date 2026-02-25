@@ -214,6 +214,53 @@ def filter_formulas(formulas: list[dict]) -> list[dict]:
     return filtered
 
 
+def expand_custom_notations(
+    formulas: list[dict],
+    notations: list[dict],
+) -> list[dict]:
+    """Expand custom LaTeX macros in extracted formulas.
+
+    Args:
+        formulas: Output of filter_formulas() — list of dicts with key 'latex'.
+        notations: List of dicts with keys 'name', 'body', 'nargs'.
+
+    Returns:
+        Formulas with macros expanded. Original list is not modified.
+    """
+    if not notations:
+        return formulas
+
+    # Build regex patterns: \MacroName{arg1}{arg2}...
+    patterns: list[tuple[re.Pattern, str, int]] = []
+    for n in notations:
+        name = re.escape(n["name"])
+        nargs = n.get("nargs", 0)
+        if nargs == 0:
+            pat = re.compile(r"\\" + name + r"(?![a-zA-Z])")
+        else:
+            arg_pat = r"\{([^}]*)\}" * nargs
+            pat = re.compile(r"\\" + name + arg_pat)
+        patterns.append((pat, n["body"], nargs))
+
+    expanded = []
+    for f in formulas:
+        latex = f["latex"]
+        for pat, body, nargs in patterns:
+            if nargs == 0:
+                latex = pat.sub(lambda _m, _b=body: _b, latex)
+            else:
+
+                def _replace(m: re.Match, _body: str = body, _n: int = nargs) -> str:
+                    result = _body
+                    for i in range(_n):
+                        result = result.replace(f"#{i + 1}", m.group(i + 1))
+                    return result
+
+                latex = pat.sub(_replace, latex)
+        expanded.append({**f, "latex": latex})
+    return expanded
+
+
 def formulas_to_models(
     paper_id: int, text: str, raw_formulas: list[dict]
 ) -> list[Formula]:

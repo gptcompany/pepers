@@ -52,7 +52,7 @@ class TestHealthEndpoint:
             )
             assert resp["status"] == "ok"
             assert resp["db"] == "ok"
-            assert resp["schema_version"] == 5
+            assert resp["schema_version"] == 6
             assert resp["last_request_seconds_ago"] is None  # no requests yet
         finally:
             if svc.server:

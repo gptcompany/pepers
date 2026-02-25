@@ -140,7 +140,7 @@ class TestInitDb:
         conn = get_connection(tmp_db_path)
         versions = conn.execute("SELECT COUNT(*) FROM schema_version").fetchone()[0]
         conn.close()
-        assert versions == 5  # v1 + v2 (github) + v3 (UNIQUE) + v4 (pipeline_runs) + v5 (openalex)
+        assert versions == 6  # v1 + v2 (github) + v3 (UNIQUE) + v4 (pipeline_runs) + v5 (openalex) + v6 (custom_notations)
 
     def test_foreign_keys_enforced(self, tmp_db_path):
         init_db(tmp_db_path)
@@ -182,13 +182,13 @@ class TestSchemaMigration:
         conn.close()
         assert "UNIQUE(paper_id, latex_hash)" in schema
 
-    def test_fresh_db_schema_version_5(self, tmp_db_path):
-        """New database should be at schema version 5."""
+    def test_fresh_db_schema_version_6(self, tmp_db_path):
+        """New database should be at schema version 6."""
         init_db(tmp_db_path)
         conn = get_connection(tmp_db_path)
         v = conn.execute("SELECT MAX(version) FROM schema_version").fetchone()[0]
         conn.close()
-        assert v == 5
+        assert v == 6
 
     def test_migration_v2_to_v3(self, tmp_db_path):
         """Existing v2 database should migrate to v3 with UNIQUE constraint."""
@@ -234,7 +234,7 @@ class TestSchemaMigration:
         v = conn.execute("SELECT MAX(version) FROM schema_version").fetchone()[0]
         conn.close()
         assert "UNIQUE" in schema
-        assert v == 5
+        assert v == 6
 
     def test_migration_deduplicates(self, tmp_db_path):
         """Migration should remove duplicate (paper_id, latex_hash) rows."""
@@ -392,12 +392,12 @@ class TestSchemaMigrationV5:
         conn.commit()
         conn.close()
 
-        # Run init_db (triggers migration v5)
+        # Run init_db (triggers migration v5 + v6)
         init_db(tmp_db_path)
 
         conn = get_connection(tmp_db_path)
         v = conn.execute("SELECT MAX(version) FROM schema_version").fetchone()[0]
-        assert v == 5
+        assert v == 6
 
         # Check schema has new columns
         schema = conn.execute(

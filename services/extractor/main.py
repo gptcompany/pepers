@@ -55,6 +55,21 @@ def _check_consistency(db_path: str) -> None:
         logger.exception("Consistency check failed")
 
 
+def _load_notations(db_path: str) -> list[dict]:
+    """Load custom notations from database."""
+    try:
+        conn = get_connection(db_path)
+        try:
+            rows = conn.execute(
+                "SELECT name, body, nargs FROM custom_notations"
+            ).fetchall()
+            return [dict(r) for r in rows]
+        finally:
+            conn.close()
+    except Exception:
+        return []
+
+
 class ExtractorHandler(BaseHandler):
     """Handler for the Extractor service.
 
@@ -133,6 +148,12 @@ class ExtractorHandler(BaseHandler):
                 # Step 3: Extract formulas
                 raw = latex.extract_formulas(markdown)
                 filtered = latex.filter_formulas(raw)
+
+                # Step 3b: Expand custom notations
+                notations = _load_notations(db_path)
+                if notations:
+                    filtered = latex.expand_custom_notations(filtered, notations)
+
                 formulas = latex.formulas_to_models(pid, markdown, filtered)
 
                 # Step 4: Store formulas + update paper

@@ -116,6 +116,22 @@ ARCADE_MESSAGES: dict[str, list[str]] = {
         "🐸 REKT! {msg} We'll get 'em next time, ser! 💀",
         "😤 CRITICAL HIT! {msg} ngmi fren! 🐸",
     ],
+    "notation_added": [
+        "🐸 NOTATION LOCKED! \\{name} is now custom ammo, ser! 💎",
+        "💥 MACRO LOADED! \\{name} added to arsenal. Math goes brrr! 🐸",
+    ],
+    "notation_deleted": [
+        "🐸 NOTATION PURGED! \\{name} is history, fren! 💀",
+        "💥 MACRO REMOVED! \\{name} unloaded from arsenal! 🐸",
+    ],
+    "notation_list": [
+        "🐸 AMMO INVENTORY! {n} custom notations loaded, ser! 💎",
+        "💎 {n} macros in the arsenal! Custom math power! 🐸🔥",
+    ],
+    "notation_empty": [
+        "📭 NO CUSTOM NOTATIONS! Add some with add_notation, fren! 🐸",
+        "🐸 EMPTY ARSENAL! No macros loaded. Time to define some, ser! 📭",
+    ],
 }
 
 PLAIN_MESSAGES: dict[str, str] = {
@@ -135,6 +151,10 @@ PLAIN_MESSAGES: dict[str, str] = {
     "codegen_found": "{n} code artifacts found.",
     "codegen_empty": "No generated code found.",
     "error": "Error: {msg}",
+    "notation_added": "Notation \\{name} saved.",
+    "notation_deleted": "Notation \\{name} removed.",
+    "notation_list": "{n} custom notations.",
+    "notation_empty": "No custom notations defined.",
 }
 
 
@@ -500,3 +520,77 @@ def get_generated_code(
             lines.append(f"```{lang}\n{code}\n```")
         lines.append("")
     return "\n".join(lines)
+
+
+@mcp.tool()
+def add_notation(
+    name: str,
+    body: str,
+    nargs: int = 0,
+    description: str = "",
+) -> str:
+    """Add or update a custom LaTeX notation for macro expansion.
+
+    Custom notations are expanded in extracted formulas before CAS validation.
+    Uses upsert: if the notation exists, it updates it.
+
+    Args:
+        name: Macro name without backslash (e.g. "Expect", "KL", "Var")
+        body: LaTeX replacement with #1, #2 placeholders (e.g. "\\mathbb{E}\\left[#1\\right]")
+        nargs: Number of arguments (0-9)
+        description: Optional description of what this notation means
+    """
+    try:
+        result = _call_orchestrator("POST", "/notations", {
+            "name": name,
+            "body": body,
+            "nargs": nargs,
+            "description": description,
+        })
+    except RuntimeError as e:
+        return _flavor("error", msg=str(e))
+
+    if isinstance(result, dict) and result.get("success"):
+        return _flavor("notation_added", name=name)
+    msg = result.get("error", "Unknown error") if isinstance(result, dict) else "Bad response"
+    return _flavor("error", msg=msg)
+
+
+@mcp.tool()
+def list_notations() -> str:
+    """List all custom LaTeX notations defined for macro expansion."""
+    try:
+        result = _call_orchestrator("GET", "/notations")
+    except RuntimeError as e:
+        return _flavor("error", msg=str(e))
+
+    if not isinstance(result, list) or not result:
+        return _flavor("notation_empty")
+
+    header = _flavor("notation_list", n=len(result))
+    lines = [header, ""]
+    for n in result:
+        nargs = n.get("nargs", 0)
+        args_str = "".join(f"{{#{i + 1}}}" for i in range(nargs)) if nargs else ""
+        lines.append(f"- **\\{n['name']}**{args_str} → `{n['body']}`")
+        if n.get("description"):
+            lines.append(f"  _{n['description']}_")
+    return "\n".join(lines)
+
+
+@mcp.tool()
+def remove_notation(name: str) -> str:
+    """Remove a custom LaTeX notation.
+
+    Args:
+        name: Macro name without backslash (e.g. "Expect")
+    """
+    try:
+        result = _call_orchestrator("POST", "/notations/delete", {"name": name})
+    except RuntimeError as e:
+        return _flavor("error", msg=str(e))
+
+    if isinstance(result, dict) and result.get("success"):
+        return _flavor("notation_deleted", name=name)
+    msg = result.get("error", "Unknown error") if isinstance(result, dict) else "Bad response"
+    return _flavor("error", msg=msg)

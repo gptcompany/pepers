@@ -464,6 +464,64 @@ class OrchestratorHandler(BaseHandler):
             result["answer"] = rag_result.get("answer", "")
         return result
 
+    @route("POST", "/notations")
+    def handle_add_notation(self, data: dict) -> dict | None:
+        """Add or update a custom LaTeX notation (upsert)."""
+        name = data.get("name", "").strip()
+        body = data.get("body", "").strip()
+        nargs = data.get("nargs", 0)
+        description = data.get("description", "")
+
+        if not name or not body:
+            self.send_error_json(
+                "name and body are required", "VALIDATION_ERROR", 400
+            )
+            return None
+        if not 0 <= nargs <= 9:
+            self.send_error_json(
+                "nargs must be 0-9", "VALIDATION_ERROR", 400
+            )
+            return None
+
+        with transaction(self._db_path_required()) as conn:
+            conn.execute(
+                "INSERT OR REPLACE INTO custom_notations "
+                "(name, body, nargs, description, updated_at) "
+                "VALUES (?, ?, ?, ?, datetime('now'))",
+                (name, body, nargs, description),
+            )
+        return {"success": True, "name": name, "action": "upserted"}
+
+    @route("GET", "/notations")
+    def handle_list_notations(self) -> list:
+        """List all custom LaTeX notations."""
+        with transaction(self._db_path_required()) as conn:
+            rows = conn.execute(
+                "SELECT * FROM custom_notations ORDER BY name"
+            ).fetchall()
+        return [dict(r) for r in rows]
+
+    @route("POST", "/notations/delete")
+    def handle_delete_notation(self, data: dict) -> dict | None:
+        """Delete a custom LaTeX notation."""
+        name = data.get("name", "").strip()
+        if not name:
+            self.send_error_json(
+                "name is required", "VALIDATION_ERROR", 400
+            )
+            return None
+
+        with transaction(self._db_path_required()) as conn:
+            cursor = conn.execute(
+                "DELETE FROM custom_notations WHERE name = ?", (name,)
+            )
+        if cursor.rowcount == 0:
+            self.send_error_json(
+                f"Notation '{name}' not found", "NOT_FOUND", 404
+            )
+            return None
+        return {"success": True, "name": name, "action": "deleted"}
+
     def _search_fallback(self, query: str) -> dict:
         """Fallback: substring match on title/abstract in SQLite."""
         terms = query.lower().split()

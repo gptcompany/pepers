@@ -1,0 +1,19 @@
+{
+  "venvPath": ".",
+  "venv": ".venv",
+  "pythonVersion": "3.11",
+  "typeCheckingMode": "basic",
+  "include": ["shared", "services", "scripts"],
+  "exclude": [
+    ".git",
+    ".venv",
+    ".pytest_cache",
+    ".ruff_cache",
+    "data",
+    "pepers.egg-info",
+    "tests",
+    "services/setup"
+  ],
+  "reportMissingImports": "warning",
+  "reportMissingModuleSource": "warning"
+}

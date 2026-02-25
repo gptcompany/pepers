@@ -299,6 +299,19 @@ MIGRATIONS: dict[int, str] = {
     CREATE INDEX IF NOT EXISTS idx_papers_source ON papers(source);
     PRAGMA foreign_keys=ON;
     """,
+    6: """
+    -- v6: Custom LaTeX notation definitions for macro expansion.
+    CREATE TABLE IF NOT EXISTS custom_notations (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        name TEXT NOT NULL UNIQUE,
+        body TEXT NOT NULL,
+        nargs INTEGER NOT NULL DEFAULT 0,
+        description TEXT DEFAULT '',
+        created_at TEXT NOT NULL DEFAULT (datetime('now')),
+        updated_at TEXT NOT NULL DEFAULT (datetime('now'))
+    );
+    CREATE INDEX IF NOT EXISTS idx_custom_notations_name ON custom_notations(name);
+    """,
 }
 
 
