@@ -56,7 +56,7 @@ jobs:
 
       - name: Update coverage badge
         if: runner.os == 'Linux' && github.ref == 'refs/heads/main' && github.event_name == 'push' && steps.cov.outputs.pct
-        uses: schneegans/dynamic-badges-action@v1.7
+        uses: schneegans/dynamic-badges-action@v1.7.0
         with:
           auth: ${{ secrets.GIST_TOKEN }}
           gistID: ac39e6516b7114f96b84ba445b8e7a83
