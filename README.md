@@ -7,7 +7,7 @@
 ![CI](https://github.com/gptcompany/pepers/actions/workflows/ci.yml/badge.svg?branch=main)
 ![Sandbox Validation](https://github.com/gptcompany/pepers/actions/workflows/sandbox-validate.yml/badge.svg?branch=main)
 ![Python](https://img.shields.io/badge/python-3.10%2B-blue?style=flat-square&logo=python)
-![License](https://img.shields.io/github/license/gptcompany/pepers?style=flat-square)
+![License](https://img.shields.io/badge/license-Internal%20project-lightgrey?style=flat-square)
 
 **Paper Extraction, Processing, Evaluation, Retrieval & Synthesis**
 
@@ -221,7 +221,7 @@ See [docs/RUNBOOK.md](docs/RUNBOOK.md) for full configuration reference.
 
 ### MCP Server (:8776)
 
-11 tools available via SSE transport for Claude Desktop, Cursor, and other MCP clients:
+11 tools available via HTTP + SSE transport for Claude Desktop, Cursor, and other MCP clients:
 
 | Tool | Description |
 |------|-------------|
@@ -251,7 +251,7 @@ See [docs/RUNBOOK.md](docs/RUNBOOK.md) for full configuration reference.
 - **SQLite WAL** — shared database, schema v6, 9 tables
 - **Pydantic v2** — 13 data models with validation
 - **SymPy** — CAS engine + C99/Rust/Python codegen
-- **MCP SDK** — FastMCP with SSE transport for tool integration
+- **MCP SDK** — FastMCP with HTTP + SSE transport for tool integration
 - **Apprise** — 90+ notification targets
 - **Docker Compose** — host networking, health checks
 
