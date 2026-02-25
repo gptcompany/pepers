@@ -7,7 +7,7 @@
 ![CI](https://github.com/gptcompany/pepers/actions/workflows/ci.yml/badge.svg?branch=main)
 ![Sandbox Validation](https://github.com/gptcompany/pepers/actions/workflows/sandbox-validate.yml/badge.svg?branch=main)
 ![Python](https://img.shields.io/badge/python-3.10%2B-blue?style=flat-square&logo=python)
-![License](https://img.shields.io/badge/license-Internal%20project-lightgrey?style=flat-square)
+![License](https://img.shields.io/github/license/gptcompany/pepers?style=flat-square)
 
 **Paper Extraction, Processing, Evaluation, Retrieval & Synthesis**
 
