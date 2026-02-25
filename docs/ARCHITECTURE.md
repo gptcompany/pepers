@@ -4,7 +4,7 @@
 
 ## Overview
 
-PePeRS (Paper Extraction, Processing, Evaluation, Retrieval & Synthesis) is a set of 5 standalone Python microservices plus 1 orchestrator that replaces the failed N8N W1-W5 academic paper processing pipeline. It discovers academic papers from arXiv, enriches them with citation data, analyzes relevance with LLM providers, extracts LaTeX formulas, validates formulas against multiple Computer Algebra Systems, and generates production Python/Rust code. All services share a common library (`shared/`) and communicate via HTTP JSON. The system is managed by systemd and monitored by an existing Prometheus + Grafana + Loki stack.
+PePeRS (Paper Extraction, Processing, Evaluation, Retrieval & Synthesis) is a set of 5 standalone Python microservices plus 1 orchestrator that replaces the failed N8N W1-W5 academic paper processing pipeline. It discovers Kelly criterion papers from arXiv, enriches them with citation data, analyzes relevance with LLM providers (Gemini, OpenRouter, Ollama), extracts LaTeX formulas, validates formulas against multiple Computer Algebra Systems, and generates production Python/Rust code. All services share a common library (`shared/`) and communicate via HTTP JSON. The system is managed by systemd and monitored by an existing Prometheus + Grafana + Loki stack. **Current database schema: v5**.
 
 The project originated after N8N crashed in January 2026 and the restored 17 workflows had never successfully processed a single paper end-to-end (all tables empty, 0 executions). Rather than fix N8N, the pipeline is being rebuilt as independent, replaceable microservices.
 
@@ -16,13 +16,14 @@ The project originated after N8N crashed in January 2026 and the restored 17 wor
 | HTTP Server | `http.server` (stdlib) | Microservice endpoints (no framework) |
 | Database | SQLite (WAL mode) | Shared data storage (`data/research.db`) |
 | Models | Pydantic v2 | Data validation, serialization, type safety |
-| LLM | Fallback chain (gemini_cli → codex_cli → claude_cli → openrouter → ollama) | Paper analysis, relevance scoring, codegen explanations |
-| CAS Engines | SymPy + Maxima + Wolfram | Multi-engine formula validation (consensus) |
+| LLM | Fallback chain (Gemini CLI/SDK, OpenRouter, Ollama, Claude CLI, Codex CLI) | Paper analysis, relevance scoring, codegen with fallback chain. **Bundled in Docker**. |
+| CAS Engines | SymPy + Maxima + MATLAB | Multi-engine formula validation (consensus) |
 | PDF Processing | RAGAnything | Text extraction from paper PDFs |
 | Secrets | dotenvx (ECIES) | Encrypted env var management |
-| Process Mgmt | systemd | Service lifecycle, journald logging |
+| Process Mgmt | systemd | Service lifecycle, journald logging, watchdog |
 | Monitoring | Prometheus + Grafana + Loki | Metrics, dashboards, centralized logs |
-| Notifications | Discord webhook | Pipeline completion summaries |
+| Notifications | Apprise (90+ targets) | Pipeline completion summaries (Discord, Slack, Telegram, etc.) |
+| Setup Wizard | questionary + rich | Interactive guided setup, health checks, and .env config |
 
 ## Project Structure
 
@@ -30,60 +31,53 @@ The project originated after N8N crashed in January 2026 and the restored 17 wor
 pepers/
 ├── shared/                     # Shared library (all services import from here)
 │   ├── __init__.py             # Package metadata, convenience imports
-│   ├── db.py                   # SQLite connection management (WAL mode)
-│   ├── models.py               # Pydantic v2 data models (8 models + enum)
-│   ├── server.py               # Base HTTP server + route dispatch + JSON helpers
-│   └── config.py               # Config loading from RP_* env vars + dotenvx
-├── services/                   # Microservice implementations (one dir per service)
-│   └── .gitkeep                # Placeholder (services built in future milestones)
-├── tests/                      # Test suite (685+ tests, unit/integration/e2e)
+│   ├── db.py                   # SQLite + WAL + migrations v5 (~340 LOC)
+│   ├── models.py               # Pydantic v2 data models (~320 LOC)
+│   ├── server.py               # Base HTTP server + route dispatch (~400 LOC)
+│   ├── config.py               # Config from RP_* env vars (~135 LOC)
+│   ├── llm.py                  # Multi-provider LLM (6 providers + fallback) (~420 LOC)
+│   └── cli_providers.json      # CLI provider configs (claude_cli, codex_cli, gemini_cli)
+├── services/                   # 7 microservice implementations + setup wizard
+│   ├── setup/                  # Interactive wizard for config/install/health
+│   ├── discovery/              # arXiv + S2 + CrossRef
+│   ├── analyzer/               # LLM relevance scoring
+│   ├── extractor/              # PDF LaTeX extraction
+│   ├── validator/              # CAS consensus validation
+│   ├── codegen/                # C99/Rust/Python generation
+│   ├── orchestrator/           # Pipeline coordination + Apprise notifications
+│   └── mcp/                    # MCP SSE server for Claude/Cursor integration
+├── tests/                      # Test suite (880+ tests, unit/integration/e2e)
 │   ├── conftest.py             # Shared fixtures (memory_db, tmp_db_path, sample data)
-│   ├── unit/                   # Unit tests (fast, no I/O)
-│   │   ├── test_db.py          # 16 tests: get_connection, transaction, init_db
-│   │   ├── test_models.py      # 30 tests: all 8 Pydantic models + JSON parsers
-│   │   ├── test_config.py      # 12 tests: Config dataclass, load_config, env vars
-│   │   └── test_server.py      # 19 tests: JsonFormatter, route, BaseHandler, BaseService
-│   ├── integration/            # Integration tests (DB + HTTP)
-│   │   ├── test_db_models.py   # 7 tests: model <-> SQLite round-trip, full pipeline flow
-│   │   └── test_server_http.py # 3 tests: HTTP server with real SQLite operations
+│   ├── unit/                   # Unit tests (460+ unit tests)
+│   ├── integration/            # Integration tests (185+ integration tests)
+│   ├── e2e/                    # End-to-end tests (120+ E2E tests)
 │   └── smoke/                  # Smoke test templates (Jinja2 .j2 files, for services)
-│       ├── conftest.py.j2
-│       ├── test_api_endpoints.py.j2
-│       ├── test_config.py.j2
-│       ├── test_connectivity.py.j2
-│       ├── test_data_integrity.py.j2
-│       └── test_imports.py.j2
 ├── data/                       # Runtime data (gitignored)
 │   └── research.db             # SQLite database
 ├── .planning/                  # GSD planning artifacts
-│   ├── PROJECT.md              # Project definition and requirements
-│   ├── ROADMAP.md              # Phase roadmap and progress
-│   ├── STATE.md                # Current state and accumulated context
-│   ├── config.json             # GSD workflow configuration
-│   └── phases/                 # Per-phase context, plans, summaries
 ├── pyproject.toml              # Project metadata + dependencies
 ├── .python-version             # Python 3.11
-└── .env                        # dotenvx encrypted secrets (not committed)
+└── .env                        # Environment variables (dotenvx or local)
 ```
 
 ## Core Components
 
 ### Component: Shared Library (`shared/`)
 
-**Purpose**: Common infrastructure for all 6 microservices. Eliminates duplication and enforces consistent patterns across the pipeline.
+**Purpose**: Common infrastructure for all 7 microservices. Eliminates duplication and enforces consistent patterns across the pipeline.
 **Location**: `./shared/`
-**LOC**: 816 lines across 5 files
+**LOC**: ~1750 lines across 6 files
 
-#### `shared/db.py` -- SQLite Database Layer (170 LOC)
+#### `shared/db.py` -- SQLite Database Layer (~340 LOC)
 
 **Purpose**: Connection management and schema initialization for the shared SQLite database.
 
 **Key functions**:
 - `get_connection(db_path)` -- Creates a connection with WAL mode, foreign keys ON, and Row factory
 - `transaction(db_path)` -- Context manager with auto-commit on success, rollback on exception
-- `init_db(db_path)` -- Idempotent schema creation (5 tables, 6 indexes)
+- `init_db(db_path)` -- Idempotent schema creation and migration v1-v5
 
-**Schema** (5 tables):
+**Schema** (7 tables):
 
 | Table | Purpose | Populated By |
 |-------|---------|-------------|
@@ -91,7 +85,10 @@ pepers/
 | `formulas` | Extracted LaTeX formulas with SHA-256 hash | Extractor service |
 | `validations` | CAS validation results per formula per engine | Validator service |
 | `generated_code` | Generated Python/Rust code per formula | Codegen service |
-| `schema_version` | Migration tracking (current: v1) | init_db() |
+| `pipeline_runs` | Async run tracking and results (v4) | Orchestrator service |
+| `github_repos` | Discovered GitHub repositories for papers | Orchestrator service |
+| `github_analyses` | Gemini analysis of repository content | Orchestrator service |
+| `schema_version` | Migration tracking (current: v5) | init_db() |
 
 **Design decisions**:
 - WAL mode enables concurrent reads (orchestrator reads while a service writes)
@@ -100,23 +97,11 @@ pepers/
 - Single connection per request (no pool -- daily batch of ~10 papers)
 - Schema as SQL string constant (no migration framework -- YAGNI)
 
-#### `shared/models.py` -- Pydantic Data Models (222 LOC)
+#### `shared/models.py` -- Pydantic Data Models (~320 LOC)
 
 **Purpose**: Type-safe data transfer between services and database with validation and serialization.
 
-**Models**:
-
-| Model | Purpose | Key Fields |
-|-------|---------|------------|
-| `Paper` | Academic paper metadata | arxiv_id, title, abstract, authors, citation_count, stage |
-| `Formula` | Extracted LaTeX formula | paper_id, latex, latex_hash (auto SHA-256), formula_type |
-| `Validation` | CAS validation result | formula_id, engine, is_valid, result, time_ms |
-| `GeneratedCode` | Generated code output | formula_id, language, code, metadata |
-| `LLMCodegenResult` | LLM fallback codegen response | python_code, variables, description |
-| `ServiceStatus` | /health and /status response | status, service, version, uptime_seconds |
-| `ProcessRequest` | Base /process request | paper_id, formula_id, force |
-| `ProcessResponse` | Base /process response | success, service, time_ms, error |
-| `ErrorResponse` | Standard error format | error, code, details |
+**Models**: 13+ Pydantic models including `Paper`, `Formula`, `Validation`, `GeneratedCode`, `PipelineRun`, `GitHubRepo`, `GitHubAnalysis`, etc.
 
 **Enum**: `PipelineStage` -- discovered, analyzed, extracted, validated, codegen, complete, failed
 
@@ -185,16 +170,18 @@ RP_LOG_LEVEL=INFO
 
 **Purpose**: Individual microservices that implement the paper processing pipeline.
 **Location**: `./services/`
-**Status**: All 6 services implemented and running in production.
+**Status**: All 7 services implemented and running in production.
 
 | Service | Port | Purpose | External Dependencies |
 |---------|------|---------|----------------------|
-| Discovery | 8770 | arXiv API fetch + Semantic Scholar/CrossRef enrichment | arXiv API, Semantic Scholar API, CrossRef API |
+| Setup | CLI | Interactive wizard for config, health, and install | - |
+| Discovery | 8770 | arXiv API fetch + Semantic Scholar/CrossRef enrichment | arXiv API, S2 API, CrossRef API |
 | Analyzer | 8771 | Topic-agnostic LLM scoring (5 criteria, 0-1.0 scale) | LLM fallback chain |
 | Extractor | 8772 | PDF text extraction + LaTeX formula regex | RAGAnything (:8767) |
-| Validator | 8773 | Multi-CAS formula validation with consensus | CAS Microservice (:8769), SymPy |
+| Validator | 8773 | Multi-CAS formula validation with consensus | CAS (:8769), SymPy |
 | Codegen | 8774 | 5-layer LaTeX→code (C99/Rust/Python) + batch LLM explain | SymPy, LLM fallback chain |
-| Orchestrator | 8775 | Pipeline coordination, per-stage timeouts, retry logic | All above services, Discord webhook |
+| Orchestrator | 8775 | Pipeline coordination, per-stage timeouts, retry, and notifications | All above services, Apprise |
+| MCP Server | 8776 | SSE interface — 8 tools for Claude Desktop/Cursor | Orchestrator (:8775) |
 
 #### Analyzer: Topic-Agnostic Scoring
 
@@ -442,7 +429,7 @@ The primary consumers of these services are AI agents running `/research` and `/
 | v6-v8 Extractor/Validator (Phases 13-25) | Complete | RAGAnything PDF, multi-CAS consensus, formula dedup |
 | v9-v11 Codegen/Orchestrator (Phases 26-37) | Complete | 5-layer codegen, batch explain, async /run, e2e tests |
 
-**Test suite**: 685+ tests (unit, integration, e2e), 0 failures.
+**Test suite**: 880+ tests (unit, integration, e2e), 0 failures.
 
 **Dependencies** (from `pyproject.toml`):
 - `pydantic>=2.0`, `sympy>=1.12`, `requests>=2.31` (runtime)
@@ -457,6 +444,6 @@ The primary consumers of these services are AI agents running `/research` and `/
 
 ---
 
-*Architecture documented: 2026-02-10*
-*Last validated: 2026-02-18 (685+ tests pass, all services running)*
+*Architecture documented: 2026-02-25*
+*Last validated: 2026-02-25 (880+ tests pass, all services running)*
 *Auto-updated by architecture-validator agent*

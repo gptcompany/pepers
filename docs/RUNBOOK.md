@@ -20,15 +20,15 @@ Production operations guide for the 7-service research paper processing pipeline
 
 ## 2. Prerequisites
 
-- Python 3.11+
+- Python 3.11+ (when running without Docker)
 - SQLite 3.35+ (WAL mode, RETURNING clause)
 - RAGAnything server on port 8767 (PDF processing)
 - CAS validation server on port 8769 (SymPy, Maxima, MATLAB engines)
 - At least one LLM provider:
   - **Ollama** (recommended for local): default fallback
   - **OpenRouter**: requires `OPENROUTER_API_KEY`
-  - **Gemini**: requires `GEMINI_API_KEY` or Gemini CLI installed
-- dotenvx for secret management (`.env` encrypted)
+  - **Gemini**: requires `GEMINI_API_KEY` or Gemini CLI. **Note**: If using Docker, the Gemini/Claude/Codex CLIs are pre-bundled.
+- **Setup Wizard**: Run `pepers-setup check` to automatically verify all prerequisites.
 
 ## 3. Startup Order
 
@@ -49,7 +49,14 @@ ollama serve
 
 ### Pipeline Services
 
-**Option A: systemd (recommended for production)**
+**Option A: Setup Wizard (recommended for first-time / check)**
+
+```bash
+pepers-setup          # Full interactive guide
+pepers-setup verify   # Aggregated health check for all services
+```
+
+**Option B: systemd (recommended for production)**
 
 ```bash
 # Start all services in dependency order via target
@@ -376,7 +383,9 @@ sudo systemctl start rp-pipeline.target
 
 ## 7. Configuration Reference
 
-All configuration via environment variables with `RP_` prefix. Set in `.env` (dotenvx encrypted).
+All configuration via environment variables with `RP_` prefix. Set in `.env`.
+
+**Tip**: Use `pepers-setup config` to interactively configure all 24+ variables with guided prompts and sensible defaults.
 
 ### Service Ports
 

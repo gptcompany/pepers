@@ -66,6 +66,8 @@ cp .env.example .env  # Configure API keys
 docker compose up -d  # Starts all 7 services + MCP server
 ```
 
+**Note**: The Docker image now bundles Node.js 20 and all LLM CLI providers (`claude`, `codex`, `gemini`). No host-side installation is required for these tools.
+
 ### Option 3: uv (standalone MCP server)
 
 ```bash

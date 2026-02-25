@@ -5,7 +5,7 @@
 
 ## Overview
 
-PePeRS (Paper Extraction, Processing, Evaluation, Retrieval & Synthesis) is a set of 5 standalone Python microservices plus 1 orchestrator that replaces the failed N8N W1-W5 academic paper processing pipeline. It discovers Kelly criterion papers from arXiv, enriches them with citation data, analyzes relevance with LLM providers (Gemini, OpenRouter, Ollama), extracts LaTeX formulas, validates formulas against multiple Computer Algebra Systems, and generates production Python/Rust code. All services share a common library (`shared/`) and communicate via HTTP JSON. The system is managed by systemd and monitored by an existing Prometheus + Grafana + Loki stack.
+PePeRS (Paper Extraction, Processing, Evaluation, Retrieval & Synthesis) is a set of 5 standalone Python microservices plus 1 orchestrator that replaces the failed N8N W1-W5 academic paper processing pipeline. It discovers Kelly criterion papers from arXiv, enriches them with citation data, analyzes relevance with LLM providers (Gemini, OpenRouter, Ollama), extracts LaTeX formulas, validates formulas against multiple Computer Algebra Systems, and generates production Python/Rust code. All services share a common library (`shared/`) and communicate via HTTP JSON. The system is managed by systemd and monitored by an existing Prometheus + Grafana + Loki stack. All services share a single SQLite database with **schema v5**.
 
 ## Tech Stack
 
@@ -29,13 +29,14 @@ PePeRS (Paper Extraction, Processing, Evaluation, Retrieval & Synthesis) is a se
 pepers/
 ├── shared/                     # Shared library (all services import from here)
 │   ├── __init__.py             # Package metadata (0.1.0)
-│   ├── db.py                   # SQLite + WAL + migrations v4 (279 LOC)
-│   ├── models.py               # Pydantic v2 models (306 LOC)
-│   ├── server.py               # Base HTTP server + route dispatch (328 LOC)
-│   ├── config.py               # Config from RP_* env vars (131 LOC)
-│   ├── llm.py                  # LLM client: data-driven CLI registry + fallback chain (442 LOC)
+│   ├── db.py                   # SQLite + WAL + migrations v5 (~340 LOC)
+│   ├── models.py               # Pydantic v2 models (~320 LOC)
+│   ├── server.py               # Base HTTP server + route dispatch (~400 LOC)
+│   ├── config.py               # Config from RP_* env vars (~135 LOC)
+│   ├── llm.py                  # LLM client: data-driven CLI registry + fallback chain (~420 LOC)
 │   └── cli_providers.json      # CLI provider configs (claude_cli, codex_cli, gemini_cli)
-├── services/                   # 6 microservice implementations
+├── services/                   # 6 microservice implementations + setup wizard
+│   ├── setup/                  # Interactive wizard for config/install/health
 │   ├── discovery/main.py       # arXiv + OpenAlex + S2 + CrossRef (495 LOC)
 │   ├── discovery/openalex.py   # OpenAlex API client + upsert (195 LOC)
 │   ├── analyzer/main.py        # LLM 5-criteria relevance scoring (321 LOC)
@@ -52,11 +53,11 @@ pepers/
 │   └── mcp/                    # MCP Server (SSE transport)
 │       ├── server.py           # FastMCP server + 8 tools + arcade flavor (~260 LOC)
 │       └── __main__.py         # Entry point: python -m services.mcp
-├── tests/                      # 790+ tests
+├── tests/                      # 880+ tests
 │   ├── conftest.py             # Shared fixtures
 │   ├── unit/                   # 460+ unit tests
 │   ├── integration/            # 185+ integration tests
-│   ├── e2e/                    # 60+ E2E tests
+│   ├── e2e/                    # 120+ E2E tests
 │   └── smoke/                  # Smoke test templates (.j2)
 ├── scripts/                    # CLI tools
 │   └── smoke_test.py           # E2E smoke test CLI (452 LOC)
@@ -302,6 +303,6 @@ Daily 8AM timer triggers Orchestrator (:8775)
 
 ---
 
-*Architecture documented: 2026-02-10*
-*Last validated: 2026-02-20 (790+ tests pass, schema v5)*
+*Architecture documented: 2026-02-25*
+*Last validated: 2026-02-25 (880+ tests pass, schema v5)*
 *Auto-updated by architecture-validator agent*
