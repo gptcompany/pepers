@@ -1,0 +1,25 @@
+apiVersion: backstage.io/v1alpha1
+kind: Component
+metadata:
+  name: pepers
+  title: PePeRS
+  description: >
+    Paper Extraction, Processing, Evaluation, Retrieval & Synthesis (PePeRS)
+    research pipeline with 7 Python microservices and MCP integration.
+  annotations:
+    github.com/project-slug: gptcompany/pepers
+  tags:
+    - python
+    - microservices
+    - llm
+    - mcp
+    - docker
+    - sqlite
+spec:
+  type: service
+  lifecycle: experimental
+  owner: user:default/sam
+  system: claude-infrastructure
+  dependsOn:
+    - component:default/cas-service
+    - component:default/rag-service

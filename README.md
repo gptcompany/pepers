@@ -4,25 +4,70 @@
 
 # 🚀 PePeRS
 
+![CI](https://github.com/gptcompany/pepers/actions/workflows/ci.yml/badge.svg?branch=main)
+![Sandbox Validation](https://github.com/gptcompany/pepers/actions/workflows/sandbox-validate.yml/badge.svg?branch=main)
+![Python](https://img.shields.io/badge/python-3.10%2B-blue?style=flat-square&logo=python)
+![License](https://img.shields.io/github/license/gptcompany/pepers?style=flat-square)
+
 **Paper Extraction, Processing, Evaluation, Retrieval & Synthesis**
 
-7 Python microservices that discover academic papers, extract LaTeX formulas, validate math with CAS engines, and generate production code. Includes an MCP Server for Claude Desktop/Cursor integration. No frameworks, no hallucinations — every formula is algebraically verified.
+7 Python microservices that discover academic papers, extract LaTeX formulas, validate math with CAS engines, and generate production code. Includes an MCP Server with HTTP + SSE interfaces for Claude Desktop/Cursor integration. No frameworks, no hallucinations — every formula is algebraically verified.
+
+**LLM access modes supported**
+- Local models (via `Ollama`)
+- CLI subscriptions / local CLIs (e.g. `Claude`, `Codex`, `Gemini`)
+- API keys (e.g. OpenAI, Anthropic, Google Gemini, OpenRouter)
 
 ---
 
 ## What It Does
 
+```text
++-----------------------------+
+| Sources                     |
+| arXiv / OpenAlex            |
++-----------------------------+
+              |
+              v
++-----------------------------+
+| Discovery        (:8770)    |
++-----------------------------+
+              |
+              v
++-----------------------------+
+| LLM Analyzer     (:8771)    |
++-----------------------------+
+              |
+              v
++-----------------------------+
+| PDF Extractor    (:8772)    |
++-----------------------------+
+              |
+              v
++-----------------------------+
+| CAS Validator    (:8773)    |
++-----------------------------+
+              |
+              v
++-----------------------------+
+| Code Generator   (:8774)    |
+| Outputs: Python / C99 / Rust|
++-----------------------------+
+
++-----------------------------+
+| Orchestrator API (:8775)    |
+| Async HTTP API + cron       |
+| Coordinates all stages      |
++-----------------------------+
+
++-----------------------------+
+| MCP Server       (:8776)    |
+| HTTP + SSE (11 tools)       |
+| Claude Desktop / Cursor     |
++-----------------------------+
 ```
-arXiv/OpenAlex  -->  LLM Analysis  -->  PDF Extraction  -->  CAS Validation  -->  Code Generation
-  (Discovery)       (Analyzer)         (Extractor)         (Validator)          (Codegen)
-     :8770             :8771              :8772               :8773               :8774
-                                                                                    |
-                                    Orchestrator (:8775) coordinates all stages     |
-                                    Async HTTP API + cron scheduling                |
-                                                                                    v
-                                    MCP Server (:8776) — SSE interface         Python / C99 / Rust
-                                    for Claude Desktop / Cursor
-```
+
+Legend: `:8770-:8776` = default local ports for PePeRS services (`.env` configurable)
 
 **Pipeline flow**: Paper discovery -> LLM relevance scoring -> PDF formula extraction -> Multi-CAS validation (SymPy + SageMath consensus; optional MATLAB, WolframAlpha) -> Code generation with batch LLM explanations.
 
@@ -39,7 +84,7 @@ arXiv/OpenAlex  -->  LLM Analysis  -->  PDF Extraction  -->  CAS Validation  -->
 | **Async Pipeline** | `POST /run` returns HTTP 202, poll `GET /runs` for progress |
 | **RAG Search** | Semantic search over processed papers via RAGAnything knowledge graph |
 | **Custom Notations** | Define custom LaTeX macros (e.g. `\Expect`, `\KL`) expanded before CAS validation |
-| **MCP Server** | SSE interface with 11 tools for Claude Desktop/Cursor. Arcade flavor output! |
+| **MCP Server** | HTTP + SSE interface with 11 tools for Claude Desktop/Cursor. Arcade flavor output! |
 | **Notifications** | Apprise (90+ targets): Discord, Slack, Telegram, email, etc. |
 | **Deterministic LLM** | `temperature=0`, `seed=42` on all configurable providers |
 

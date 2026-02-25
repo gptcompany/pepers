@@ -1,0 +1,104 @@
+name: Cross-Repo Integration Validation
+
+on:
+  repository_dispatch:
+    types: [cas-service-update, rag-service-update]
+  workflow_dispatch:
+    inputs:
+      source_service:
+        description: Service that changed
+        required: true
+        type: choice
+        options: [cas-service, rag-service]
+        default: cas-service
+      source_ref:
+        description: Optional ref/SHA for reporting
+        required: false
+        type: string
+      require_pepers_stack:
+        description: Also validate local PePeRS endpoints on the runner
+        required: true
+        type: boolean
+        default: false
+
+jobs:
+  validate:
+    runs-on: [self-hosted, linux, ws]
+    timeout-minutes: 20
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Resolve trigger metadata
+        id: meta
+        shell: bash
+        run: |
+          if [ "${{ github.event_name }}" = "repository_dispatch" ]; then
+            echo "service=${{ github.event.action == 'cas-service-update' && 'cas-service' || 'rag-service' }}" >> "$GITHUB_OUTPUT"
+            echo "source_sha=${{ github.event.client_payload.source_sha || '' }}" >> "$GITHUB_OUTPUT"
+            echo "source_ref=${{ github.event.client_payload.source_ref || '' }}" >> "$GITHUB_OUTPUT"
+          else
+            echo "service=${{ inputs.source_service }}" >> "$GITHUB_OUTPUT"
+            echo "source_sha=" >> "$GITHUB_OUTPUT"
+            echo "source_ref=${{ inputs.source_ref }}" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@v7
+        with:
+          enable-cache: true
+
+      - name: Install pepers dependencies
+        run: uv sync --extra dev --extra setup
+
+      - name: Validate setup wizard compatibility tests
+        run: uv run pytest -q tests/unit/test_setup_wizard.py
+
+      - name: Probe updated dependency service health
+        shell: bash
+        run: |
+          set -euo pipefail
+          case "${{ steps.meta.outputs.service }}" in
+            cas-service) URL="http://localhost:8769/health" ;;
+            rag-service) URL="http://localhost:8767/health" ;;
+            *) echo "Unknown service"; exit 1 ;;
+          esac
+          echo "Checking $URL"
+          curl -fsS --max-time 5 "$URL" | python -m json.tool || curl -fsS --max-time 5 "$URL"
+
+      - name: Probe local PePeRS stack (optional)
+        if: ${{ github.event_name == 'repository_dispatch' || inputs.require_pepers_stack }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          for url in \
+            http://localhost:8770/health \
+            http://localhost:8771/health \
+            http://localhost:8772/health \
+            http://localhost:8773/health \
+            http://localhost:8774/health \
+            http://localhost:8775/health \
+            http://localhost:8776/sse
+          do
+            echo "Checking $url"
+            curl -fsS --max-time 5 "$url" >/dev/null
+          done
+          echo "PePeRS local endpoints are reachable."
+
+      - name: Summary
+        if: always()
+        run: |
+          {
+            echo "## Cross-Repo Integration Validation"
+            echo
+            echo "- Trigger: ${{ github.event_name }}"
+            echo "- Source service: ${{ steps.meta.outputs.service }}"
+            echo "- Source ref: ${{ steps.meta.outputs.source_ref }}"
+            echo "- Source sha: ${{ steps.meta.outputs.source_sha }}"
+          } >> "$GITHUB_STEP_SUMMARY"

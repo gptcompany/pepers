@@ -1,0 +1,111 @@
+name: Sandbox Deploy Validation
+
+on:
+  workflow_dispatch:
+    inputs:
+      runner_labels_json:
+        description: 'Runner labels JSON (e.g. ["self-hosted","linux","ws"])'
+        required: true
+        type: string
+        default: '["self-hosted","linux","ws"]'
+      rebuild_images:
+        description: Rebuild Docker images before validation
+        required: true
+        type: boolean
+        default: false
+      require_external_services:
+        description: Require CAS/RAG/Ollama endpoints to be healthy
+        required: true
+        type: boolean
+        default: false
+      leave_running:
+        description: Leave docker compose stack running after validation
+        required: true
+        type: boolean
+        default: true
+
+jobs:
+  sandbox-validate:
+    name: Compose Health + Smoke
+    runs-on: ${{ fromJSON(inputs.runner_labels_json) }}
+    timeout-minutes: 30
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Show Docker versions
+        run: |
+          docker --version
+          docker compose version
+
+      - name: Bring up stack
+        run: |
+          set -euo pipefail
+          if [ "${{ inputs.rebuild_images }}" = "true" ]; then
+            docker compose up -d --build
+          else
+            docker compose up -d
+          fi
+
+      - name: Wait for internal endpoints
+        run: |
+          set -euo pipefail
+
+          wait_url() {
+            local url="$1"
+            local timeout_s="${2:-180}"
+            local start
+            start="$(date +%s)"
+            while true; do
+              if curl -fsS --max-time 5 "$url" >/dev/null; then
+                echo "OK  $url"
+                return 0
+              fi
+              if [ $(( $(date +%s) - start )) -ge "$timeout_s" ]; then
+                echo "TIMEOUT $url"
+                return 1
+              fi
+              sleep 3
+            done
+          }
+
+          wait_url "http://localhost:8770/health"
+          wait_url "http://localhost:8771/health"
+          wait_url "http://localhost:8772/health"
+          wait_url "http://localhost:8773/health"
+          wait_url "http://localhost:8774/health"
+          wait_url "http://localhost:8775/health"
+          wait_url "http://localhost:8776/sse"
+
+      - name: Probe external dependencies (optional)
+        run: |
+          set -euo pipefail
+          if [ "${{ inputs.require_external_services }}" != "true" ]; then
+            echo "Skipping external dependency checks."
+            exit 0
+          fi
+
+          curl -fsS --max-time 5 http://localhost:8769/health >/dev/null
+          curl -fsS --max-time 5 http://localhost:8767/health >/dev/null
+          curl -fsS --max-time 5 http://localhost:11434/ >/dev/null
+          echo "External CAS/RAG/Ollama endpoints are reachable."
+
+      - name: Capture compose status
+        if: always()
+        run: |
+          mkdir -p .artifacts
+          docker compose ps > .artifacts/compose-ps.txt || true
+          docker compose logs --tail=200 > .artifacts/compose-logs.txt || true
+
+      - name: Upload artifacts
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: pepers-sandbox-validation
+          path: .artifacts/
+          if-no-files-found: ignore
+
+      - name: Tear down stack
+        if: always() && inputs.leave_running == false
+        run: docker compose down
