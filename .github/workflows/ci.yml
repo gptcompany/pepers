@@ -45,4 +45,24 @@ jobs:
 
       - name: Unit suite (Linux only)
         if: runner.os == 'Linux'
-        run: uv run pytest tests/unit
+        run: uv run pytest tests/unit --cov=services --cov-report=term --cov-report=json
+
+      - name: Extract coverage percentage
+        if: runner.os == 'Linux'
+        id: cov
+        run: |
+          COV=$(python -c "import json; print(int(json.load(open('coverage.json'))['totals']['percent_covered']))")
+          echo "pct=$COV" >> "$GITHUB_OUTPUT"
+
+      - name: Update coverage badge
+        if: runner.os == 'Linux' && github.ref == 'refs/heads/main' && github.event_name == 'push' && steps.cov.outputs.pct
+        uses: schneegans/dynamic-badges-action@v1.7
+        with:
+          auth: ${{ secrets.GIST_TOKEN }}
+          gistID: ac39e6516b7114f96b84ba445b8e7a83
+          filename: pepers-coverage.json
+          label: coverage
+          message: ${{ steps.cov.outputs.pct }}%
+          valColorRange: ${{ steps.cov.outputs.pct }}
+          minColorRange: 40
+          maxColorRange: 90

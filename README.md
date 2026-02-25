@@ -6,6 +6,7 @@
 
 ![CI](https://github.com/gptcompany/pepers/actions/workflows/ci.yml/badge.svg?branch=main)
 ![Sandbox Validation](https://github.com/gptcompany/pepers/actions/workflows/sandbox-validate.yml/badge.svg?branch=main)
+![Coverage](https://img.shields.io/endpoint?url=https://gist.githubusercontent.com/gptprojectmanager/ac39e6516b7114f96b84ba445b8e7a83/raw/pepers-coverage.json)
 ![Python](https://img.shields.io/badge/python-3.10%2B-blue?style=flat-square&logo=python)
 ![License](https://img.shields.io/github/license/gptcompany/pepers?style=flat-square)
 
