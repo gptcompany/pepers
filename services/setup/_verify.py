@@ -69,6 +69,7 @@ def _discover_rag_details(base_url: str) -> str:
 
 class AggregatedHealthCheck:
     name = "Aggregated health check"
+    description = "Verify PePeRS, CAS, RAG, and Ollama endpoints"
 
     def check(self) -> bool:
         # Always run the full check in install()

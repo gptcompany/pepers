@@ -11,6 +11,7 @@ from rich.console import Console
 
 class DockerCheck:
     name = "Docker"
+    description = "Container runtime for local service stack"
 
     def check(self) -> bool:
         return shutil.which("docker") is not None
@@ -28,6 +29,7 @@ class DockerCheck:
 
 class DockerComposeCheck:
     name = "Docker Compose"
+    description = "Compose subcommand for multi-service orchestration"
 
     def check(self) -> bool:
         try:
@@ -54,6 +56,7 @@ class DockerComposeCheck:
 
 class DockerComposeUp:
     name = "Docker Compose services"
+    description = "Start local containers from compose file"
 
     def __init__(self, project_root: Path) -> None:
         self._root = project_root

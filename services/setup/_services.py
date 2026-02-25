@@ -1,9 +1,13 @@
-"""Step: verify external services (CAS, RAG, Ollama)."""
+"""Step: verify external services (CAS, RAG) and optionally launch setup CLIs."""
 
 from __future__ import annotations
 
 import os
+import shutil
+import subprocess
+from pathlib import Path
 
+import questionary
 import requests
 from rich.console import Console
 
@@ -13,6 +17,10 @@ _EXTERNAL_SERVICES = [
         "env_urls": ["RP_VALIDATOR_CAS_URL", "RP_CAS_URL"],
         "default_url": "http://localhost:8769",
         "health_path": "/health",
+        "setup_cmd": "cas-setup",
+        "description": "CAS validation (SymPy, SageMath, MATLAB, WolframAlpha)",
+        "local_repo": "cas-service",
+        "local_module": "cas_service.setup.main",
         "setup_hint": (
             "Install & run CAS Service:\n"
             "  cd /path/to/cas-service && cas-setup\n"
@@ -24,21 +32,15 @@ _EXTERNAL_SERVICES = [
         "env_urls": ["RP_EXTRACTOR_RAG_URL", "RP_RAG_QUERY_URL", "RP_RAG_URL"],
         "default_url": "http://localhost:8767",
         "health_path": "/health",
+        "setup_cmd": "rag-setup",
+        "description": "PDF extraction + knowledge graph via RAGAnything",
+        "local_repo": "rag-service",
+        "local_module": "scripts.setup",
+        "local_module_needs_pythonpath": True,
         "setup_hint": (
             "Install & run RAG Service:\n"
             "  cd /path/to/rag-service && rag-setup\n"
             "  Or: ./scripts/raganything_start.sh"
-        ),
-    },
-    {
-        "name": "Ollama",
-        "env_urls": ["RP_CODEGEN_OLLAMA_URL", "RP_OLLAMA_URL"],
-        "default_url": "http://localhost:11434",
-        "health_path": "/",
-        "setup_hint": (
-            "Install Ollama:\n"
-            "  curl -fsSL https://ollama.ai/install.sh | sh\n"
-            "  ollama serve"
         ),
     },
 ]
@@ -50,6 +52,7 @@ class ExternalServiceCheck:
     def __init__(self, svc: dict) -> None:
         self._svc = svc
         self.name = svc["name"]
+        self.description = svc.get("description", "")
 
     def _url(self) -> str:
         env_urls = self._svc.get("env_urls")
@@ -65,6 +68,35 @@ class ExternalServiceCheck:
                 return val
         return self._svc["default_url"]
 
+    def _local_setup_fallback(self) -> tuple[list[str], Path, dict[str, str], str] | None:
+        """Return local repo fallback command when CLI is not installed in PATH."""
+        repo_name = self._svc.get("local_repo")
+        module_name = self._svc.get("local_module")
+        if not isinstance(repo_name, str) or not isinstance(module_name, str):
+            return None
+
+        # Prefer a sibling repo next to pepers, but fall back to CWD parent when run elsewhere.
+        pepers_root = Path(__file__).resolve().parents[2]
+        candidate_roots = [
+            pepers_root.parent / repo_name,
+            Path.cwd().resolve().parent / repo_name,
+        ]
+        repo_dir = next((p for p in candidate_roots if p.exists()), None)
+        if repo_dir is None:
+            return None
+
+        venv_python = repo_dir / ".venv" / "bin" / "python"
+        if not venv_python.exists():
+            return None
+
+        env = {"PYTHONHASHSEED": "0"}
+        if self._svc.get("local_module_needs_pythonpath"):
+            env["PYTHONPATH"] = str(repo_dir)
+
+        cmd = [str(venv_python), "-m", module_name]
+        display = f"{venv_python} -m {module_name}"
+        return cmd, repo_dir, env, display
+
     def check(self) -> bool:
         url = self._url().rstrip("/") + self._svc["health_path"]
         try:
@@ -75,6 +107,48 @@ class ExternalServiceCheck:
 
     def install(self, console: Console) -> bool:
         console.print(f"[yellow]{self.name} is not reachable at {self._url()}[/]")
+        setup_cmd = self._svc.get("setup_cmd")
+        if isinstance(setup_cmd, str) and shutil.which(setup_cmd):
+            if questionary.confirm(
+                f"Launch {setup_cmd} now?",
+                default=True,
+            ).ask():
+                try:
+                    result = subprocess.run([setup_cmd], check=False)
+                except OSError as exc:
+                    console.print(f"[red]Failed to launch {setup_cmd}:[/] {exc}")
+                else:
+                    if result.returncode == 0:
+                        return True
+                    console.print(
+                        f"[red]{setup_cmd} failed (exit {result.returncode})[/]"
+                    )
+        else:
+            fallback = self._local_setup_fallback()
+            if fallback is not None:
+                cmd, cwd, env_extra, display = fallback
+                if questionary.confirm(
+                    f"Launch local setup wizard from {cwd.name}? ({display})",
+                    default=True,
+                ).ask():
+                    run_env = os.environ.copy()
+                    # Preserve existing PYTHONPATH if present.
+                    if "PYTHONPATH" in env_extra and run_env.get("PYTHONPATH"):
+                        env_extra = env_extra.copy()
+                        env_extra["PYTHONPATH"] = (
+                            f"{env_extra['PYTHONPATH']}:{run_env['PYTHONPATH']}"
+                        )
+                    run_env.update(env_extra)
+                    try:
+                        result = subprocess.run(cmd, cwd=cwd, env=run_env, check=False)
+                    except OSError as exc:
+                        console.print(f"[red]Failed to launch local setup:[/] {exc}")
+                    else:
+                        if result.returncode == 0:
+                            return True
+                        console.print(
+                            f"[red]Local setup failed (exit {result.returncode})[/]"
+                        )
         console.print(f"[dim]{self._svc['setup_hint']}[/]")
         return False  # can't auto-install external services
 

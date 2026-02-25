@@ -80,6 +80,7 @@ def _validate_url(val: str) -> bool | str:
 
 class EnvConfig:
     name = "Environment configuration (.env)"
+    description = "Core service ports, URLs, defaults, and orchestration settings"
 
     def __init__(self, project_root: Path) -> None:
         self._root = project_root
@@ -139,6 +140,22 @@ class EnvConfig:
             if value is None:  # user Ctrl-C
                 return False
             lines.append(f"{env_name}={value}")
+
+        if questionary.confirm(
+            "Add custom environment variables?",
+            default=False,
+        ).ask():
+            while True:
+                key = questionary.text("Variable name (empty to finish):").ask()
+                if key is None:
+                    return False
+                key = key.strip()
+                if not key:
+                    break
+                value = questionary.text(f"Value for {key}:").ask()
+                if value is None:
+                    return False
+                lines.append(f"{key}={value}")
 
         env_content = "\n".join(lines) + "\n"
         self._env_path.write_text(env_content)

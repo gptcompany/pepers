@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import json
 import os
 import sqlite3
 from unittest.mock import MagicMock, patch
@@ -16,6 +17,7 @@ from services.setup._checks import (
 )
 from services.setup import main as setup_main
 from services.setup._config import _CONFIG_VARS, _read_env_values, EnvConfig
+from services.setup._mcp_config import McpConfigStep
 from services.setup._services import _EXTERNAL_SERVICES, ExternalServiceCheck
 from services.setup._verify import _EXTERNAL, AggregatedHealthCheck
 
@@ -215,7 +217,64 @@ class TestExternalServiceCheck:
         by_name = {svc["name"]: svc for svc in _EXTERNAL_SERVICES}
         assert by_name["CAS Service"]["env_urls"][0] == "RP_VALIDATOR_CAS_URL"
         assert by_name["RAG Service"]["env_urls"][0] == "RP_EXTRACTOR_RAG_URL"
-        assert by_name["Ollama"]["env_urls"][0] == "RP_CODEGEN_OLLAMA_URL"
+        assert by_name["CAS Service"]["setup_cmd"] == "cas-setup"
+        assert by_name["RAG Service"]["setup_cmd"] == "rag-setup"
+        assert "Ollama" not in by_name
+
+    @patch("services.setup._services.subprocess.run")
+    @patch("services.setup._services.questionary.confirm")
+    @patch("services.setup._services.shutil.which", return_value="/usr/bin/cas-setup")
+    def test_install_can_launch_subprocess_setup_cli(
+        self,
+        mock_which,
+        mock_confirm,
+        mock_run,
+    ):
+        svc = {
+            "name": "CAS Service",
+            "env_urls": ["RP_VALIDATOR_CAS_URL", "RP_CAS_URL"],
+            "default_url": "http://localhost:8769",
+            "health_path": "/health",
+            "setup_cmd": "cas-setup",
+            "setup_hint": "Install CAS",
+        }
+        mock_confirm.return_value.ask.return_value = True
+        mock_run.return_value.returncode = 0
+        step = ExternalServiceCheck(svc)
+        console = MagicMock()
+
+        result = step.install(console)
+
+        assert result is True
+        mock_confirm.assert_called_once()
+        mock_run.assert_called_once_with(["cas-setup"], check=False)
+
+
+# ── MCP config ───────────────────────────────────────────────
+
+class TestMcpConfigStep:
+    def test_install_writes_claude_config_and_verify_passes(self, tmp_path):
+        step = McpConfigStep()
+        console = MagicMock()
+        config_path = tmp_path / ".claude.json"
+
+        with patch("services.setup._mcp_config.Path.home", return_value=tmp_path):
+            assert step.check() is False
+            assert step.install(console) is True
+            assert config_path.exists()
+
+            data = json.loads(config_path.read_text())
+            assert data["mcpServers"]["pepers"]["type"] == "sse"
+            assert data["mcpServers"]["pepers"]["url"] == "http://localhost:8776/sse"
+            assert step.verify() is True
+
+    def test_install_fails_on_invalid_existing_json(self, tmp_path):
+        step = McpConfigStep()
+        console = MagicMock()
+        (tmp_path / ".claude.json").write_text("{not json")
+
+        with patch("services.setup._mcp_config.Path.home", return_value=tmp_path):
+            assert step.install(console) is False
 
 
 # ── AggregatedHealthCheck ────────────────────────────────────
@@ -370,6 +429,21 @@ class TestRunner:
         assert result is True
         step.install.assert_not_called()
 
+    @patch("questionary.select")
+    def test_run_interactive_menu_exit_returns_false_when_pending(self, mock_select):
+        from services.setup._runner import run_interactive_menu
+
+        step = MagicMock()
+        step.name = "Pending"
+        step.description = "Test step"
+        step.check.return_value = False
+
+        mock_select.return_value.ask.return_value = "exit"
+        console = MagicMock()
+
+        result = run_interactive_menu([step], console)
+        assert result is False
+
 
 # ── CLI main() ────────────────────────────────────────────────
 
@@ -380,3 +454,17 @@ class TestSetupMainCli:
         assert rc == 0
         console = mock_console_cls.return_value
         console.print.assert_called()
+
+    @patch("services.setup._runner.run_interactive_menu", return_value=True)
+    @patch("services.setup.main._all_steps", return_value=[])
+    @patch("services.setup.main.Console")
+    def test_all_command_uses_interactive_menu(
+        self,
+        mock_console_cls,
+        mock_all_steps,
+        mock_run_menu,
+    ):
+        rc = setup_main.main(["all"])
+        assert rc == 0
+        mock_all_steps.assert_called_once()
+        mock_run_menu.assert_called_once()

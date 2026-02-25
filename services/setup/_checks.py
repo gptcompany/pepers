@@ -13,6 +13,7 @@ from rich.console import Console
 
 class PythonCheck:
     name = "Python >= 3.10"
+    description = "Runtime required to run the PePeRS services"
 
     def check(self) -> bool:
         return sys.version_info >= (3, 10)
@@ -31,6 +32,7 @@ class PythonCheck:
 
 class UvCheck:
     name = "uv (package manager)"
+    description = "Fast Python package manager used for project sync"
 
     def check(self) -> bool:
         return shutil.which("uv") is not None
@@ -58,6 +60,7 @@ class UvCheck:
 
 class SQLiteCheck:
     name = "SQLite >= 3.35 (WAL mode)"
+    description = "Local metadata database engine compatibility"
 
     def check(self) -> bool:
         version = sqlite3.sqlite_version_info
@@ -76,6 +79,7 @@ class SQLiteCheck:
 
 class VenvCheck:
     name = "Virtual environment (.venv)"
+    description = "Project virtualenv with synced dependencies"
 
     def __init__(self, project_root: Path) -> None:
         self._root = project_root
@@ -105,6 +109,7 @@ class VenvCheck:
 
 class DotenvxCheck:
     name = "dotenvx (secret management)"
+    description = "Secret and environment variable management CLI"
 
     def check(self) -> bool:
         return shutil.which("dotenvx") is not None
@@ -132,6 +137,7 @@ class DotenvxCheck:
 
 class DiskSpaceCheck:
     name = "Disk space (data/ directory)"
+    description = "Minimum free disk space for local data and indexes"
     _min_mb = 500
 
     def __init__(self, project_root: Path) -> None:
