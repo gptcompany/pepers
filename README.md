@@ -239,6 +239,29 @@ See [docs/RUNBOOK.md](docs/RUNBOOK.md) for full configuration reference.
 | `list_notations` | List all custom notations |
 | `remove_notation` | Remove a custom notation |
 
+#### Guided Workflows (MCP Prompts)
+
+Claude Desktop users can access pre-built workflow prompts from the prompt menu:
+
+| Prompt | What It Does |
+|--------|-------------|
+| `research_workflow` | Full end-to-end: discover → extract → validate → codegen → search |
+| `paper_deep_dive` | Explore a single paper: formulas, code, GitHub repos |
+| `setup_notations` | Define custom LaTeX macros before extraction |
+
+**Example conversation in Claude Desktop:**
+
+```
+User: I want to research papers about the Kelly criterion in portfolio optimization.
+
+Claude: I'll use the PePeRS research workflow. Let me start the pipeline...
+  → run_pipeline(query="Kelly criterion portfolio optimization", stages=5)
+  → get_run_status(run_id="run-abc123")  [polls until completed]
+  → list_papers(stage="codegen")  [shows 8 papers found]
+  → get_paper(paper_id=42)  [shows details of best-scored paper]
+  → get_generated_code(paper_id=42)  [shows Python implementation]
+```
+
 ### All Services
 
 | Method | Endpoint | Description |
