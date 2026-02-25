@@ -35,7 +35,7 @@ _CONFIG_VARS: list[tuple[str, str, str, str]] = [
     ),
     ("RP_VALIDATOR_CAS_URL", "CAS service URL (validator)", "http://localhost:8769", "url"),
     ("RP_VALIDATOR_MAX_FORMULAS", "Validator max formulas per batch", "50", "text"),
-    ("RP_VALIDATOR_ENGINES", "Validator engines (comma-separated)", "sympy,maxima", "text"),
+    ("RP_VALIDATOR_ENGINES", "Validator engines (comma-separated)", "sympy,sage", "text"),
     ("RP_EXTRACTOR_RAG_URL", "RAG service URL (extractor)", "http://localhost:8767", "url"),
     ("RP_RAG_QUERY_URL", "RAG query URL (orchestrator)", "http://localhost:8767", "url"),
     ("RP_CODEGEN_OLLAMA_URL", "Ollama URL (codegen)", "http://localhost:11434", "url"),

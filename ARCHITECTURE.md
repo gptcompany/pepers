@@ -16,7 +16,7 @@ PePeRS (Paper Extraction, Processing, Evaluation, Retrieval & Synthesis) is a se
 | Database | SQLite (WAL mode) | Shared data storage (`data/research.db`) |
 | Models | Pydantic v2 | Data validation, serialization, type safety |
 | LLM | Multi-provider (Gemini CLI/SDK, OpenRouter, Ollama, Claude CLI, Codex CLI) | Paper analysis, relevance scoring, codegen with fallback chain |
-| CAS Engines | SymPy + Maxima + Wolfram | Multi-engine formula validation (consensus) |
+| CAS Engines | SymPy + SageMath (required); MATLAB + WolframAlpha (optional) | Multi-engine formula validation (consensus via CAS microservice) |
 | PDF Processing | RAGAnything | Text extraction from paper PDFs |
 | Secrets | dotenvx (ECIES) | Encrypted env var management |
 | Process Mgmt | systemd | Service lifecycle, journald logging, watchdog |
@@ -199,7 +199,7 @@ Daily 8AM timer triggers Orchestrator (:8775)
          |
          v
   Validator (:8773)
-  +-- Validate with SymPy, Maxima (CAS :8769), Wolfram Alpha
+  +-- Validate with SymPy + SageMath via CAS (:8769); optional MATLAB, WolframAlpha
   +-- Consensus scoring (2/3 agree = valid)
   +-- UPDATE formulas [stage=validated]
          |

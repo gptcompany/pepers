@@ -141,7 +141,7 @@ class Formula(BaseModel):
 class Validation(BaseModel):
     """CAS validation result.
 
-    Populated by Validator service (SymPy + Wolfram + Maxima consensus).
+    Populated by Validator service (multi-engine consensus via CAS microservice).
     """
 
     model_config = ConfigDict(from_attributes=True)

@@ -23,7 +23,7 @@ Production operations guide for the 7-service research paper processing pipeline
 - Python 3.11+ (when running without Docker)
 - SQLite 3.35+ (WAL mode, RETURNING clause)
 - RAGAnything server on port 8767 (PDF processing)
-- CAS validation server on port 8769 (SymPy, Maxima, MATLAB engines)
+- CAS validation server on port 8769 (SymPy + SageMath required; MATLAB + WolframAlpha optional)
 - At least one LLM provider:
   - **Ollama** (recommended for local): default fallback
   - **OpenRouter**: requires `OPENROUTER_API_KEY`
@@ -218,7 +218,7 @@ RP_MCP_PORT=8776 RP_MCP_FLAVOR=arcade python -m services.mcp
 
 **Symptom**: Validator takes >17s/formula average, or times out entirely.
 
-**Cause**: Complex LaTeX with nested expressions, or CAS engine (Maxima/MATLAB) hanging on edge cases.
+**Cause**: Complex LaTeX with nested expressions, or CAS engine (SageMath/MATLAB) hanging on edge cases.
 
 **Impact**: Individual formulas marked as `failed`, pipeline continues with remaining formulas.
 
