@@ -2,7 +2,7 @@
   <img src="pepers_logo.png" alt="PePeRS Logo" width="100%">
 </p>
 
-# PePeRS
+# 🚀 PePeRS
 
 **Paper Extraction, Processing, Evaluation, Retrieval & Synthesis**
 
@@ -42,7 +42,7 @@ arXiv/OpenAlex  -->  LLM Analysis  -->  PDF Extraction  -->  CAS Validation  -->
 | **Notifications** | Apprise (90+ targets): Discord, Slack, Telegram, email, etc. |
 | **Deterministic LLM** | `temperature=0`, `seed=42` on all configurable providers |
 
-## Install
+## 🛠️ Install
 
 ### Option 1: Setup Wizard (recommended)
 
@@ -139,7 +139,7 @@ pepers/
 └── Dockerfile           # Multi-stage build
 ```
 
-## Configuration
+## 📝 Configuration
 
 All config via environment variables with `RP_` prefix:
 
