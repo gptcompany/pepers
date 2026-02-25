@@ -67,9 +67,11 @@
 +-----------------------------+
 ```
 
-Legend: `:8770-:8776` = default local ports for PePeRS services (`.env` configurable)
+Default local ports: `:8770-:8776` (override in `.env`).
 
-**Pipeline flow**: Paper discovery -> LLM relevance scoring -> PDF formula extraction -> Multi-CAS validation (SymPy + SageMath consensus; optional MATLAB, WolframAlpha) -> Code generation with batch LLM explanations.
+**Orchestrated mode (recommended)**: the Orchestrator (`:8775`) runs the end-to-end pipeline (discovery -> analysis -> extraction -> CAS validation -> code generation) and coordinates the other services.
+
+**Standalone mode**: each microservice also exposes its own HTTP API and can be run/queried independently for debugging, testing, or partial integrations.
 
 ## Features
 
