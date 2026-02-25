@@ -98,10 +98,10 @@ class TestCASValidation:
             pytest.skip("CAS service not available at :8769")
 
         client = CASClient(CAS_URL, timeout=60)
-        # Use sympy+maxima only (MATLAB license temporarily unavailable)
+        # Use sympy+sage only (MATLAB license temporarily unavailable)
         response = client.validate(
             r"x^2 + 2 \cdot x + 1 = (x + 1)^2",
-            engines=["sympy", "maxima"],
+            engines=["sympy", "sage"],
         )
 
         assert len(response.results) == 2
@@ -119,7 +119,7 @@ class TestCASValidation:
         client = CASClient(CAS_URL, timeout=60)
         response = client.validate(
             r"\frac{d}{dx} x^2 = 2x",
-            engines=["sympy", "maxima"],
+            engines=["sympy", "sage"],
         )
 
         assert len(response.results) == 2
@@ -146,7 +146,7 @@ class TestCASValidation:
         client = CASClient(CAS_URL, timeout=60)
         response = client.validate(
             r"x^2 + 2 \cdot x + 1 = (x + 1)^2",
-            engines=["sympy", "maxima"],
+            engines=["sympy", "sage"],
         )
 
         consensus = apply_consensus(response.results)
@@ -170,11 +170,11 @@ class TestValidatorE2EFlow:
 
         db = e2e_db_with_formula
 
-        # Start validator service (engines: sympy+maxima only, skip matlab)
+        # Start validator service (engines: sympy+sage only, skip matlab)
         port = _get_free_port()
         ValidatorHandler.cas_url = CAS_URL
         ValidatorHandler.max_formulas_default = 50
-        ValidatorHandler.engines = ["sympy", "maxima"]
+        ValidatorHandler.engines = ["sympy", "sage"]
 
         service = BaseService("validator", port, ValidatorHandler, db)
         thread = threading.Thread(target=service.run, daemon=True)
@@ -221,7 +221,7 @@ class TestValidatorE2EFlow:
 
         port = _get_free_port()
         ValidatorHandler.cas_url = CAS_URL
-        ValidatorHandler.engines = ["sympy", "maxima"]
+        ValidatorHandler.engines = ["sympy", "sage"]
 
         service = BaseService("validator", port, ValidatorHandler, db)
         thread = threading.Thread(target=service.run, daemon=True)
