@@ -21,9 +21,12 @@ on:
         type: boolean
         default: false
 
+permissions:
+  contents: read
+
 jobs:
   validate:
-    runs-on: [self-hosted, linux, ws]
+    runs-on: [self-hosted, linux]
     timeout-minutes: 20
 
     steps:
