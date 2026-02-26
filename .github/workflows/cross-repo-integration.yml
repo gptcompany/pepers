@@ -88,12 +88,13 @@ jobs:
             http://localhost:8772/health \
             http://localhost:8773/health \
             http://localhost:8774/health \
-            http://localhost:8775/health \
-            http://localhost:8776/sse
+            http://localhost:8775/health
           do
             echo "Checking $url"
             curl -fsS --max-time 5 "$url" >/dev/null || echo "Not reachable (expected on ubuntu-latest)"
           done
+          # MCP (8776) exposes SSE streaming — TCP check only
+          timeout 5 bash -c 'cat < /dev/null > /dev/tcp/localhost/8776' 2>/dev/null && echo "OK  MCP port 8776" || echo "WARN  MCP port 8776 not listening"
           echo "PePeRS local endpoint probes completed."
 
       - name: Summary
