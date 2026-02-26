@@ -7,7 +7,7 @@ on:
         description: 'Runner labels JSON (e.g. ["self-hosted","linux","ws"])'
         required: true
         type: string
-        default: '["self-hosted","linux","ws"]'
+        default: '["self-hosted","linux"]'
       rebuild_images:
         description: Rebuild Docker images before validation
         required: true
