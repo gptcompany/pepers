@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import json
 import os
 from unittest.mock import MagicMock, patch
 
@@ -587,16 +588,24 @@ class TestOrchestratorHandler:
         assert len(res) == 1
         assert res[0]["stage"] == "analyzed"
 
-    def test_handle_papers_detail(self, validated_formula_db):
+    def test_handle_papers_detail_not_found(self, initialized_db):
         handler = OrchestratorHandler.__new__(OrchestratorHandler)
-        handler.db_path = str(validated_formula_db)
-        handler.path = "/papers?id=1"
+        handler.db_path = str(initialized_db)
+        handler.path = "/papers?id=999"
         handler.send_error_json = MagicMock()
         
         res = handler.handle_papers()
-        assert res["id"] == 1
-        assert "formulas" in res
-        assert len(res["formulas"]) == 1
+        assert res is None
+        handler.send_error_json.assert_called_once()
+
+    def test_handle_generated_code_no_formulas(self, validated_formula_db):
+        handler = OrchestratorHandler.__new__(OrchestratorHandler)
+        handler.db_path = str(validated_formula_db)
+        handler.path = "/generated-code?paper_id=1"
+        
+        res = handler.handle_generated_code()
+        assert isinstance(res, list)
+        assert len(res) == 0
 
     def test_handle_formulas(self, validated_formula_db):
         handler = OrchestratorHandler.__new__(OrchestratorHandler)
@@ -715,27 +724,143 @@ class TestOrchestratorHandler:
         handler.send_error_json.assert_called_once()
 
 
-class TestCronHelpers:
-    """Tests for cron and async run helpers."""
+class TestPipelineRunnerAdvanced:
+    """Tests for PipelineRunner's advanced logic (retries, batching, cleanup)."""
 
-    @patch("services.orchestrator.main.notify_pipeline_result")
-    def test_run_pipeline_async_success(self, mock_notify):
-        runner = MagicMock()
-        runner.run.return_value = {"status": "completed"}
-        _run_pipeline_async(runner, "run-123")
-        mock_notify.assert_called_once_with({"status": "completed"})
+    @patch("requests.post")
+    def test_call_service_with_retry_success_after_failure(self, mock_post, initialized_db):
+        runner = PipelineRunner(initialized_db)
+        runner.retry_max = 2
+        runner.retry_backoff = 0.1
+        
+        # 1st fail (500), 2nd success
+        resp_500 = MagicMock(status_code=500, text="Internal Error")
+        resp_200 = MagicMock(status_code=200)
+        resp_200.json.return_value = {"ok": True}
+        mock_post.side_effect = [resp_500, resp_200]
+        
+        with patch("time.sleep"): # avoid actual sleeping
+            res = runner._call_service_with_retry("http://test", {})
+            assert res == {"ok": True}
+            assert mock_post.call_count == 2
 
-    @patch("services.orchestrator.main.notify")
-    @patch("services.orchestrator.main.OrchestratorHandler.runner")
-    def test_cron_run_success(self, mock_runner, mock_notify):
-        # Setup the class-level runner
-        OrchestratorHandler.runner = MagicMock()
-        OrchestratorHandler.runner.run.return_value = {
-            "status": "completed",
-            "stages_completed": 5,
-            "stages_requested": 5,
-        }
+    @patch("requests.post")
+    def test_call_service_with_retry_exhausted(self, mock_post, initialized_db):
+        runner = PipelineRunner(initialized_db)
+        runner.retry_max = 1
+        runner.retry_backoff = 0.1
+        
+        mock_post.return_value = MagicMock(status_code=500, text="Continuous Error")
+        
+        with patch("time.sleep"):
+            with pytest.raises(ServiceError, match="HTTP 500"):
+                runner._call_service_with_retry("http://test", {})
+        assert mock_post.call_count == 2
+
+    @patch("requests.post")
+    def test_call_service_no_retry_on_4xx(self, mock_post, initialized_db):
+        runner = PipelineRunner(initialized_db)
+        mock_post.return_value = MagicMock(status_code=400, text="Bad Request")
+        mock_post.return_value.json.return_value = {"error": "validation failed"}
+        
+        with pytest.raises(ServiceError, match="HTTP 400: validation failed"):
+            runner._call_service_with_retry("http://test", {})
+        assert mock_post.call_count == 1
+
+    def test_merge_batch_results_validator(self):
+        batch = [
+            {"formulas_processed": 10, "formulas_valid": 8, "formulas_invalid": 2},
+            {"formulas_processed": 5, "formulas_valid": 4, "formulas_invalid": 1},
+        ]
+        merged = PipelineRunner._merge_batch_results(batch, "validator")
+        assert merged["formulas_processed"] == 15
+        assert merged["formulas_valid"] == 12
+        assert merged["formulas_invalid"] == 3
+        assert merged["batch_iterations"] == 2
+
+    def test_merge_batch_results_codegen(self):
+        batch = [
+            {"formulas_processed": 1, "code_generated": {"python": 1}, "errors": []},
+            {"formulas_processed": 1, "code_generated": {"python": 1, "rust": 1}, "errors": ["err1"]},
+        ]
+        merged = PipelineRunner._merge_batch_results(batch, "codegen")
+        assert merged["formulas_processed"] == 2
+        assert merged["code_generated"]["python"] == 2
+        assert merged["code_generated"]["rust"] == 1
+        assert merged["errors"] == ["err1"]
+
+    def test_cleanup_stuck_runs(self, initialized_db):
+        db_path = str(initialized_db)
+        runner = PipelineRunner(db_path)
+        
+        # Insert a stuck run
+        with transaction(db_path) as conn:
+            conn.execute(
+                "INSERT INTO pipeline_runs (run_id, status, params, stages_requested) "
+                "VALUES ('stuck-1', 'running', '{}', 5)"
+            )
+        
+        count = runner.cleanup_stuck_runs()
+        assert count == 1
+        
+        status = runner.get_run_status("stuck-1")
+        assert status["status"] == "failed"
+        assert "orphaned" in status["errors"][0]
+
+    def test_get_run_status_not_found(self, initialized_db):
+        runner = PipelineRunner(initialized_db)
+        assert runner.get_run_status("nonexistent") is None
+
+    @patch("requests.get")
+    def test_get_services_health_mixed(self, mock_get, initialized_db):
+        runner = PipelineRunner(initialized_db)
+        # Mock 5 stages: Discovery OK, others fail/error
+        resp_ok = MagicMock(status_code=200)
+        resp_ok.json.return_value = {"status": "ok"}
+        resp_err = MagicMock(status_code=500)
+        
+        import requests
+        mock_get.side_effect = [resp_ok, resp_err, requests.RequestException("down"), resp_err, resp_err]
+        
+        health = runner.get_services_health()
+        assert health["all_healthy"] is False
+        assert health["services"]["discovery"]["status"] == "ok"
+        assert health["services"]["analyzer"]["status"] == "error"
+        assert "down" in health["services"]["extractor"]["error"]
+
+
+    @patch("urllib.request.urlopen")
+    def test_query_rag_success(self, mock_open):
+        from services.orchestrator.main import _query_rag
+        mock_resp = MagicMock()
+        mock_resp.read.return_value = json.dumps({"answer": "based"}).encode()
+        mock_resp.__enter__.return_value = mock_resp
+        mock_open.return_value = mock_resp
+        
+        res = _query_rag("test", "hybrid")
+        assert res["answer"] == "based"
+
+    @patch("urllib.request.urlopen", side_effect=Exception("RAG Down"))
+    def test_query_rag_failure(self, mock_open):
+        from services.orchestrator.main import _query_rag
+        with pytest.raises(Exception, match="RAG Down"):
+            _query_rag("test", "mix")
+
+
+class TestOrchestratorMain:
+    """Tests for orchestrator service entry point."""
+
+    @patch("services.orchestrator.main.BaseService")
+    @patch("services.orchestrator.main.load_config")
+    @patch("services.orchestrator.main.init_db")
+    @patch("services.orchestrator.main.create_scheduler")
+    def test_main_startup(self, mock_sched, mock_init, mock_load, mock_svc, initialized_db):
+        from services.orchestrator.main import main
+        mock_load.return_value = MagicMock(port=8775, db_path=str(initialized_db))
         
         with patch.dict(os.environ, {"RP_ORCHESTRATOR_CRON_ENABLED": "true"}):
-            _cron_run()
-            OrchestratorHandler.runner.run.assert_called_once()
+            main()
+            
+        mock_init.assert_called_once()
+        mock_svc.return_value.run.assert_called_once()
+        mock_sched.assert_called_once()

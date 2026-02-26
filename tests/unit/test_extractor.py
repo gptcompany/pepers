@@ -798,28 +798,61 @@ class TestExtractorHandler:
     @patch("services.extractor.main.pdf.download_pdf")
     @patch("services.extractor.main.rag_client.process_paper")
     @patch("services.extractor.main.rag_client.check_service")
+    def test_handle_process_paper_level_failure(self, mock_check, mock_rag, mock_pdf, mock_session, analyzed_paper_db):
+        db_path = str(analyzed_paper_db)
+        handler = ExtractorHandler.__new__(ExtractorHandler)
+        handler.db_path = db_path
+        handler.pdf_dir = "/tmp"
+        handler.download_delay = 0
+        handler.rag_url = "http://rag"
+
+        mock_check.return_value = {"status": "ok"}
+        
+        # PDF download fails
+        mock_pdf.side_effect = Exception("Download failed")
+        resp = handler.handle_process({"paper_id": 1})
+        assert resp["papers_processed"] == 0
+        assert resp["papers_failed"] == 1
+        
+        from shared.db import get_connection
+        conn = get_connection(db_path)
+        row = conn.execute("SELECT stage, error FROM papers WHERE id=1").fetchone()
+        assert row["stage"] == "failed"
+        assert "Download failed" in row["error"]
+        conn.close()
+
+    @patch("services.extractor.main.pdf.create_session")
+    @patch("services.extractor.main.pdf.download_pdf")
+    @patch("services.extractor.main.rag_client.process_paper")
+    @patch("services.extractor.main.rag_client.check_service")
     def test_handle_process_success(self, mock_check, mock_rag, mock_pdf, mock_session, analyzed_paper_db):
         db_path = str(analyzed_paper_db)
         handler = ExtractorHandler.__new__(ExtractorHandler)
         handler.db_path = db_path
         handler.pdf_dir = "/tmp"
-        handler.rag_url = "http://rag:8767"
         handler.download_delay = 0
+        handler.rag_url = "http://rag"
 
         mock_check.return_value = {"status": "ok"}
-        mock_pdf.return_value = Path("/tmp/2401.00001.pdf")
-        mock_rag.return_value = "# Extraction\n\n" + r"$$E = mc^2$$"
+        mock_pdf.return_value = Path("/tmp/p.pdf")
+        # Formula needs to be > 10 chars and have an operator to be non-trivial
+        mock_rag.return_value = "$$ E = m c^2 + \alpha \beta \gamma $$"
         
-        resp = handler.handle_process({})
-        assert resp["success"] is True
+        resp = handler.handle_process({"paper_id": 1})
         assert resp["papers_processed"] == 1
         assert resp["formulas_extracted"] == 1
         
         from shared.db import get_connection
         conn = get_connection(db_path)
-        f_row = conn.execute("SELECT * FROM formulas WHERE paper_id=1").fetchone()
-        assert f_row["latex"] == "E = mc^2"
+        p_row = conn.execute("SELECT stage FROM papers WHERE id=1").fetchone()
+        assert p_row["stage"] == "extracted"
         conn.close()
+
+    def test_handle_process_paper_not_found(self, initialized_db):
+        handler = ExtractorHandler.__new__(ExtractorHandler)
+        handler.db_path = str(initialized_db)
+        resp = handler.handle_process({"paper_id": 999})
+        assert resp["papers_processed"] == 0
 
     @patch("services.extractor.main.rag_client.check_service")
     def test_handle_process_service_down(self, mock_check, analyzed_paper_db):

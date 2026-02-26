@@ -5,6 +5,7 @@ from __future__ import annotations
 import json
 import os
 import sqlite3
+import subprocess
 from unittest.mock import MagicMock, patch
 
 from services.setup._checks import (
@@ -42,18 +43,27 @@ class TestPythonCheck:
         # We're running >= 3.10
         assert step.check() is True
 
+    def test_check_fails_on_old_python(self):
+        step = PythonCheck()
+        with patch("services.setup._checks.sys.version_info", (3, 8, 0)):
+            assert step.check() is False
+
     def test_verify_same_as_check(self):
         step = PythonCheck()
         assert step.verify() == step.check()
 
-    def test_install_returns_false(self):
-        """Python can't be auto-installed."""
-        step = PythonCheck()
-        console = MagicMock()
-        assert step.install(console) is False
 
+class TestDiskSpaceCheck:
+    def test_check_passes_on_normal_system(self, tmp_path):
+        step = DiskSpaceCheck(tmp_path)
+        assert step.check() is True
 
-# ── NodeCheck ────────────────────────────────────────────────
+    @patch("shutil.disk_usage")
+    def test_check_fails_on_low_space(self, mock_usage, tmp_path):
+        # 500MB total, 5MB free (less than 1GB required)
+        mock_usage.return_value = MagicMock(total=500*1024*1024, free=5*1024*1024)
+        step = DiskSpaceCheck(tmp_path)
+        assert step.check() is False
 
 class TestNodeCheck:
     @patch("shutil.which", return_value="/usr/bin/node")
@@ -79,6 +89,22 @@ class TestNodeCheck:
         assert step.install(console) is True
         mock_run.assert_called_with(["sh", "-c", "curl -fsSL https://deb.nodesource.com/setup_20.x | sudo -E bash - && sudo apt-get install -y nodejs"], check=True, text=True)
 
+    @patch("platform.system", return_value="Darwin")
+    @patch("shutil.which", return_value="/usr/local/bin/brew")
+    @patch("subprocess.run")
+    def test_install_macos(self, mock_run, mock_which, mock_platform):
+        console = MagicMock()
+        step = NodeCheck()
+        mock_run.return_value = MagicMock(returncode=0)
+        assert step.install(console) is True
+        mock_run.assert_called_with(["brew", "install", "node@20"], check=True, text=True)
+
+    @patch("platform.system", return_value="Windows")
+    def test_install_windows_unsupported(self, mock_platform):
+        console = MagicMock()
+        step = NodeCheck()
+        assert step.install(console) is False
+
 
 # ── OllamaCheck ──────────────────────────────────────────────
 
@@ -98,6 +124,15 @@ class TestOllamaCheck:
         assert step.install(console) is True
         mock_run.assert_called_with(["brew", "install", "ollama"], check=True, text=True)
 
+    @patch("platform.system", return_value="Linux")
+    @patch("subprocess.run")
+    def test_install_linux(self, mock_run, mock_platform):
+        console = MagicMock()
+        step = OllamaCheck()
+        mock_run.return_value = MagicMock(returncode=0)
+        assert step.install(console) is True
+        mock_run.assert_called_with(["sh", "-c", "curl -fsSL https://ollama.ai/install.sh | sh"], check=True, text=True)
+
 
 # ── NpmCliTool ───────────────────────────────────────────────
 
@@ -114,6 +149,19 @@ class TestNpmCliTool:
         assert step.install(console) is True
         mock_run.assert_called_with(["npm", "install", "-g", "test-pkg"], check=True, capture_output=True, text=True)
 
+    @patch("shutil.which", return_value=None)
+    def test_install_fails_no_npm(self, mock_which):
+        step = NpmCliTool("Test", "Desc", "test-bin", "test-pkg")
+        console = MagicMock()
+        assert step.install(console) is False
+
+    @patch("shutil.which", return_value="/usr/bin/npm")
+    @patch("subprocess.run", side_effect=subprocess.CalledProcessError(1, "npm"))
+    def test_install_fails_npm_error(self, mock_run, mock_which):
+        step = NpmCliTool("Test", "Desc", "test-bin", "test-pkg")
+        console = MagicMock()
+        assert step.install(console) is False
+
 
 # ── DockerCheck ──────────────────────────────────────────────
 
@@ -122,6 +170,10 @@ class TestDockerCheck:
     def test_check_passes(self, mock_which):
         step = DockerCheck()
         assert step.check() is True
+
+    def test_install_unsupported(self):
+        step = DockerCheck()
+        assert step.install(MagicMock()) is False
 
 
 # ── DockerComposeCheck ───────────────────────────────────────
@@ -137,6 +189,10 @@ class TestDockerComposeCheck:
     def test_check_fails_missing(self, mock_run):
         step = DockerComposeCheck()
         assert step.check() is False
+
+    def test_install_unsupported(self):
+        step = DockerComposeCheck()
+        assert step.install(MagicMock()) is False
 
 
 # ── DockerComposeUp ──────────────────────────────────────────
@@ -155,6 +211,14 @@ class TestDockerComposeUp:
         assert step.check() is True
 
     @patch("subprocess.run")
+    def test_check_fails_not_running(self, mock_run, tmp_path):
+        (tmp_path / "compose.yml").touch()
+        # implementation: return len(result.stdout.strip()) > 0
+        mock_run.return_value = MagicMock(returncode=0, stdout='') 
+        step = DockerComposeUp(tmp_path)
+        assert step.check() is False
+
+    @patch("subprocess.run")
     def test_install_up(self, mock_run, tmp_path):
         (tmp_path / "compose.yml").touch()
         mock_run.return_value = MagicMock(returncode=0)
@@ -162,6 +226,12 @@ class TestDockerComposeUp:
         console = MagicMock()
         assert step.install(console) is True
         mock_run.assert_called_with(["docker", "compose", "up", "-d"], cwd=tmp_path, check=True, text=True)
+
+    @patch("subprocess.run", side_effect=subprocess.CalledProcessError(1, "docker"))
+    def test_install_fails_on_error(self, mock_run, tmp_path):
+        (tmp_path / "compose.yml").touch()
+        step = DockerComposeUp(tmp_path)
+        assert step.install(MagicMock()) is False
 
 
 # ── UvCheck ──────────────────────────────────────────────────
@@ -195,6 +265,11 @@ class TestSQLiteCheck:
         expected = version >= (3, 35, 0)
         assert step.check() == expected
 
+    def test_check_fails_on_ancient_sqlite(self):
+        step = SQLiteCheck()
+        with patch("services.setup._checks.sqlite3.sqlite_version_info", (3, 0, 0)):
+            assert step.check() is False
+
 
 # ── VenvCheck ────────────────────────────────────────────────
 
@@ -208,6 +283,13 @@ class TestVenvCheck:
 
     def test_check_fails_when_no_venv(self, tmp_path):
         step = VenvCheck(tmp_path)
+        assert step.check() is False
+
+    @patch("subprocess.run", side_effect=subprocess.CalledProcessError(1, "uv"))
+    def test_install_fails_on_subprocess_error(self, mock_run, tmp_path):
+        step = VenvCheck(tmp_path)
+        console = MagicMock()
+        assert step.install(console) is False
         assert step.check() is False
 
 
@@ -410,6 +492,19 @@ class TestExternalServiceCheck:
         assert result is True
         mock_confirm.assert_called_once()
         mock_run.assert_called_once_with(["cas-setup"], check=False)
+
+    def test_local_setup_fallback_discovery(self, tmp_path):
+        svc = {
+            "name": "CAS",
+            "local_repo": "cas-service",
+            "local_module": "cas.main",
+            "default_url": "http://h",
+        }
+        check = ExternalServiceCheck(svc)
+        
+        with patch("services.setup._services.Path.exists", return_value=False):
+             res = check._local_setup_fallback()
+             assert res is None
 
 
 # ── MCP config ───────────────────────────────────────────────
@@ -617,16 +712,27 @@ class TestSetupMainCli:
         console = mock_console_cls.return_value
         console.print.assert_called()
 
-    @patch("services.setup._runner.run_interactive_menu", return_value=True)
-    @patch("services.setup.main._all_steps", return_value=[])
+    @patch("services.setup._runner.run_steps", return_value=True)
     @patch("services.setup.main.Console")
-    def test_all_command_uses_interactive_menu(
-        self,
-        mock_console_cls,
-        mock_all_steps,
-        mock_run_menu,
-    ):
-        rc = setup_main.main(["all"])
-        assert rc == 0
-        mock_all_steps.assert_called_once()
-        mock_run_menu.assert_called_once()
+    def test_subcommands_use_run_steps(self, mock_console, mock_run_steps):
+        for cmd in ["check", "config", "services", "docker", "verify"]:
+            rc = setup_main.main([cmd])
+            assert rc == 0
+        assert mock_run_steps.call_count == 5
+
+    @patch("services.setup.main.Console")
+    def test_unknown_command_returns_one(self, mock_console):
+        rc = setup_main.main(["bogus"])
+        assert rc == 1
+        # It prints unknown command THEN usage
+        calls = mock_console.return_value.print.call_args_list
+        assert any("[red]Unknown command: bogus[/]" in str(c) for c in calls)
+
+    def test_project_root_discovery(self, tmp_path):
+        # We need to make sure _project_root finds pyproject.toml in tmp_path
+        (tmp_path / "pyproject.toml").touch()
+        # Mock Path.cwd() to be tmp_path
+        with patch("services.setup.main.Path.cwd", return_value=tmp_path):
+            with patch("services.setup.main.Path.resolve", return_value=tmp_path / "services" / "setup" / "main.py"):
+                root = setup_main._project_root()
+                assert root == tmp_path

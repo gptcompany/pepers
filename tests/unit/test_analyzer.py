@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+import os
 import subprocess
 from unittest.mock import MagicMock, patch
 
@@ -492,8 +493,22 @@ class TestParseLlmResponse:
 # ---------------------------------------------------------------------------
 
 
-class TestScoreValidation:
-    """Tests for score validation logic in handle_process()."""
+class TestAnalyzerMain:
+    """Tests for analyzer service entry point."""
+
+    @patch("services.analyzer.main.BaseService")
+    @patch("services.analyzer.main.load_config")
+    @patch("services.analyzer.main.init_db")
+    @patch("services.analyzer.main.migrate_db")
+    def test_main_startup(self, mock_migrate, mock_init, mock_load, mock_svc):
+        from services.analyzer.main import main
+        mock_load.return_value = MagicMock(port=8771, db_path="/tmp/test.db")
+        
+        main()
+        
+        mock_init.assert_called_once()
+        mock_migrate.assert_called_once()
+        mock_svc.return_value.run.assert_called_once()
 
     @patch("services.analyzer.main._update_paper_score")
     @patch("services.analyzer.main.fallback_chain")
@@ -772,3 +787,57 @@ class TestPromptConstants:
 
     def test_system_prompt_mentions_json(self):
         assert "JSON" in SCORING_SYSTEM_PROMPT
+
+
+# ---------------------------------------------------------------------------
+# TestLLMFallbackChain
+# ---------------------------------------------------------------------------
+
+
+class TestLLMFallbackChain:
+    """Tests for LLM fallback providers."""
+
+    @patch("shared.llm.subprocess.run")
+    def test_call_claude_cli_success(self, mock_run):
+        from shared.llm import call_claude_cli
+        # Claude/Codex/Gemini CLI in Phase 18 expect JSON from call_cli
+        mock_run.return_value = MagicMock(
+            returncode=0, 
+            stdout=json.dumps({"response": "Claude response"})
+        )
+        assert call_claude_cli("prompt", "system") == "Claude response"
+
+    @patch("shared.llm.subprocess.run")
+    def test_call_codex_cli_success(self, mock_run):
+        from shared.llm import call_codex_cli
+        # Codex CLI in Phase 18 uses text format
+        mock_run.return_value = MagicMock(
+            returncode=0, 
+            stdout="Codex response"
+        )
+        assert call_codex_cli("prompt", "system") == "Codex response"
+
+    @patch("shared.llm.urllib.request.urlopen")
+    @patch.dict(os.environ, {"OPENROUTER_API_KEY": "test-key"})
+    def test_call_openrouter_success(self, mock_open):
+        from shared.llm import call_openrouter
+        mock_resp = MagicMock()
+        mock_resp.read.return_value = json.dumps({"choices": [{"message": {"content": "OR response"}}]}).encode()
+        mock_resp.__enter__.return_value = mock_resp
+        mock_open.return_value = mock_resp
+        
+        assert call_openrouter("prompt", "system") == "OR response"
+
+
+# ---------------------------------------------------------------------------
+# TestJSONCleaning
+# ---------------------------------------------------------------------------
+
+
+class TestJSONCleaning:
+    """Tests for _clean_json_text()."""
+
+    def test_clean_json_text_raw(self):
+        from services.analyzer.main import _clean_json_text
+        # Analyzer's clean_json_text only does .strip()
+        assert _clean_json_text("  {\"a\": 1}  ") == "{\"a\": 1}"

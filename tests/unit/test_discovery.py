@@ -9,6 +9,7 @@ import requests
 
 from services.discovery.main import (
     DEFAULT_MAX_RESULTS,
+    DiscoveryHandler,
     extract_arxiv_id,
     search_arxiv,
     enrich_s2,
@@ -17,6 +18,80 @@ from services.discovery.main import (
     update_paper_s2,
     update_paper_crossref,
 )
+
+
+# ---------------------------------------------------------------------------
+# TestDiscoveryHandler
+# ---------------------------------------------------------------------------
+
+
+class TestDiscoveryHandler:
+    """Tests for DiscoveryHandler full flow."""
+
+    def _make_handler(self, db_path):
+        handler = DiscoveryHandler.__new__(DiscoveryHandler)
+        handler.db_path = db_path
+        handler.send_error_json = MagicMock()
+        return handler
+
+    @patch("services.discovery.main.search_arxiv")
+    @patch("services.discovery.main.upsert_paper")
+    @patch("services.discovery.main.enrich_s2")
+    @patch("services.discovery.main.enrich_crossref")
+    @patch("services.discovery.main.time.sleep")
+    def test_handle_process_arxiv_full_flow(self, mock_sleep, mock_cr, mock_s2, mock_upsert, mock_search, initialized_db):
+        db_path = str(initialized_db)
+        handler = self._make_handler(db_path)
+        
+        mock_search.return_value = [{"arxiv_id": "2401.00001", "title": "T", "doi": "10.1/j"}]
+        mock_upsert.return_value = 1
+        mock_s2.return_value = {"semantic_scholar_id": "s2_1", "citation_count": 10}
+        mock_cr.return_value = {"DOI": "10.1/j", "title": ["T"]}
+        
+        # Mock created_at == updated_at to count as new
+        from shared.db import transaction
+        with transaction(db_path) as conn:
+            conn.execute("INSERT INTO papers (id, arxiv_id, title, stage, created_at, updated_at) VALUES (1, '2401.00001', 'T', 'discovered', '2024-01-01', '2024-01-01')")
+
+        resp = handler.handle_process({"query": "test", "sources": ["arxiv"]})
+        
+        assert resp["papers_found"] == 1
+        assert resp["papers_new"] == 1
+        assert resp["papers_enriched_s2"] == 1
+        assert resp["papers_enriched_cr"] == 1
+        assert len(resp["errors"]) == 0
+
+    @patch("services.discovery.main.search_arxiv", side_effect=Exception("Arxiv Down"))
+    def test_handle_process_arxiv_error(self, mock_search, initialized_db):
+        handler = self._make_handler(str(initialized_db))
+        resp = handler.handle_process({"query": "test", "sources": ["arxiv"]})
+        assert "Arxiv Down" in resp["errors"][0]
+
+    @patch("services.discovery.openalex.search_openalex")
+    @patch("services.discovery.openalex.upsert_openalex_paper")
+    def test_handle_process_openalex_flow(self, mock_upsert, mock_search, initialized_db):
+        db_path = str(initialized_db)
+        handler = self._make_handler(db_path)
+        
+        mock_search.return_value = [{"openalex_id": "W123", "title": "T"}]
+        mock_upsert.return_value = 1
+        
+        # Mock already exists (updated_at > created_at)
+        from shared.db import transaction
+        with transaction(db_path) as conn:
+            conn.execute("INSERT INTO papers (id, arxiv_id, openalex_id, title, stage, created_at, updated_at) VALUES (1, 'arxiv_1', 'W123', 'T', 'discovered', '2024-01-01', '2024-01-02')")
+
+        resp = handler.handle_process({"query": "test", "sources": ["openalex"]})
+        
+        assert resp["papers_found"] == 1
+        assert resp["papers_new"] == 0
+        assert len(resp["errors"]) == 0
+
+    def test_handle_process_invalid_source(self, initialized_db):
+        handler = self._make_handler(str(initialized_db))
+        resp = handler.handle_process({"query": "test", "sources": ["invalid"]})
+        assert resp is None
+        handler.send_error_json.assert_called_once()
 
 
 # ---------------------------------------------------------------------------

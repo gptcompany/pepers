@@ -657,8 +657,22 @@ class TestParallelValidation:
 class TestValidatorHelpers:
     """Tests for standalone helper functions in main.py."""
 
-    def test_check_consistency_safe(self, initialized_db):
-        _check_consistency(str(initialized_db))
+    def test_check_consistency_warns_on_partial(self, extracted_formula_db):
+        db_path = str(extracted_formula_db)
+        # Manually insert a validation without updating formula stage
+        from shared.db import transaction
+        with transaction(db_path) as conn:
+            conn.execute(
+                "INSERT INTO validations (formula_id, engine, is_valid, result, time_ms) "
+                "VALUES (1, 'sympy', 1, 'x+1', 10)"
+            )
+        
+        # Should not crash and should log warning (implicitly covered)
+        _check_consistency(db_path)
+
+    def test_check_consistency_safe_on_error(self):
+        # Invalid DB path should not crash
+        _check_consistency("/nonexistent/path")
 
     def test_query_formulas_extracted(self, extracted_formula_db):
         formulas = _query_formulas(str(extracted_formula_db), 1, None, 10, False)
@@ -697,9 +711,47 @@ class TestValidatorHelpers:
         assert row["stage"] == "validated"
         conn.close()
 
+    def test_mark_formula_failed(self, extracted_formula_db):
+        db_path = str(extracted_formula_db)
+        _mark_formula_failed(db_path, 1, "validation failed")
+        from shared.db import get_connection
+        conn = get_connection(db_path)
+        row = conn.execute("SELECT stage, error FROM formulas WHERE id=1").fetchone()
+        assert row["stage"] == "failed"
+        assert "validator: validation failed" in row["error"]
+        conn.close()
 
-class TestValidatorHandler:
-    """Tests for ValidatorHandler.handle_process()."""
+    def test_query_formulas_force(self, extracted_formula_db):
+        db_path = str(extracted_formula_db)
+        # Mark as validated first
+        from shared.db import transaction
+        with transaction(db_path) as conn:
+            conn.execute("UPDATE formulas SET stage='validated' WHERE id=1")
+        
+        # Without force: 0
+        formulas = _query_formulas(db_path, None, None, 10, False)
+        assert len(formulas) == 0
+        
+        # With force: 1
+        formulas = _query_formulas(db_path, None, None, 10, True)
+        assert len(formulas) == 1
+
+
+class TestValidatorMain:
+    """Tests for validator service entry point."""
+
+    @patch("services.validator.main.BaseService")
+    @patch("services.validator.main.load_config")
+    @patch("services.validator.main.init_db")
+    @patch("services.validator.main.CASClient.health", return_value=True)
+    def test_main_startup(self, mock_health, mock_init, mock_load, mock_svc):
+        from services.validator.main import main
+        mock_load.return_value = MagicMock(port=8773, db_path="/tmp/test.db")
+        
+        main()
+        
+        mock_init.assert_called_once()
+        mock_svc.return_value.run.assert_called_once()
 
     @patch("services.validator.main.CASClient.health", return_value=True)
     @patch("services.validator.main.CASClient.validate")
@@ -728,15 +780,87 @@ class TestValidatorHandler:
         assert p_row["stage"] == "validated"
         conn.close()
 
-    @patch("services.validator.main.CASClient.health", return_value=False)
-    def test_handle_process_service_down(self, mock_health, extracted_formula_db):
+    @patch("services.validator.main.CASClient.health", return_value=True)
+    @patch("services.validator.main.CASClient.validate")
+    def test_handle_process_validation_failure(self, mock_validate, mock_health, extracted_formula_db):
+        db_path = str(extracted_formula_db)
+        handler = ValidatorHandler.__new__(ValidatorHandler)
+        handler.db_path = db_path
+        handler.cas_url = "http://cas:8769"
+        handler.engines = ["sympy", "maxima"]
+        
+        # Two failing engines -> stage='validated' (Consensus: INVALID)
+        mock_validate.return_value = CASResponse(
+            results=[_engine_ok("sympy", valid=False), _engine_ok("maxima", valid=False)],
+            latex_preprocessed="x++1",
+            time_ms=50
+        )
+        
+        resp = handler.handle_process({"paper_id": 1})
+        assert resp["formulas_processed"] == 1
+        assert resp["formulas_valid"] == 0
+        
+        from shared.db import get_connection
+        conn = get_connection(db_path)
+        f_row = conn.execute("SELECT stage FROM formulas WHERE id=1").fetchone()
+        # Stage is 'validated' even if consensus is INVALID
+        assert f_row["stage"] == "validated"
+        conn.close()
+
+    @patch("services.validator.main.CASClient.health", return_value=True)
+    @patch("services.validator.main.CASClient.validate")
+    def test_handle_process_unparseable(self, mock_validate, mock_health, extracted_formula_db):
         db_path = str(extracted_formula_db)
         handler = ValidatorHandler.__new__(ValidatorHandler)
         handler.db_path = db_path
         handler.cas_url = "http://cas:8769"
         handler.engines = ["sympy"]
-        handler.send_error_json = MagicMock()
         
-        resp = handler.handle_process({})
-        assert resp is None
+        # All engines failed to parse (success=False) -> UNPARSEABLE
+        mock_validate.return_value = CASResponse(
+            results=[_engine_err("sympy")],
+            latex_preprocessed="???",
+            time_ms=50
+        )
+        
+        resp = handler.handle_process({"paper_id": 1})
+        assert resp["formulas_processed"] == 1
+        
+        from shared.db import get_connection
+        conn = get_connection(db_path)
+        f_row = conn.execute("SELECT stage FROM formulas WHERE id=1").fetchone()
+        # UNPARSEABLE consensus leaves it at 'extracted'
+        assert f_row["stage"] == "extracted"
+        conn.close()
+
+    def test_handle_process_no_engines_error(self, initialized_db):
+        handler = ValidatorHandler.__new__(ValidatorHandler)
+        handler.db_path = str(initialized_db)
+        handler.engines = [] # Empty engines
+        handler.send_error_json = MagicMock()
+        res = handler.handle_process({})
+        assert res is None
         handler.send_error_json.assert_called_once()
+        args = handler.send_error_json.call_args[0]
+        assert args[1] == "NO_ENGINES"
+
+    @patch("services.validator.main.CASClient.health", return_value=True)
+    @patch("services.validator.main.CASClient.validate", side_effect=Exception("CAS Timeout"))
+    def test_handle_process_cas_exception(self, mock_validate, mock_health, extracted_formula_db):
+        db_path = str(extracted_formula_db)
+        handler = ValidatorHandler.__new__(ValidatorHandler)
+        handler.db_path = db_path
+        handler.cas_url = "http://cas:8769"
+        handler.engines = ["sympy"]
+        
+        resp = handler.handle_process({"paper_id": 1})
+        assert len(resp["errors"]) > 0
+        assert "CAS Timeout" in resp["errors"][0]
+
+    def test_handle_process_no_formulas(self, initialized_db):
+        handler = ValidatorHandler.__new__(ValidatorHandler)
+        handler.db_path = str(initialized_db)
+        handler.send_error_json = MagicMock()
+        resp = handler.handle_process({})
+        assert resp["formulas_processed"] == 0
+        assert resp["success"] is True

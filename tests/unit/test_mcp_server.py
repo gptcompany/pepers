@@ -63,8 +63,214 @@ class TestMCPMain:
 
 
 # ---------------------------------------------------------------------------
-# Flavor system
+# services/mcp/server.py Tests
 # ---------------------------------------------------------------------------
+
+
+class TestMCPServerTools:
+    """Tests for MCP tool functions and flavors."""
+
+    @patch("services.mcp.server._call_orchestrator")
+    def test_search_papers_hybrid_success(self, mock_call):
+        from services.mcp.server import search_papers
+        mock_call.return_value = {"answer": "The answer", "success": True}
+        
+        with patch("services.mcp.server.MCP_FLAVOR", "plain"):
+            res = search_papers("query")
+            assert "The answer" in res
+            assert "1 results found" in res
+
+    @patch("services.mcp.server._call_orchestrator")
+    def test_search_papers_context_only(self, mock_call):
+        from services.mcp.server import search_papers
+        mock_call.return_value = {"context": "chunk 1\n\nchunk 2", "success": True}
+        
+        with patch("services.mcp.server.MCP_FLAVOR", "plain"):
+            res = search_papers("query", context_only=True)
+            assert "2 context chunks retrieved" in res
+            assert "chunk 1" in res
+
+    @patch("services.mcp.server._call_orchestrator")
+    def test_get_paper_success(self, mock_call):
+        from services.mcp.server import get_paper
+        mock_call.return_value = {
+            "id": 1,
+            "title": "Test Paper",
+            "stage": "codegen",
+            "abstract": "The abstract",
+            "arxiv_id": "2401.00001",
+            "formulas": [{"latex": "x^2", "stage": "validated"}]
+        }
+        
+        with patch("services.mcp.server.MCP_FLAVOR", "plain"):
+            res = get_paper(1)
+            assert "Paper #1 retrieved" in res
+            assert "Test Paper" in res
+            assert "x^2" in res
+
+    @patch("services.mcp.server._call_orchestrator")
+    def test_get_paper_not_found(self, mock_call):
+        from services.mcp.server import get_paper
+        mock_call.return_value = {"error": "not found"}
+        
+        with patch("services.mcp.server.MCP_FLAVOR", "plain"):
+            res = get_paper(999)
+            assert "Paper #999 not found" in res
+
+    @patch("services.mcp.server._call_orchestrator")
+    def test_run_pipeline_full_params(self, mock_call):
+        from services.mcp.server import run_pipeline
+        mock_call.return_value = {"run_id": "run-456"}
+        
+        with patch("services.mcp.server.MCP_FLAVOR", "plain"):
+            res = run_pipeline("query", paper_id=1, stages=3)
+            assert "Pipeline run run-456 started" in res
+            mock_call.assert_called_once_with("POST", "/run", {
+                "stages": 3, "max_papers": 10, "max_formulas": 50,
+                "query": "query", "paper_id": 1
+            }, timeout=10)
+
+    @patch("services.mcp.server._call_orchestrator")
+    def test_search_github_success(self, mock_call):
+        from services.mcp.server import search_github
+        mock_call.return_value = {
+            "repos": [
+                {"full_name": "u/r", "stars": 100, "url": "h1", 
+                 "analysis": {"recommendation": "USE"}}
+            ]
+        }
+        
+        with patch("services.mcp.server.MCP_FLAVOR", "plain"):
+            res = search_github(1)
+            assert "1 repos found" in res
+            assert "u/r" in res
+            assert "Recommendation: USE" in res
+
+    @patch("services.mcp.server._call_orchestrator")
+    def test_add_notation_success(self, mock_call):
+        from services.mcp.server import add_notation
+        mock_call.return_value = {"success": True}
+        
+        with patch("services.mcp.server.MCP_FLAVOR", "plain"):
+            res = add_notation("KL", "D_{KL}", 2, "desc")
+            assert "Notation \\KL saved" in res
+            mock_call.assert_called_once_with("POST", "/notations", {
+                "name": "KL", "body": "D_{KL}", "nargs": 2, "description": "desc"
+            })
+
+    @patch("services.mcp.server._call_orchestrator")
+    def test_remove_notation_success(self, mock_call):
+        from services.mcp.server import remove_notation
+        mock_call.return_value = {"success": True}
+        
+        with patch("services.mcp.server.MCP_FLAVOR", "plain"):
+            res = remove_notation("KL")
+            assert "Notation \\KL removed" in res
+
+    @patch("urllib.request.urlopen")
+    def test_call_orchestrator_http_error(self, mock_open):
+        from services.mcp.server import _call_orchestrator
+        import urllib.error
+        
+        mock_fp = MagicMock()
+        mock_fp.read.return_value = b'{"error": "bad request"}'
+        err = urllib.error.HTTPError("url", 400, "Bad", {}, mock_fp)
+        mock_open.side_effect = err
+        
+        res = _call_orchestrator("GET", "/test")
+        assert res == {"error": "bad request"}
+
+    @patch("urllib.request.urlopen")
+    def test_call_orchestrator_network_error(self, mock_open):
+        from services.mcp.server import _call_orchestrator
+        import urllib.error
+        
+        mock_open.side_effect = urllib.error.URLError("refused")
+        with pytest.raises(RuntimeError, match="Cannot reach orchestrator"):
+            _call_orchestrator("GET", "/test")
+
+
+class TestMCPServerFlavors:
+    """Tests for flavor system (arcade vs plain)."""
+
+    def test_flavor_plain(self):
+        from services.mcp.server import _flavor
+        with patch("services.mcp.server.MCP_FLAVOR", "plain"):
+            res = _flavor("search_found", n=5)
+            assert res == "5 results found."
+
+    def test_flavor_arcade_random(self):
+        from services.mcp.server import _flavor
+        with patch("services.mcp.server.MCP_FLAVOR", "arcade"):
+            # Call multiple times to ensure we hit different variants
+            res1 = _flavor("search_found", n=10)
+            assert "10 papers acquired" in res1 or "10 papers locked" in res1 or "COMBO x10" in res1
+
+    def test_flavor_unknown_key(self):
+        from services.mcp.server import _flavor
+        with patch("services.mcp.server.MCP_FLAVOR", "plain"):
+            assert _flavor("unknown_key", x=1) == "unknown_key"
+
+
+class TestMCPServerToolsExtended:
+    """Extra tool edge cases."""
+
+    @patch("services.mcp.server._call_orchestrator")
+    def test_list_papers_empty(self, mock_call):
+        from services.mcp.server import list_papers
+        mock_call.return_value = []
+        with patch("services.mcp.server.MCP_FLAVOR", "plain"):
+            res = list_papers()
+            assert "No matches found" in res
+
+    @patch("services.mcp.server._call_orchestrator")
+    def test_get_formulas_empty(self, mock_call):
+        from services.mcp.server import get_formulas
+        mock_call.return_value = []
+        with patch("services.mcp.server.MCP_FLAVOR", "plain"):
+            res = get_formulas(1)
+            assert "No formulas found" in res
+
+    @patch("services.mcp.server._call_orchestrator")
+    def test_get_run_status_success(self, mock_call):
+        from services.mcp.server import get_run_status
+        mock_call.return_value = {
+            "status": "completed",
+            "stages_completed": 5,
+            "stages_requested": 5,
+            "papers_processed": 10
+        }
+        with patch("services.mcp.server.MCP_FLAVOR", "plain"):
+            res = get_run_status("run-1")
+            assert "status=completed" in res
+            assert "Stages: 5/5" in res
+            assert "Papers processed: 10" in res
+
+    @patch("services.mcp.server._call_orchestrator")
+    def test_add_notation_fail(self, mock_call):
+        from services.mcp.server import add_notation
+        mock_call.return_value = {"success": False, "error": "too long"}
+        with patch("services.mcp.server.MCP_FLAVOR", "plain"):
+            res = add_notation("X", "Y")
+            assert "Error: too long" in res
+
+    @patch("services.mcp.server._call_orchestrator")
+    def test_list_notations_success(self, mock_call):
+        from services.mcp.server import list_notations
+        mock_call.return_value = [{"name": "Expect", "body": "E", "nargs": 1, "description": "Exp"}]
+        with patch("services.mcp.server.MCP_FLAVOR", "plain"):
+            res = list_notations()
+            assert "1 custom notations" in res
+            assert "**\\Expect**{#1}" in res
+            assert "_Exp_" in res
+
+    @patch("services.mcp.server._call_orchestrator")
+    def test_remove_notation_fail(self, mock_call):
+        from services.mcp.server import remove_notation
+        mock_call.return_value = {"success": False, "error": "not found"}
+        with patch("services.mcp.server.MCP_FLAVOR", "plain"):
+            res = remove_notation("Z")
+            assert "Error: not found" in res
 
 
 class TestFlavorSystem:
