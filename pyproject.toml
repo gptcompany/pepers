@@ -1,6 +1,6 @@
 [project]
 name = "pepers"
-version = "1.0.0"
+version = "1.1.0"
 description = "PePeRS — Paper Extraction, Processing, Evaluation, Retrieval & Synthesis. Microservices for academic paper discovery, LLM analysis, formula extraction, CAS validation, and code generation."
 requires-python = ">=3.10"
 dependencies = [
