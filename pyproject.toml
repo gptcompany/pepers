@@ -47,3 +47,9 @@ markers = [
     "e2e: End-to-end tests (real APIs, network required)",
     "slow: Slow calibration tests (manual/nightly only)",
 ]
+
+[tool.semantic_release]
+version_toml = ["pyproject.toml:project.version"]
+branch = "main"
+commit_message = "chore(release): v{version}"
+build_command = ""
