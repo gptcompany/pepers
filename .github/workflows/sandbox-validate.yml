@@ -78,6 +78,33 @@ jobs:
           wait_url "http://localhost:8775/health"
           wait_url "http://localhost:8776/sse"
 
+      - name: Functional smoke (orchestrator read-only APIs)
+        run: |
+          set -euo pipefail
+          mkdir -p .artifacts
+
+          curl -fsS --max-time 5 http://localhost:8775/health > .artifacts/orchestrator-health.json
+          python - <<'PY'
+          import json
+          from pathlib import Path
+
+          payload = json.loads(Path(".artifacts/orchestrator-health.json").read_text())
+          if "schema_version" not in payload:
+              raise SystemExit("Missing schema_version in orchestrator /health response")
+          print(f"schema_version={payload['schema_version']}")
+          PY
+
+          curl -fsS --max-time 5 http://localhost:8775/notations > .artifacts/orchestrator-notations.json
+          python - <<'PY'
+          import json
+          from pathlib import Path
+
+          payload = json.loads(Path(".artifacts/orchestrator-notations.json").read_text())
+          if not isinstance(payload, list):
+              raise SystemExit("/notations did not return a JSON list")
+          print(f"notations_count={len(payload)}")
+          PY
+
       - name: Probe external dependencies (optional)
         run: |
           set -euo pipefail
