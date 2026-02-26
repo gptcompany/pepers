@@ -12,6 +12,7 @@ Usage:
 from __future__ import annotations
 
 import sys
+from collections.abc import Callable
 from pathlib import Path
 
 from rich.console import Console
@@ -76,6 +77,45 @@ def _all_steps(root: Path) -> list:
     ]
 
 
+def _check_steps(root: Path) -> list:
+    from services.setup._checks import get_all_steps
+
+    return get_all_steps(root)
+
+
+def _config_steps(root: Path) -> list:
+    from services.setup._config import EnvConfig
+
+    return [EnvConfig(root)]
+
+
+def _services_steps(_: Path) -> list:
+    from services.setup._services import get_all_steps
+
+    return get_all_steps()
+
+
+def _docker_steps(root: Path) -> list:
+    from services.setup._docker import get_all_steps
+
+    return get_all_steps(root)
+
+
+def _verify_steps(_: Path) -> list:
+    from services.setup._verify import AggregatedHealthCheck
+
+    return [AggregatedHealthCheck()]
+
+
+SUBCOMMANDS: dict[str, Callable[[Path], list]] = {
+    "check": _check_steps,
+    "config": _config_steps,
+    "services": _services_steps,
+    "docker": _docker_steps,
+    "verify": _verify_steps,
+}
+
+
 def main(argv: list[str] | None = None) -> int:
     args = argv if argv is not None else sys.argv[1:]
     console = Console()
@@ -91,26 +131,13 @@ def main(argv: list[str] | None = None) -> int:
 
     from services.setup._runner import run_interactive_menu, run_steps
 
-    if command == "check":
-        from services.setup._checks import get_all_steps
-        steps = get_all_steps(root)
-    elif command == "config":
-        from services.setup._config import EnvConfig
-        steps = [EnvConfig(root)]
-    elif command == "services":
-        from services.setup._services import get_all_steps
-        steps = get_all_steps()
-    elif command == "docker":
-        from services.setup._docker import get_all_steps
-        steps = get_all_steps(root)
-    elif command == "verify":
-        from services.setup._verify import AggregatedHealthCheck
-        steps = [AggregatedHealthCheck()]
-    elif command == "all":
+    if command == "all":
         console.print(WELCOME_GUIDE)
         steps = _all_steps(root)
         ok = run_interactive_menu(steps, console)
         return 0 if ok else 1
+    elif command in SUBCOMMANDS:
+        steps = SUBCOMMANDS[command](root)
     else:
         console.print(f"[red]Unknown command: {command}[/]")
         _print_usage(console)
