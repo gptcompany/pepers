@@ -8,6 +8,13 @@ from unittest.mock import MagicMock, patch
 import pytest
 import requests
 
+from shared.db import transaction
+from services.orchestrator.main import (
+    OrchestratorHandler,
+    _cron_run,
+    _query_rag,
+    _run_pipeline_async,
+)
 from services.orchestrator.pipeline import (
     STAGE_ORDER,
     STAGE_PARAMS,
@@ -536,3 +543,199 @@ class TestSearchFallback:
 
         assert result["success"] is True
         assert result["papers"] == []
+
+
+# ---------------------------------------------------------------------------
+# services/orchestrator/main.py Handler Tests
+# ---------------------------------------------------------------------------
+
+
+class TestOrchestratorHandler:
+    """Tests for OrchestratorHandler routes."""
+
+    @patch("threading.Thread")
+    @patch("services.orchestrator.pipeline.PipelineRunner._generate_run_id", return_value="run-123")
+    def test_handle_run_async(self, mock_gen_id, mock_thread, initialized_db):
+        handler = OrchestratorHandler.__new__(OrchestratorHandler)
+        handler.runner = MagicMock()
+        handler.send_json = MagicMock()
+        
+        handler.handle_run({"query": "test", "stages": 3})
+        
+        handler.send_json.assert_called_once_with(
+            {"run_id": "run-123", "status": "running"},
+            status=202,
+        )
+        mock_thread.assert_called_once()
+
+    def test_handle_status(self, initialized_db):
+        handler = OrchestratorHandler.__new__(OrchestratorHandler)
+        handler.runner = MagicMock()
+        handler.runner.get_pipeline_status.return_value = {"active_runs": 0}
+        
+        res = handler.handle_status()
+        assert res["active_runs"] == 0
+        assert "cron" in res
+
+    def test_handle_papers_list(self, analyzed_paper_db):
+        handler = OrchestratorHandler.__new__(OrchestratorHandler)
+        handler.db_path = str(analyzed_paper_db)
+        handler.path = "/papers?stage=analyzed"
+        
+        res = handler.handle_papers()
+        assert isinstance(res, list)
+        assert len(res) == 1
+        assert res[0]["stage"] == "analyzed"
+
+    def test_handle_papers_detail(self, validated_formula_db):
+        handler = OrchestratorHandler.__new__(OrchestratorHandler)
+        handler.db_path = str(validated_formula_db)
+        handler.path = "/papers?id=1"
+        handler.send_error_json = MagicMock()
+        
+        res = handler.handle_papers()
+        assert res["id"] == 1
+        assert "formulas" in res
+        assert len(res["formulas"]) == 1
+
+    def test_handle_formulas(self, validated_formula_db):
+        handler = OrchestratorHandler.__new__(OrchestratorHandler)
+        handler.db_path = str(validated_formula_db)
+        handler.path = "/formulas?paper_id=1"
+        
+        res = handler.handle_formulas()
+        assert len(res) == 1
+        assert res[0]["paper_id"] == 1
+
+    def test_handle_generated_code(self, validated_formula_db):
+        db_path = str(validated_formula_db)
+        from shared.db import transaction
+        with transaction(db_path) as conn:
+            conn.execute(
+                "INSERT INTO generated_code (formula_id, language, code) "
+                "VALUES (?, ?, ?)",
+                (1, "python", "def f(): pass")
+            )
+        
+        handler = OrchestratorHandler.__new__(OrchestratorHandler)
+        handler.db_path = db_path
+        handler.path = "/generated-code?paper_id=1"
+        
+        res = handler.handle_generated_code()
+        assert len(res) == 1
+        assert res[0]["language"] == "python"
+
+    def test_handle_generated_code_no_paper_id(self):
+        handler = OrchestratorHandler.__new__(OrchestratorHandler)
+        handler.path = "/generated-code"
+        handler.send_error_json = MagicMock()
+        
+        res = handler.handle_generated_code()
+        assert res is None
+        handler.send_error_json.assert_called_once()
+
+    @patch("services.orchestrator.main.search_and_analyze")
+    def test_handle_search_github(self, mock_sa, initialized_db):
+        handler = OrchestratorHandler.__new__(OrchestratorHandler)
+        handler.db_path = str(initialized_db)
+        mock_sa.return_value = {"success": True}
+        
+        res = handler.handle_search_github({"paper_id": 1})
+        assert res["success"] is True
+
+    def test_handle_github_repos(self, initialized_db):
+        db_path = str(initialized_db)
+        with transaction(db_path) as conn:
+            conn.execute("INSERT INTO papers (id, title, stage) VALUES (1, 't', 'analyzed')")
+            conn.execute("INSERT INTO github_repos (paper_id, full_name, url, clone_url) VALUES (1, 'u/r', 'h', 'c')")
+            
+        handler = OrchestratorHandler.__new__(OrchestratorHandler)
+        handler.db_path = db_path
+        handler.path = "/github-repos?paper_id=1"
+        
+        res = handler.handle_github_repos()
+        assert len(res) == 1
+        assert res[0]["repo"]["full_name"] == "u/r"
+
+    @patch("services.orchestrator.main._query_rag")
+    def test_handle_search_rag(self, mock_rag, initialized_db):
+        handler = OrchestratorHandler.__new__(OrchestratorHandler)
+        handler.db_path = str(initialized_db)
+        mock_rag.return_value = {"success": True, "answer": "The answer"}
+        
+        res = handler.handle_search({"query": "test"})
+        assert res["answer"] == "The answer"
+
+    @patch("services.orchestrator.main._query_rag", side_effect=Exception("RAG Down"))
+    def test_handle_search_fallback(self, mock_rag, initialized_db):
+        db_path = str(initialized_db)
+        with transaction(db_path) as conn:
+            conn.execute("INSERT INTO papers (id, title, stage) VALUES (1, 'Kelly criterion', 'analyzed')")
+            
+        handler = OrchestratorHandler.__new__(OrchestratorHandler)
+        handler.db_path = db_path
+        
+        res = handler.handle_search({"query": "Kelly"})
+        assert res["mode"] == "fallback"
+        assert len(res["papers"]) == 1
+
+    def test_handle_services_status(self):
+        handler = OrchestratorHandler.__new__(OrchestratorHandler)
+        handler.runner = MagicMock()
+        handler.runner.get_services_health.return_value = {"discovery": "ok"}
+        
+        res = handler.handle_services_status()
+        assert res["discovery"] == "ok"
+
+    def test_handle_runs_list(self):
+        handler = OrchestratorHandler.__new__(OrchestratorHandler)
+        handler.runner = MagicMock()
+        handler.runner.list_runs.return_value = [{"run_id": "1"}]
+        handler.path = "/runs"
+        
+        res = handler.handle_runs()
+        assert len(res) == 1
+
+    def test_handle_runs_detail(self):
+        handler = OrchestratorHandler.__new__(OrchestratorHandler)
+        handler.runner = MagicMock()
+        handler.runner.get_run_status.return_value = {"run_id": "run-1"}
+        handler.path = "/runs?id=run-1"
+        
+        res = handler.handle_runs()
+        assert res["run_id"] == "run-1"
+
+    def test_handle_delete_notation_not_found(self, initialized_db):
+        handler = OrchestratorHandler.__new__(OrchestratorHandler)
+        handler.db_path = str(initialized_db)
+        handler.send_error_json = MagicMock()
+        
+        res = handler.handle_delete_notation({"name": "nonexistent"})
+        assert res is None
+        handler.send_error_json.assert_called_once()
+
+
+class TestCronHelpers:
+    """Tests for cron and async run helpers."""
+
+    @patch("services.orchestrator.main.notify_pipeline_result")
+    def test_run_pipeline_async_success(self, mock_notify):
+        runner = MagicMock()
+        runner.run.return_value = {"status": "completed"}
+        _run_pipeline_async(runner, "run-123")
+        mock_notify.assert_called_once_with({"status": "completed"})
+
+    @patch("services.orchestrator.main.notify")
+    @patch("services.orchestrator.main.OrchestratorHandler.runner")
+    def test_cron_run_success(self, mock_runner, mock_notify):
+        # Setup the class-level runner
+        OrchestratorHandler.runner = MagicMock()
+        OrchestratorHandler.runner.run.return_value = {
+            "status": "completed",
+            "stages_completed": 5,
+            "stages_requested": 5,
+        }
+        
+        with patch.dict(os.environ, {"RP_ORCHESTRATOR_CRON_ENABLED": "true"}):
+            _cron_run()
+            OrchestratorHandler.runner.run.assert_called_once()

@@ -22,6 +22,17 @@ from services.codegen.explain import (
     explain_formula,
     explain_formulas_batch,
 )
+from services.codegen.main import (
+    CodegenHandler,
+    _check_consistency,
+    _mark_formula_failed,
+    _query_formulas,
+    _release_memory,
+    _store_generated_code,
+    _update_formula_description,
+    _update_formula_stage,
+    _update_paper_stage,
+)
 from shared.models import FormulaExplanation
 
 
@@ -795,3 +806,169 @@ class TestExplainFormulasBatch:
         prompt = call_args[1]["prompt"] if "prompt" in call_args[1] else call_args[0][0]
         assert r"\frac{p}{q}" in prompt
         assert r"x^2 + 1" in prompt
+
+
+# ===========================================================================
+# services/codegen/main.py Tests
+# ===========================================================================
+
+
+class TestCodegenHelpers:
+    """Tests for standalone helper functions in main.py."""
+
+    def test_release_memory_safe(self):
+        """_release_memory() should not crash on any platform."""
+        _release_memory()  # Should run without error
+
+    def test_check_consistency_safe(self, initialized_db):
+        """_check_consistency() should run without error on empty DB."""
+        _check_consistency(str(initialized_db))
+
+    def test_query_formulas_by_paper_id(self, validated_formula_db):
+        formulas = _query_formulas(str(validated_formula_db), 1, None, 10, False)
+        assert len(formulas) == 1
+        assert formulas[0]["paper_id"] == 1
+
+    def test_query_formulas_by_formula_id(self, validated_formula_db):
+        formulas = _query_formulas(str(validated_formula_db), None, 1, 10, False)
+        assert len(formulas) == 1
+        assert formulas[0]["id"] == 1
+
+    def test_query_formulas_force(self, validated_formula_db):
+        # Mark as codegen stage first
+        _update_formula_stage(str(validated_formula_db), 1)
+        # Without force, should be 0 (since it's not 'validated' stage)
+        formulas = _query_formulas(str(validated_formula_db), None, None, 10, False)
+        assert len(formulas) == 0
+        # With force, should be 1
+        formulas = _query_formulas(str(validated_formula_db), None, None, 10, True)
+        assert len(formulas) == 1
+
+    def test_store_generated_code(self, validated_formula_db):
+        db_path = str(validated_formula_db)
+        _store_generated_code(db_path, 1, "rust", "fn test() {}", {"v": 1}, None)
+        from shared.db import get_connection
+        conn = get_connection(db_path)
+        row = conn.execute("SELECT * FROM generated_code WHERE formula_id=1").fetchone()
+        assert row["language"] == "rust"
+        assert row["code"] == "fn test() {}"
+        assert json.loads(row["metadata"]) == {"v": 1}
+        conn.close()
+
+    def test_update_formula_description(self, validated_formula_db):
+        db_path = str(validated_formula_db)
+        _update_formula_description(db_path, 1, '{"desc": "test"}')
+        from shared.db import get_connection
+        conn = get_connection(db_path)
+        row = conn.execute("SELECT description FROM formulas WHERE id=1").fetchone()
+        assert row["description"] == '{"desc": "test"}'
+        conn.close()
+
+    def test_update_paper_stage(self, initialized_db, sample_paper_row):
+        from services.discovery.main import upsert_paper
+        db_path = str(initialized_db)
+        upsert_paper(db_path, sample_paper_row)
+        _update_paper_stage(db_path, 1, "codegen")
+        from shared.db import get_connection
+        conn = get_connection(db_path)
+        row = conn.execute("SELECT stage FROM papers WHERE id=1").fetchone()
+        assert row["stage"] == "codegen"
+        conn.close()
+
+    def test_mark_formula_failed(self, validated_formula_db):
+        db_path = str(validated_formula_db)
+        _mark_formula_failed(db_path, 1, "some error")
+        from shared.db import get_connection
+        conn = get_connection(db_path)
+        row = conn.execute("SELECT stage, error FROM formulas WHERE id=1").fetchone()
+        assert row["stage"] == "failed"
+        assert row["error"] == "some error"
+        conn.close()
+
+
+class TestCodegenHandler:
+    """Tests for CodegenHandler.handle_process()."""
+
+    @patch("services.codegen.main.explain_formulas_batch")
+    @patch("services.codegen.main.generate_all")
+    def test_handle_process_success(self, mock_gen, mock_explain, validated_formula_db):
+        db_path = str(validated_formula_db)
+        handler = CodegenHandler.__new__(CodegenHandler)
+        handler.db_path = db_path
+        
+        # Mock batch explain
+        mock_explain.return_value = {1: {"explanation": "Calculates f*"}}
+        
+        # Mock code generation for 3 languages
+        mock_gen.return_value = [
+            {"language": "c99", "code": "double f() {}", "metadata": {}, "error": None},
+            {"language": "rust", "code": "fn f() {}", "metadata": {}, "error": None},
+            {"language": "python", "code": "def f(): pass", "metadata": {}, "error": None},
+        ]
+        
+        resp = handler.handle_process({"paper_id": 1})
+        
+        assert resp["success"] is True
+        assert resp["formulas_processed"] == 1
+        assert resp["code_generated"] == {"c99": 1, "rust": 1, "python": 1}
+        assert resp["explanations_generated"] == 1
+        
+        # Verify DB updates
+        from shared.db import get_connection
+        conn = get_connection(db_path)
+        f_row = conn.execute("SELECT stage, description FROM formulas WHERE id=1").fetchone()
+        assert f_row["stage"] == "codegen"
+        assert "Calculates f*" in f_row["description"]
+        
+        p_row = conn.execute("SELECT stage FROM papers WHERE id=1").fetchone()
+        assert p_row["stage"] == "codegen"
+        conn.close()
+
+    def test_handle_process_no_formulas(self, initialized_db):
+        handler = CodegenHandler.__new__(CodegenHandler)
+        handler.db_path = str(initialized_db)
+        resp = handler.handle_process({})
+        assert resp["success"] is True
+        assert resp["formulas_processed"] == 0
+
+    @patch("services.codegen.main.explain_formulas_batch", return_value={})
+    @patch("services.codegen.main.generate_all")
+    def test_handle_process_partial_failure(self, mock_gen, mock_explain, validated_formula_db):
+        db_path = str(validated_formula_db)
+        handler = CodegenHandler.__new__(CodegenHandler)
+        handler.db_path = db_path
+        
+        # Mock code generation: one fails
+        mock_gen.return_value = [
+            {"language": "c99", "code": "", "metadata": {}, "error": "C error"},
+            {"language": "rust", "code": "fn f() {}", "metadata": {}, "error": None},
+            {"language": "python", "code": "def f(): pass", "metadata": {}, "error": None},
+        ]
+        
+        resp = handler.handle_process({})
+        assert resp["code_generated"]["c99"] == 0
+        assert resp["code_generated"]["rust"] == 1
+        assert len(resp["errors"]) == 1
+        assert "C error" in resp["errors"][0]
+
+    @patch("services.codegen.main.explain_formulas_batch", return_value={})
+    @patch("services.codegen.main.generate_all")
+    def test_handle_process_all_languages_fail(self, mock_gen, mock_explain, validated_formula_db):
+        db_path = str(validated_formula_db)
+        handler = CodegenHandler.__new__(CodegenHandler)
+        handler.db_path = db_path
+        
+        mock_gen.return_value = [
+            {"language": "c99", "code": "", "metadata": {}, "error": "err"},
+            {"language": "rust", "code": "", "metadata": {}, "error": "err"},
+            {"language": "python", "code": "", "metadata": {}, "error": "err"},
+        ]
+        
+        handler.handle_process({})
+        
+        from shared.db import get_connection
+        conn = get_connection(db_path)
+        f_row = conn.execute("SELECT stage, error FROM formulas WHERE id=1").fetchone()
+        assert f_row["stage"] == "failed"
+        assert "codegen: all languages failed" in f_row["error"]
+        conn.close()

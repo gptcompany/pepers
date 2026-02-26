@@ -19,6 +19,15 @@ from services.validator.consensus import (
     ConsensusResult,
     apply_consensus,
 )
+from services.validator.main import (
+    ValidatorHandler,
+    _check_consistency,
+    _mark_formula_failed,
+    _query_formulas,
+    _store_validations,
+    _update_formula_stage,
+    _update_paper_stage,
+)
 
 
 # ---------------------------------------------------------------------------
@@ -638,3 +647,96 @@ class TestParallelValidation:
         seq_ids = sorted(r.formula_id for r in seq_results)
         par_ids = sorted(r.formula_id for r in par_results)
         assert seq_ids == par_ids
+
+
+# ===========================================================================
+# services/validator/main.py Tests
+# ===========================================================================
+
+
+class TestValidatorHelpers:
+    """Tests for standalone helper functions in main.py."""
+
+    def test_check_consistency_safe(self, initialized_db):
+        _check_consistency(str(initialized_db))
+
+    def test_query_formulas_extracted(self, extracted_formula_db):
+        formulas = _query_formulas(str(extracted_formula_db), 1, None, 10, False)
+        assert len(formulas) == 1
+        assert formulas[0]["stage"] == "extracted"
+
+    def test_store_validations(self, extracted_formula_db):
+        db_path = str(extracted_formula_db)
+        res = [_engine_ok("sympy")]
+        _store_validations(db_path, 1, res)
+        
+        from shared.db import get_connection
+        conn = get_connection(db_path)
+        row = conn.execute("SELECT * FROM validations WHERE formula_id=1").fetchone()
+        assert row["engine"] == "sympy"
+        assert row["is_valid"] == 1
+        conn.close()
+
+    def test_update_formula_stage_valid(self, extracted_formula_db):
+        db_path = str(extracted_formula_db)
+        consensus = ConsensusResult(ConsensusOutcome.VALID, "ok", 2, 2)
+        _update_formula_stage(db_path, 1, consensus)
+        
+        from shared.db import get_connection
+        conn = get_connection(db_path)
+        row = conn.execute("SELECT stage FROM formulas WHERE id=1").fetchone()
+        assert row["stage"] == "validated"
+        conn.close()
+
+    def test_update_paper_stage(self, extracted_formula_db):
+        db_path = str(extracted_formula_db)
+        _update_paper_stage(db_path, 1, "validated")
+        from shared.db import get_connection
+        conn = get_connection(db_path)
+        row = conn.execute("SELECT stage FROM papers WHERE id=1").fetchone()
+        assert row["stage"] == "validated"
+        conn.close()
+
+
+class TestValidatorHandler:
+    """Tests for ValidatorHandler.handle_process()."""
+
+    @patch("services.validator.main.CASClient.health", return_value=True)
+    @patch("services.validator.main.CASClient.validate")
+    def test_handle_process_success(self, mock_validate, mock_health, extracted_formula_db):
+        db_path = str(extracted_formula_db)
+        handler = ValidatorHandler.__new__(ValidatorHandler)
+        handler.db_path = db_path
+        handler.cas_url = "http://cas:8769"
+        handler.cas_timeout = 60
+        handler.engines = ["sympy", "maxima"]
+        
+        mock_validate.return_value = CASResponse(
+            results=[_engine_ok("sympy"), _engine_ok("maxima")],
+            latex_preprocessed="x+1",
+            time_ms=100
+        )
+        
+        resp = handler.handle_process({"paper_id": 1})
+        assert resp["success"] is True
+        assert resp["formulas_processed"] == 1
+        assert resp["formulas_valid"] == 1
+        
+        from shared.db import get_connection
+        conn = get_connection(db_path)
+        p_row = conn.execute("SELECT stage FROM papers WHERE id=1").fetchone()
+        assert p_row["stage"] == "validated"
+        conn.close()
+
+    @patch("services.validator.main.CASClient.health", return_value=False)
+    def test_handle_process_service_down(self, mock_health, extracted_formula_db):
+        db_path = str(extracted_formula_db)
+        handler = ValidatorHandler.__new__(ValidatorHandler)
+        handler.db_path = db_path
+        handler.cas_url = "http://cas:8769"
+        handler.engines = ["sympy"]
+        handler.send_error_json = MagicMock()
+        
+        resp = handler.handle_process({})
+        assert resp is None
+        handler.send_error_json.assert_called_once()

@@ -15,8 +15,20 @@ from services.setup._checks import (
     UvCheck,
     VenvCheck,
 )
+from services.setup._cli_tools import NodeCheck, NpmCliTool, OllamaCheck
+from services.setup._docker import (
+    DockerCheck,
+    DockerComposeCheck,
+    DockerComposeUp,
+)
 from services.setup import main as setup_main
-from services.setup._config import _CONFIG_VARS, _read_env_values, EnvConfig
+from services.setup._config import (
+    _CONFIG_VARS,
+    _read_env_values,
+    _validate_port,
+    _validate_url,
+    EnvConfig,
+)
 from services.setup._mcp_config import McpConfigStep
 from services.setup._services import _EXTERNAL_SERVICES, ExternalServiceCheck
 from services.setup._verify import _EXTERNAL, AggregatedHealthCheck
@@ -39,6 +51,117 @@ class TestPythonCheck:
         step = PythonCheck()
         console = MagicMock()
         assert step.install(console) is False
+
+
+# ── NodeCheck ────────────────────────────────────────────────
+
+class TestNodeCheck:
+    @patch("shutil.which", return_value="/usr/bin/node")
+    @patch("subprocess.run")
+    def test_check_passes_node18(self, mock_run, mock_which):
+        mock_run.return_value = MagicMock(stdout="v18.15.0\n")
+        step = NodeCheck()
+        assert step.check() is True
+
+    @patch("shutil.which", return_value="/usr/bin/node")
+    @patch("subprocess.run")
+    def test_check_fails_old_node(self, mock_run, mock_which):
+        mock_run.return_value = MagicMock(stdout="v16.0.0\n")
+        step = NodeCheck()
+        assert step.check() is False
+
+    @patch("platform.system", return_value="Linux")
+    @patch("subprocess.run")
+    def test_install_linux(self, mock_run, mock_platform):
+        console = MagicMock()
+        step = NodeCheck()
+        mock_run.return_value = MagicMock(returncode=0)
+        assert step.install(console) is True
+        mock_run.assert_called_with(["sh", "-c", "curl -fsSL https://deb.nodesource.com/setup_20.x | sudo -E bash - && sudo apt-get install -y nodejs"], check=True, text=True)
+
+
+# ── OllamaCheck ──────────────────────────────────────────────
+
+class TestOllamaCheck:
+    @patch("shutil.which", return_value="/usr/bin/ollama")
+    def test_check_passes(self, mock_which):
+        step = OllamaCheck()
+        assert step.check() is True
+
+    @patch("platform.system", return_value="Darwin")
+    @patch("shutil.which", return_value="/usr/local/bin/brew")
+    @patch("subprocess.run")
+    def test_install_macos(self, mock_run, mock_which, mock_platform):
+        console = MagicMock()
+        step = OllamaCheck()
+        mock_run.return_value = MagicMock(returncode=0)
+        assert step.install(console) is True
+        mock_run.assert_called_with(["brew", "install", "ollama"], check=True, text=True)
+
+
+# ── NpmCliTool ───────────────────────────────────────────────
+
+class TestNpmCliTool:
+    @patch("shutil.which")
+    @patch("subprocess.run")
+    def test_install_success(self, mock_run, mock_which):
+        # npm is found, binary is NOT found
+        mock_which.side_effect = lambda x: "/usr/bin/npm" if x == "npm" else None
+        mock_run.return_value = MagicMock(returncode=0)
+        
+        step = NpmCliTool("Test", "Desc", "test-bin", "test-pkg")
+        console = MagicMock()
+        assert step.install(console) is True
+        mock_run.assert_called_with(["npm", "install", "-g", "test-pkg"], check=True, capture_output=True, text=True)
+
+
+# ── DockerCheck ──────────────────────────────────────────────
+
+class TestDockerCheck:
+    @patch("shutil.which", return_value="/usr/bin/docker")
+    def test_check_passes(self, mock_which):
+        step = DockerCheck()
+        assert step.check() is True
+
+
+# ── DockerComposeCheck ───────────────────────────────────────
+
+class TestDockerComposeCheck:
+    @patch("subprocess.run")
+    def test_check_passes(self, mock_run):
+        mock_run.return_value = MagicMock(returncode=0)
+        step = DockerComposeCheck()
+        assert step.check() is True
+
+    @patch("subprocess.run", side_effect=FileNotFoundError)
+    def test_check_fails_missing(self, mock_run):
+        step = DockerComposeCheck()
+        assert step.check() is False
+
+
+# ── DockerComposeUp ──────────────────────────────────────────
+
+class TestDockerComposeUp:
+    def test_compose_file_discovery(self, tmp_path):
+        (tmp_path / "docker-compose.yml").touch()
+        step = DockerComposeUp(tmp_path)
+        assert step._compose_file() == tmp_path / "docker-compose.yml"
+
+    @patch("subprocess.run")
+    def test_check_passes_running(self, mock_run, tmp_path):
+        (tmp_path / "compose.yml").touch()
+        mock_run.return_value = MagicMock(returncode=0, stdout='{"Status": "running"}')
+        step = DockerComposeUp(tmp_path)
+        assert step.check() is True
+
+    @patch("subprocess.run")
+    def test_install_up(self, mock_run, tmp_path):
+        (tmp_path / "compose.yml").touch()
+        mock_run.return_value = MagicMock(returncode=0)
+        step = DockerComposeUp(tmp_path)
+        console = MagicMock()
+        assert step.install(console) is True
+        mock_run.assert_called_with(["docker", "compose", "up", "-d"], cwd=tmp_path, check=True, text=True)
 
 
 # ── UvCheck ──────────────────────────────────────────────────
@@ -113,6 +236,20 @@ class TestDiskSpaceCheck:
 
 # ── EnvConfig ────────────────────────────────────────────────
 
+class TestConfigValidators:
+    def test_validate_port(self):
+        assert _validate_port("8080") is True
+        assert isinstance(_validate_port("0"), str)
+        assert isinstance(_validate_port("70000"), str)
+        assert isinstance(_validate_port("abc"), str)
+
+    def test_validate_url(self):
+        assert _validate_url("http://localhost:8080") is True
+        assert _validate_url("https://example.com:443") is True
+        assert isinstance(_validate_url("localhost:8080"), str)
+        assert isinstance(_validate_url("http://localhost"), str)
+
+
 class TestEnvConfig:
     def test_check_fails_when_no_env(self, tmp_path):
         step = EnvConfig(tmp_path)
@@ -136,6 +273,31 @@ class TestEnvConfig:
         env_file = tmp_path / ".env"
         env_file.write_text("something")
         assert step.verify() is True
+
+    @patch("questionary.text")
+    @patch("questionary.select")
+    @patch("questionary.confirm")
+    def test_install_generates_env_file(self, mock_confirm, mock_select, mock_text, tmp_path):
+        mock_text.return_value.ask.return_value = "custom-val"
+        mock_select.return_value.ask.return_value = "choice-val"
+        mock_confirm.return_value.ask.return_value = False
+        
+        step = EnvConfig(tmp_path)
+        console = MagicMock()
+        assert step.install(console) is True
+        
+        env_content = (tmp_path / ".env").read_text()
+        assert "RP_DB_PATH=custom-val" in env_content
+        assert "RP_LOG_LEVEL=choice-val" in env_content
+
+    @patch("questionary.text")
+    @patch("questionary.confirm")
+    def test_install_aborts_on_ctrl_c(self, mock_confirm, mock_text, tmp_path):
+        mock_text.return_value.ask.return_value = None # Simulates Ctrl-C
+        
+        step = EnvConfig(tmp_path)
+        console = MagicMock()
+        assert step.install(console) is False
 
     def test_read_env_values_parses_simple_env_file(self, tmp_path):
         env_file = tmp_path / ".env"

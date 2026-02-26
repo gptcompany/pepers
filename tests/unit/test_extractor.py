@@ -27,11 +27,20 @@ from services.extractor.rag_client import (
 from services.extractor.latex import (
     CONTEXT_WINDOW,
     MIN_FORMULA_LENGTH,
+    expand_custom_notations,
     extract_context,
     extract_formulas,
     filter_formulas,
     formulas_to_models,
     is_nontrivial,
+)
+from services.extractor.main import (
+    ExtractorHandler,
+    _check_consistency,
+    _load_notations,
+    _mark_failed,
+    _query_papers,
+    _store_results,
 )
 from shared.models import Formula, Paper
 
@@ -680,3 +689,148 @@ class TestFormulasToModels:
         models = formulas_to_models(paper_id=1, text=text, raw_formulas=raw)
         expected_hash = hashlib.sha256(r"\alpha + \beta".encode()).hexdigest()
         assert models[0].latex_hash == expected_hash
+
+
+# ---------------------------------------------------------------------------
+# TestExpandCustomNotations
+# ---------------------------------------------------------------------------
+
+
+class TestExpandCustomNotations:
+    """Tests for expand_custom_notations()."""
+
+    def test_expand_no_args(self):
+        formulas = [{"latex": r"\KL(p || q)"}]
+        notations = [{"name": "KL", "body": "D_{KL}", "nargs": 0}]
+        expanded = expand_custom_notations(formulas, notations)
+        assert expanded[0]["latex"] == r"D_{KL}(p || q)"
+
+    def test_expand_with_args(self):
+        formulas = [{"latex": r"\prob{X}{Y}"}]
+        notations = [{"name": "prob", "body": "P(#1 | #2)", "nargs": 2}]
+        expanded = expand_custom_notations(formulas, notations)
+        assert expanded[0]["latex"] == "P(X | Y)"
+
+    def test_expand_multiple(self):
+        formulas = [{"latex": r"\KL(p || q) + \prob{X}{Y}"}]
+        notations = [
+            {"name": "KL", "body": "D_{KL}", "nargs": 0},
+            {"name": "prob", "body": "P(#1 | #2)", "nargs": 2},
+        ]
+        expanded = expand_custom_notations(formulas, notations)
+        assert expanded[0]["latex"] == r"D_{KL}(p || q) + P(X | Y)"
+
+    def test_no_notations_returns_original(self):
+        formulas = [{"latex": "x^2"}]
+        assert expand_custom_notations(formulas, []) == formulas
+
+
+# ---------------------------------------------------------------------------
+# services/extractor/main.py Tests
+# ---------------------------------------------------------------------------
+
+
+class TestExtractorHelpers:
+    """Tests for standalone helper functions in main.py."""
+
+    def test_check_consistency_safe(self, initialized_db):
+        _check_consistency(str(initialized_db))
+
+    def test_load_notations(self, initialized_db):
+        db_path = str(initialized_db)
+        from shared.db import transaction
+        with transaction(db_path) as conn:
+            conn.execute(
+                "CREATE TABLE IF NOT EXISTS custom_notations "
+                "(id INTEGER PRIMARY KEY AUTOINCREMENT, name TEXT UNIQUE, body TEXT, nargs INTEGER)"
+            )
+            conn.execute(
+                "INSERT INTO custom_notations (name, body, nargs) VALUES (?, ?, ?)",
+                ("KL", "D_{KL}", 0)
+            )
+        notations = _load_notations(db_path)
+        assert len(notations) == 1
+        assert notations[0]["name"] == "KL"
+
+    def test_query_papers_analyzed(self, analyzed_paper_db):
+        papers = _query_papers(str(analyzed_paper_db), None, 10, False)
+        assert len(papers) == 1
+        assert papers[0]["stage"] == "analyzed"
+
+    def test_query_papers_specific_force(self, analyzed_paper_db):
+        # Force re-querying an analyzed paper
+        papers = _query_papers(str(analyzed_paper_db), 1, 10, True)
+        assert len(papers) == 1
+
+    def test_store_results(self, analyzed_paper_db):
+        db_path = str(analyzed_paper_db)
+        formula = Formula(
+            paper_id=1,
+            latex=r"x^2",
+            formula_type="inline",
+            context="test context"
+        )
+        _store_results(db_path, 1, [formula])
+        
+        from shared.db import get_connection
+        conn = get_connection(db_path)
+        p_row = conn.execute("SELECT stage FROM papers WHERE id=1").fetchone()
+        assert p_row["stage"] == "extracted"
+        f_row = conn.execute("SELECT * FROM formulas WHERE paper_id=1").fetchone()
+        assert f_row["latex"] == r"x^2"
+        conn.close()
+
+    def test_mark_failed(self, analyzed_paper_db):
+        db_path = str(analyzed_paper_db)
+        _mark_failed(db_path, 1, "extractor error")
+        from shared.db import get_connection
+        conn = get_connection(db_path)
+        row = conn.execute("SELECT stage, error FROM papers WHERE id=1").fetchone()
+        assert row["stage"] == "failed"
+        assert "extractor error" in row["error"]
+        conn.close()
+
+
+class TestExtractorHandler:
+    """Tests for ExtractorHandler.handle_process()."""
+
+    @patch("services.extractor.main.pdf.create_session")
+    @patch("services.extractor.main.pdf.download_pdf")
+    @patch("services.extractor.main.rag_client.process_paper")
+    @patch("services.extractor.main.rag_client.check_service")
+    def test_handle_process_success(self, mock_check, mock_rag, mock_pdf, mock_session, analyzed_paper_db):
+        db_path = str(analyzed_paper_db)
+        handler = ExtractorHandler.__new__(ExtractorHandler)
+        handler.db_path = db_path
+        handler.pdf_dir = "/tmp"
+        handler.rag_url = "http://rag:8767"
+        handler.download_delay = 0
+
+        mock_check.return_value = {"status": "ok"}
+        mock_pdf.return_value = Path("/tmp/2401.00001.pdf")
+        mock_rag.return_value = "# Extraction\n\n" + r"$$E = mc^2$$"
+        
+        resp = handler.handle_process({})
+        assert resp["success"] is True
+        assert resp["papers_processed"] == 1
+        assert resp["formulas_extracted"] == 1
+        
+        from shared.db import get_connection
+        conn = get_connection(db_path)
+        f_row = conn.execute("SELECT * FROM formulas WHERE paper_id=1").fetchone()
+        assert f_row["latex"] == "E = mc^2"
+        conn.close()
+
+    @patch("services.extractor.main.rag_client.check_service")
+    def test_handle_process_service_down(self, mock_check, analyzed_paper_db):
+        db_path = str(analyzed_paper_db)
+        handler = ExtractorHandler.__new__(ExtractorHandler)
+        handler.db_path = db_path
+        # Mock send_error_json since handle_process calls it on error
+        handler.send_error_json = MagicMock()
+        
+        mock_check.side_effect = Exception("Service Down")
+        
+        resp = handler.handle_process({})
+        assert resp is None
+        handler.send_error_json.assert_called_once()

@@ -10,19 +10,26 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 
+from shared.db import transaction
 from services.orchestrator.github_search import (
     EXTENSIONS,
     SKIP_DIRS,
     STOP_WORDS,
+    _analyze_with_sdk_fallback,
     _check_rate_limit,
     _extract_keywords,
     _generate_queries,
     _get_github_headers,
     _parse_json_response,
     _read_repo_files,
+    _store_analysis,
+    _store_repo,
+    analyze_with_gemini_cli,
     build_dynamic_prompt,
     cleanup_clone,
     clone_repo,
+    search_and_analyze,
+    search_github,
 )
 
 
@@ -433,3 +440,159 @@ class TestConstants:
         assert "the" in STOP_WORDS
         assert "of" in STOP_WORDS
         assert "optimal" in STOP_WORDS
+
+
+# ---------------------------------------------------------------------------
+# search_github (API Mock)
+# ---------------------------------------------------------------------------
+
+
+class TestSearchGithubAPI:
+    """Tests for search_github using mocked urllib."""
+
+    @patch("urllib.request.urlopen")
+    def test_search_returns_deduplicated_repos(self, mock_urlopen):
+        # Mock API response
+        mock_resp = MagicMock()
+        mock_resp.read.return_value = json.dumps({
+            "items": [
+                {"full_name": "u/r1", "html_url": "h1", "clone_url": "c1", "stargazers_count": 10},
+                {"full_name": "u/r2", "html_url": "h2", "clone_url": "c2", "stargazers_count": 5},
+            ]
+        }).encode()
+        mock_resp.headers = {"x-ratelimit-remaining": "30"}
+        mock_resp.__enter__ = MagicMock(return_value=mock_resp)
+        mock_resp.__exit__ = MagicMock(return_value=False)
+        mock_urlopen.return_value = mock_resp
+
+        repos = search_github("test query", languages=["python"])
+        
+        assert len(repos) == 2
+        assert repos[0]["full_name"] == "u/r1"
+        assert repos[1]["stars"] == 5
+
+    @patch("urllib.request.urlopen")
+    def test_search_rate_limit_retry(self, mock_urlopen):
+        import urllib.error
+        from email.message import Message
+        
+        # First call: 403 Forbidden
+        hdrs = Message()
+        hdrs.add_header("x-ratelimit-remaining", "0")
+        hdrs.add_header("x-ratelimit-reset", str(int(time.time()) + 1))
+        err = urllib.error.HTTPError("url", 403, "Forbidden", hdrs, MagicMock())
+        
+        # Second call: Success
+        mock_resp = MagicMock()
+        mock_resp.read.return_value = json.dumps({"items": []}).encode()
+        mock_resp.headers = {"x-ratelimit-remaining": "30"}
+        mock_resp.__enter__ = MagicMock(return_value=mock_resp)
+        mock_resp.__exit__ = MagicMock(return_value=False)
+        
+        mock_urlopen.side_effect = [err, mock_resp]
+        
+        with patch("time.sleep"): # avoid actual sleeping
+            repos = search_github("q", languages=["python", "rust"])
+        
+        assert len(repos) == 0
+        assert mock_urlopen.call_count == 2
+
+
+# ---------------------------------------------------------------------------
+# analyze_with_gemini_cli
+# ---------------------------------------------------------------------------
+
+
+class TestAnalyzeCLI:
+    """Tests for analyze_with_gemini_cli."""
+
+    @patch("subprocess.run")
+    def test_analyze_success(self, mock_run, tmp_path):
+        mock_run.return_value = MagicMock(
+            returncode=0,
+            stdout=json.dumps({"response": '{"relevance_score": 90}'})
+        )
+        
+        result = analyze_with_gemini_cli(tmp_path, "prompt")
+        assert result["relevance_score"] == 90
+
+    @patch("services.orchestrator.github_search._analyze_with_sdk_fallback")
+    @patch("subprocess.run", side_effect=FileNotFoundError)
+    def test_analyze_fallback_on_missing_cli(self, mock_run, mock_fallback, tmp_path):
+        mock_fallback.return_value = {"relevance_score": 80}
+        
+        result = analyze_with_gemini_cli(tmp_path, "prompt")
+        assert result["relevance_score"] == 80
+        mock_fallback.assert_called_once()
+
+    @patch("shared.llm.call_gemini_sdk")
+    def test_sdk_fallback_logic(self, mock_sdk_call, tmp_path):
+        (tmp_path / "test.py").write_text("code")
+        mock_sdk_call.return_value = '{"relevance_score": 75}'
+        
+        result = _analyze_with_sdk_fallback(tmp_path, "prompt", "model-x")
+        assert result["relevance_score"] == 75
+        assert "test.py" in mock_sdk_call.call_args[0][0]
+
+
+# ---------------------------------------------------------------------------
+# search_and_analyze (Flow)
+# ---------------------------------------------------------------------------
+
+
+class TestSearchAndAnalyze:
+    """Tests for the full search_and_analyze flow."""
+
+    @patch("services.orchestrator.github_search.search_github")
+    @patch("services.orchestrator.github_search.clone_repo")
+    @patch("services.orchestrator.github_search.analyze_with_gemini_cli")
+    @patch("services.orchestrator.github_search.cleanup_clone")
+    def test_flow_success(self, mock_cleanup, mock_analyze, mock_clone, mock_search, initialized_db):
+        db_path = str(initialized_db)
+        # Mock paper in DB
+        with transaction(db_path) as conn:
+            conn.execute("INSERT INTO papers (id, title, stage) VALUES (1, 'Paper title', 'analyzed')")
+
+        mock_search.return_value = [
+            {"full_name": "u/r1", "clone_url": "c1", "url": "h1", "stars": 100}
+        ]
+        mock_clone.return_value = Path("/tmp/fake-clone")
+        mock_analyze.return_value = {"relevance_score": 95, "recommendation": "USE"}
+
+        with patch.dict(os.environ, {"RP_GITHUB_RPM": "100"}):
+            res = search_and_analyze(1, db_path, max_repos=1)
+
+        assert res["repos_analyzed"] == 1
+        assert res["results"][0]["analysis"]["relevance_score"] == 95
+        
+        # Verify DB storage
+        with transaction(db_path) as conn:
+            repo = conn.execute("SELECT * FROM github_repos WHERE paper_id=1").fetchone()
+            assert repo["full_name"] == "u/r1"
+            analysis = conn.execute("SELECT * FROM github_analyses WHERE repo_id=?", (repo["id"],)).fetchone()
+            assert analysis["relevance_score"] == 95
+
+    def test_paper_not_found(self, initialized_db):
+        res = search_and_analyze(999, str(initialized_db))
+        assert "not found" in res["errors"][0]
+
+    @patch("services.orchestrator.github_search.search_github")
+    def test_skip_if_exists_no_force(self, mock_search, initialized_db):
+        db_path = str(initialized_db)
+        with transaction(db_path) as conn:
+            conn.execute("INSERT INTO papers (id, title, stage) VALUES (1, 'Paper title', 'analyzed')")
+            conn.execute("INSERT INTO github_repos (paper_id, full_name, url, clone_url) VALUES (1, 'r', 'u', 'c')")
+        
+        res = search_and_analyze(1, db_path, force=False)
+        assert res.get("skipped") is True
+        mock_search.assert_not_called()
+
+    def test_store_helpers(self, initialized_db):
+        db_path = str(initialized_db)
+        with transaction(db_path) as conn:
+            conn.execute("INSERT INTO papers (id, title, stage) VALUES (1, 'Paper title', 'analyzed')")
+            repo_id = _store_repo(conn, 1, {"full_name": "u/r", "url": "h", "clone_url": "c"}, "query")
+            assert repo_id is not None
+            
+            analysis_id = _store_analysis(conn, repo_id, {"relevance_score": 50}, "model", 100)
+            assert analysis_id is not None

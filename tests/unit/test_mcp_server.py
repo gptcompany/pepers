@@ -3,9 +3,63 @@
 from __future__ import annotations
 
 import json
+import os
+import runpy
 from unittest.mock import MagicMock, patch
 
 import pytest
+
+
+# ---------------------------------------------------------------------------
+# CLI and Main entry points
+# ---------------------------------------------------------------------------
+
+
+class TestMCPCLI:
+    """Tests for services/mcp/cli.py."""
+
+    @patch("argparse.ArgumentParser.parse_args")
+    @patch("services.mcp.server.mcp.run")
+    @patch("builtins.print")
+    def test_cli_main_success(self, mock_print, mock_run, mock_parse):
+        from services.mcp.cli import main
+        mock_parse.return_value = MagicMock(
+            port=9999,
+            flavor="plain",
+            orchestrator_url="http://test:8775",
+            transport="streamable-http"
+        )
+        
+        with patch.dict(os.environ, {}):
+            main()
+            assert os.environ["RP_MCP_PORT"] == "9999"
+            assert os.environ["RP_MCP_FLAVOR"] == "plain"
+            assert os.environ["RP_ORCHESTRATOR_URL"] == "http://test:8775"
+        
+        mock_run.assert_called_once_with(transport="streamable-http")
+        mock_print.assert_called()
+
+
+class TestMCPMain:
+    """Tests for services/mcp/__main__.py."""
+
+    @patch("services.mcp.server.mcp.run")
+    def test_main_module_stdio(self, mock_run):
+        with patch.dict(os.environ, {"RP_MCP_TRANSPORT": "stdio"}):
+            runpy.run_module("services.mcp.__main__", run_name="__main__")
+            mock_run.assert_called_once_with(transport="stdio")
+
+    @patch("services.mcp.server.mcp.run")
+    def test_main_module_default_sse(self, mock_run):
+        with patch.dict(os.environ, {}, clear=True):
+            # We use clear=True to ensure RP_MCP_TRANSPORT is not set, 
+            # but we need to keep other env vars if needed. 
+            # Actually patch.dict(os.environ, {"RP_MCP_TRANSPORT": ""}) might be safer
+            # or just rely on pop if it exists.
+            if "RP_MCP_TRANSPORT" in os.environ:
+                del os.environ["RP_MCP_TRANSPORT"]
+            runpy.run_module("services.mcp.__main__", run_name="__main__")
+            mock_run.assert_called_once_with(transport="sse")
 
 
 # ---------------------------------------------------------------------------
