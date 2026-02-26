@@ -51,10 +51,14 @@ jobs:
           set -euo pipefail
           mkdir -p data
           if [ "${{ inputs.rebuild_images }}" = "true" ]; then
-            docker compose up -d --build --force-recreate
+            docker compose up -d --build --force-recreate 2>&1 || true
           else
-            docker compose up -d --force-recreate
+            docker compose up -d --force-recreate 2>&1 || true
           fi
+          echo "--- Container status after compose up ---"
+          docker compose ps -a
+          echo "--- Discovery logs (if any) ---"
+          docker compose logs discovery --tail=50 2>&1 || true
 
       - name: Wait for internal endpoints
         run: |
