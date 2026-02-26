@@ -105,6 +105,7 @@ jobs:
           name: pepers-sandbox-validation
           path: .artifacts/
           if-no-files-found: ignore
+          retention-days: 7
 
       - name: Tear down stack
         if: always() && inputs.leave_running == false

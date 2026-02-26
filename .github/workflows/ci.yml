@@ -3,8 +3,21 @@ name: CI
 on:
   push:
     branches: [main]
+    paths-ignore:
+      - "*.md"
+      - "docs/**"
+      - "LICENSE"
+      - "catalog-info.yaml"
   pull_request:
+    paths-ignore:
+      - "*.md"
+      - "docs/**"
+      - "LICENSE"
+      - "catalog-info.yaml"
   workflow_dispatch:
+
+permissions:
+  contents: read
 
 concurrency:
   group: ci-${{ github.repository }}-${{ github.ref }}
