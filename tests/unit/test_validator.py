@@ -860,6 +860,8 @@ class TestValidatorMain:
     def test_handle_process_no_formulas(self, initialized_db):
         handler = ValidatorHandler.__new__(ValidatorHandler)
         handler.db_path = str(initialized_db)
+        handler.engines = ["maxima"]
+        handler.max_formulas_default = 50
         handler.send_error_json = MagicMock()
         resp = handler.handle_process({})
         assert resp["formulas_processed"] == 0
