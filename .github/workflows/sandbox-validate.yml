@@ -49,10 +49,11 @@ jobs:
       - name: Bring up stack
         run: |
           set -euo pipefail
+          mkdir -p data
           if [ "${{ inputs.rebuild_images }}" = "true" ]; then
-            docker compose up -d --build
+            docker compose up -d --build --force-recreate
           else
-            docker compose up -d
+            docker compose up -d --force-recreate
           fi
 
       - name: Wait for internal endpoints
