@@ -9,6 +9,9 @@
 ![Coverage](https://img.shields.io/endpoint?url=https://gist.githubusercontent.com/gptprojectmanager/ac39e6516b7114f96b84ba445b8e7a83/raw/pepers-coverage.json)
 ![Python](https://img.shields.io/badge/python-3.10%2B-blue?style=flat-square&logo=python)
 ![License](https://img.shields.io/github/license/gptcompany/pepers?style=flat-square)
+![Last Commit](https://img.shields.io/github/last-commit/gptcompany/pepers?style=flat-square)
+![Issues](https://img.shields.io/github/issues/gptcompany/pepers?style=flat-square)
+![Lines of Code](https://tokei.rs/b1/github/gptcompany/pepers?style=flat-square)
 
 **Paper Extraction, Processing, Evaluation, Retrieval & Synthesis**
 
