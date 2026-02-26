@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 import json
-from unittest.mock import patch
+from unittest.mock import MagicMock, patch
 
 import pytest
 import sympy
@@ -886,8 +886,20 @@ class TestCodegenHelpers:
         conn.close()
 
 
-class TestCodegenHandler:
-    """Tests for CodegenHandler.handle_process()."""
+class TestCodegenMain:
+    """Tests for codegen service entry point."""
+
+    @patch("services.codegen.main.BaseService")
+    @patch("services.codegen.main.load_config")
+    @patch("services.codegen.main.init_db")
+    def test_main_startup(self, mock_init, mock_load, mock_svc):
+        from services.codegen.main import main
+        mock_load.return_value = MagicMock(port=8774, db_path="/tmp/test.db")
+        
+        main()
+        
+        mock_init.assert_called_once()
+        mock_svc.return_value.run.assert_called_once()
 
     @patch("services.codegen.main.explain_formulas_batch")
     @patch("services.codegen.main.generate_all")

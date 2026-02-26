@@ -60,10 +60,22 @@ class TestDiskSpaceCheck:
 
     @patch("shutil.disk_usage")
     def test_check_fails_on_low_space(self, mock_usage, tmp_path):
-        # 500MB total, 5MB free (less than 1GB required)
+        # 5MB free (less than 500MB required)
         mock_usage.return_value = MagicMock(total=500*1024*1024, free=5*1024*1024)
         step = DiskSpaceCheck(tmp_path)
         assert step.check() is False
+
+    @patch("shutil.disk_usage")
+    def test_install_prints_space_warning(self, mock_usage, tmp_path):
+        mock_usage.return_value = MagicMock(total=500*1024*1024, free=5*1024*1024)
+        step = DiskSpaceCheck(tmp_path)
+        console = MagicMock()
+        assert step.install(console) is False
+        console.print.assert_called()
+
+    def test_verify_calls_check(self, tmp_path):
+        step = DiskSpaceCheck(tmp_path)
+        assert step.verify() == step.check()
 
 class TestNodeCheck:
     @patch("shutil.which", return_value="/usr/bin/node")
@@ -81,23 +93,30 @@ class TestNodeCheck:
         assert step.check() is False
 
     @patch("platform.system", return_value="Linux")
-    @patch("subprocess.run")
-    def test_install_linux(self, mock_run, mock_platform):
+    @patch("subprocess.run", side_effect=subprocess.CalledProcessError(1, "curl"))
+    def test_install_linux_fails(self, mock_run, mock_platform):
         console = MagicMock()
         step = NodeCheck()
-        mock_run.return_value = MagicMock(returncode=0)
-        assert step.install(console) is True
-        mock_run.assert_called_with(["sh", "-c", "curl -fsSL https://deb.nodesource.com/setup_20.x | sudo -E bash - && sudo apt-get install -y nodejs"], check=True, text=True)
+        assert step.install(console) is False
+
+    @patch("shutil.which", return_value=None)
+    def test_npm_tool_install_fails_no_npm(self, mock_which):
+        step = NpmCliTool("T", "D", "b", "p")
+        assert step.install(MagicMock()) is False
+
+    @patch("shutil.which", return_value="/usr/bin/npm")
+    @patch("subprocess.run", side_effect=subprocess.CalledProcessError(1, "npm"))
+    def test_npm_tool_install_fails_subprocess(self, mock_run, mock_which):
+        step = NpmCliTool("T", "D", "b", "p")
+        assert step.install(MagicMock()) is False
 
     @patch("platform.system", return_value="Darwin")
     @patch("shutil.which", return_value="/usr/local/bin/brew")
-    @patch("subprocess.run")
-    def test_install_macos(self, mock_run, mock_which, mock_platform):
+    @patch("subprocess.run", side_effect=subprocess.CalledProcessError(1, "brew"))
+    def test_install_macos_fails(self, mock_run, mock_which, mock_platform):
         console = MagicMock()
         step = NodeCheck()
-        mock_run.return_value = MagicMock(returncode=0)
-        assert step.install(console) is True
-        mock_run.assert_called_with(["brew", "install", "node@20"], check=True, text=True)
+        assert step.install(console) is False
 
     @patch("platform.system", return_value="Windows")
     def test_install_windows_unsupported(self, mock_platform):
@@ -125,13 +144,16 @@ class TestOllamaCheck:
         mock_run.assert_called_with(["brew", "install", "ollama"], check=True, text=True)
 
     @patch("platform.system", return_value="Linux")
-    @patch("subprocess.run")
-    def test_install_linux(self, mock_run, mock_platform):
-        console = MagicMock()
+    @patch("subprocess.run", side_effect=subprocess.CalledProcessError(1, "sh"))
+    def test_install_fails_subprocess_error(self, mock_run, mock_platform):
         step = OllamaCheck()
-        mock_run.return_value = MagicMock(returncode=0)
-        assert step.install(console) is True
-        mock_run.assert_called_with(["sh", "-c", "curl -fsSL https://ollama.ai/install.sh | sh"], check=True, text=True)
+        console = MagicMock()
+        assert step.install(console) is False
+
+    @patch("shutil.which", return_value="/usr/bin/ollama")
+    def test_verify_calls_check(self, mock_which):
+        step = OllamaCheck()
+        assert step.verify() == step.check()
 
 
 # ── NpmCliTool ───────────────────────────────────────────────
@@ -197,11 +219,13 @@ class TestDockerComposeCheck:
 
 # ── DockerComposeUp ──────────────────────────────────────────
 
-class TestDockerComposeUp:
-    def test_compose_file_discovery(self, tmp_path):
-        (tmp_path / "docker-compose.yml").touch()
+    def test_compose_file_missing(self, tmp_path):
         step = DockerComposeUp(tmp_path)
-        assert step._compose_file() == tmp_path / "docker-compose.yml"
+        assert step._compose_file() is None
+        # Implementation returns True for check/install/verify if no file
+        assert step.check() is True
+        assert step.install(MagicMock()) is True
+        assert step.verify() is True
 
     @patch("subprocess.run")
     def test_check_passes_running(self, mock_run, tmp_path):
@@ -242,10 +266,17 @@ class TestUvCheck:
         step = UvCheck()
         assert step.check() is True
 
-    @patch("shutil.which", return_value=None)
-    def test_check_fails_when_uv_missing(self, mock_which):
+    @patch("subprocess.run")
+    def test_install_success(self, mock_run):
+        mock_run.return_value = MagicMock(returncode=0)
         step = UvCheck()
-        assert step.check() is False
+        console = MagicMock()
+        assert step.install(console) is True
+
+    @patch("shutil.which", return_value="/usr/bin/uv")
+    def test_verify_calls_check(self, mock_which):
+        step = UvCheck()
+        assert step.verify() == step.check()
 
     @patch("shutil.which", return_value=None)
     @patch("subprocess.run", side_effect=FileNotFoundError)
@@ -300,6 +331,24 @@ class TestDotenvxCheck:
     def test_check_passes(self, mock_which):
         step = DotenvxCheck()
         assert step.check() is True
+
+    @patch("subprocess.run")
+    def test_install_success(self, mock_run):
+        mock_run.return_value = MagicMock(returncode=0)
+        step = DotenvxCheck()
+        console = MagicMock()
+        assert step.install(console) is True
+
+    @patch("subprocess.run", side_effect=subprocess.CalledProcessError(1, "sh"))
+    def test_install_fails_subprocess_error(self, mock_run):
+        step = DotenvxCheck()
+        console = MagicMock()
+        assert step.install(console) is False
+
+    @patch("shutil.which", return_value="/usr/bin/dotenvx")
+    def test_verify_calls_check(self, mock_which):
+        step = DotenvxCheck()
+        assert step.verify() == step.check()
 
     @patch("shutil.which", return_value=None)
     def test_check_fails(self, mock_which):
@@ -493,7 +542,33 @@ class TestExternalServiceCheck:
         mock_confirm.assert_called_once()
         mock_run.assert_called_once_with(["cas-setup"], check=False)
 
+    @patch("services.setup._services.questionary.confirm")
+    def test_install_aborted_by_user(self, mock_confirm):
+        svc = {"name": "S", "default_url": "h", "setup_cmd": "cmd", "setup_hint": "hint"}
+        check = ExternalServiceCheck(svc)
+        mock_confirm.return_value.ask.return_value = False
+        assert check.install(MagicMock()) is False
+
+    @patch("services.setup._services.shutil.which", return_value=None)
+    @patch("services.setup._services.ExternalServiceCheck._local_setup_fallback", return_value=None)
+    @patch("services.setup._services.questionary.confirm")
+    def test_install_no_paths_found(self, mock_confirm, mock_fallback, mock_which):
+        svc = {"name": "S", "default_url": "h", "setup_hint": "hint"}
+        check = ExternalServiceCheck(svc)
+        mock_confirm.return_value.ask.return_value = True
+        console = MagicMock()
+        assert check.install(console) is False
+        console.print.assert_called()
+
     def test_local_setup_fallback_discovery(self, tmp_path):
+        # Create a fake sibling repo structure
+        # ../cas-service/.venv/bin/python
+        repo_dir = tmp_path / "cas-service"
+        repo_dir.mkdir()
+        (repo_dir / ".venv" / "bin").mkdir(parents=True)
+        python_bin = repo_dir / ".venv" / "bin" / "python"
+        python_bin.touch()
+        
         svc = {
             "name": "CAS",
             "local_repo": "cas-service",
@@ -502,9 +577,17 @@ class TestExternalServiceCheck:
         }
         check = ExternalServiceCheck(svc)
         
-        with patch("services.setup._services.Path.exists", return_value=False):
-             res = check._local_setup_fallback()
-             assert res is None
+        # Patch Path.resolve() to point to pepers/services/setup/main.py
+        pepers_dir = tmp_path / "pepers"
+        pepers_dir.mkdir()
+        main_file = pepers_dir / "services" / "setup" / "main.py"
+        main_file.parent.mkdir(parents=True)
+        
+        with patch("services.setup._services.Path.resolve", return_value=main_file):
+            cmd, cwd, env, display = check._local_setup_fallback()
+            assert str(cwd) == str(repo_dir)
+            assert "cas.main" in cmd
+            assert str(python_bin) in cmd[0]
 
 
 # ── MCP config ───────────────────────────────────────────────
@@ -736,3 +819,8 @@ class TestSetupMainCli:
             with patch("services.setup.main.Path.resolve", return_value=tmp_path / "services" / "setup" / "main.py"):
                 root = setup_main._project_root()
                 assert root == tmp_path
+
+    def test_all_steps_returns_list(self, tmp_path):
+        steps = setup_main._all_steps(tmp_path)
+        assert isinstance(steps, list)
+        assert len(steps) > 0

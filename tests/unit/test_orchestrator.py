@@ -559,6 +559,7 @@ class TestOrchestratorHandler:
     def test_handle_run_async(self, mock_gen_id, mock_thread, initialized_db):
         handler = OrchestratorHandler.__new__(OrchestratorHandler)
         handler.runner = MagicMock()
+        handler.runner.get_pipeline_status.return_value = {"active_runs": 0}
         handler.send_json = MagicMock()
         
         handler.handle_run({"query": "test", "stages": 3})
@@ -568,6 +569,24 @@ class TestOrchestratorHandler:
             status=202,
         )
         mock_thread.assert_called_once()
+
+    def test_handle_github_repos_no_paper_id(self):
+        handler = OrchestratorHandler.__new__(OrchestratorHandler)
+        handler.path = "/github-repos"
+        handler.send_error_json = MagicMock()
+        res = handler.handle_github_repos()
+        assert res is None
+        handler.send_error_json.assert_called_once()
+        handler = OrchestratorHandler.__new__(OrchestratorHandler)
+        handler.runner = MagicMock()
+        handler.send_error_json = MagicMock()
+        
+        # stages=99 is invalid (max 5)
+        res = handler.handle_run({"stages": 99})
+        assert res is None
+        handler.send_error_json.assert_called_once()
+        args = handler.send_error_json.call_args[0]
+        assert args[1] == "VALIDATION_ERROR"
 
     def test_handle_status(self, initialized_db):
         handler = OrchestratorHandler.__new__(OrchestratorHandler)
@@ -642,6 +661,17 @@ class TestOrchestratorHandler:
         res = handler.handle_generated_code()
         assert res is None
         handler.send_error_json.assert_called_once()
+
+    def test_handle_formulas_no_paper_id(self, initialized_db):
+        handler = OrchestratorHandler.__new__(OrchestratorHandler)
+        handler.db_path = str(initialized_db)
+        handler.path = "/formulas"
+        handler.send_error_json = MagicMock()
+        
+        res = handler.handle_formulas()
+        # It returns [] (all formulas) when no paper_id given
+        assert isinstance(res, list)
+        assert len(res) == 0
 
     @patch("services.orchestrator.main.search_and_analyze")
     def test_handle_search_github(self, mock_sa, initialized_db):
@@ -847,6 +877,18 @@ class TestPipelineRunnerAdvanced:
             _query_rag("test", "mix")
 
 
+class TestPipelineAsync:
+    """Tests for async pipeline runner helper."""
+
+    @patch("services.orchestrator.main.notify_pipeline_result")
+    def test_run_pipeline_async_failure(self, mock_notify):
+        from services.orchestrator.main import _run_pipeline_async
+        runner = MagicMock()
+        runner.run.side_effect = Exception("Async crash")
+        
+        # Should catch exception and log it (implicitly covered)
+        _run_pipeline_async(runner, "run-123")
+        mock_notify.assert_not_called()
 class TestOrchestratorMain:
     """Tests for orchestrator service entry point."""
 
@@ -854,13 +896,121 @@ class TestOrchestratorMain:
     @patch("services.orchestrator.main.load_config")
     @patch("services.orchestrator.main.init_db")
     @patch("services.orchestrator.main.create_scheduler")
-    def test_main_startup(self, mock_sched, mock_init, mock_load, mock_svc, initialized_db):
+    def test_main_startup_and_shutdown(self, mock_sched, mock_init, mock_load, mock_svc, initialized_db):
         from services.orchestrator.main import main
         mock_load.return_value = MagicMock(port=8775, db_path=str(initialized_db))
         
+        # Test shutdown logic by making run() raise KeyboardInterrupt
+        mock_svc.return_value.run.side_effect = KeyboardInterrupt()
+        
         with patch.dict(os.environ, {"RP_ORCHESTRATOR_CRON_ENABLED": "true"}):
+            try:
+                main()
+            except KeyboardInterrupt:
+                pass
+            
+        mock_init.assert_called_once()
+        mock_sched.return_value.start.assert_called_once()
+        mock_sched.return_value.shutdown.assert_called_once()
+
+    @patch("services.orchestrator.main.BaseService")
+    @patch("services.orchestrator.main.load_config")
+    @patch("services.orchestrator.main.init_db")
+    @patch("services.orchestrator.main.create_scheduler")
+    def test_main_startup_cron_disabled(self, mock_sched, mock_init, mock_load, mock_svc, initialized_db):
+        from services.orchestrator.main import main
+        mock_load.return_value = MagicMock(port=8775, db_path=str(initialized_db))
+        mock_sched.return_value = None
+        
+        with patch.dict(os.environ, {"RP_ORCHESTRATOR_CRON_ENABLED": "false"}):
             main()
             
         mock_init.assert_called_once()
         mock_svc.return_value.run.assert_called_once()
         mock_sched.assert_called_once()
+
+
+class TestPipelineAsync:
+    """Tests for async pipeline runner helper."""
+
+    @patch("services.orchestrator.main.notify_pipeline_result")
+    def test_run_pipeline_async_failure(self, mock_notify):
+        from services.orchestrator.main import _run_pipeline_async
+        runner = MagicMock()
+        runner.run.side_effect = Exception("Async crash")
+        
+        _run_pipeline_async(runner, "run-123")
+        mock_notify.assert_not_called()
+
+
+    def test_handle_github_repos_no_paper_id(self, initialized_db):
+        handler = OrchestratorHandler.__new__(OrchestratorHandler)
+        handler.db_path = str(initialized_db)
+        handler.path = "/github-repos"
+        handler.send_error_json = MagicMock()
+        
+        res = handler.handle_github_repos()
+        assert res is None
+        handler.send_error_json.assert_called_once()
+
+    def test_handle_add_notation_missing_fields(self, initialized_db):
+        handler = OrchestratorHandler.__new__(OrchestratorHandler)
+        handler.send_error_json = MagicMock()
+        res = handler.handle_add_notation({"name": "X"})
+        assert res is None
+        handler.send_error_json.assert_called_once()
+
+    def test_handle_delete_notation_success(self, initialized_db):
+        db_path = str(initialized_db)
+        with transaction(db_path) as conn:
+            conn.execute("INSERT INTO custom_notations (name, body) VALUES ('X', 'Y')")
+        
+        handler = OrchestratorHandler.__new__(OrchestratorHandler)
+        handler.db_path = db_path
+        res = handler.handle_delete_notation({"name": "X"})
+        assert res["success"] is True
+
+    def test_handle_delete_notation_not_found(self, initialized_db):
+        handler = OrchestratorHandler.__new__(OrchestratorHandler)
+        handler.db_path = str(initialized_db)
+        handler.send_error_json = MagicMock()
+        
+        res = handler.handle_delete_notation({"name": "nonexistent"})
+        assert res is None
+        handler.send_error_json.assert_called_once()
+
+
+    def test_handle_delete_notation_missing_fields(self, initialized_db):
+        handler = OrchestratorHandler.__new__(OrchestratorHandler)
+        handler.send_error_json = MagicMock()
+        # No 'name' in data
+        res = handler.handle_delete_notation({})
+        assert res is None
+        handler.send_error_json.assert_called_once()
+
+    @patch("services.orchestrator.main.notify")
+    @patch("services.orchestrator.main.OrchestratorHandler.runner")
+    def test_cron_run_failure(self, mock_runner, mock_notify):
+        from services.orchestrator.main import _cron_run
+        OrchestratorHandler.runner = MagicMock()
+        OrchestratorHandler.runner.run.side_effect = Exception("Cron crash")
+        
+        with patch.dict(os.environ, {"RP_ORCHESTRATOR_CRON_ENABLED": "true"}):
+            _cron_run()
+            mock_notify.assert_called()
+
+    @patch("services.orchestrator.main.notify_pipeline_result")
+    @patch("services.orchestrator.main.OrchestratorHandler.runner")
+    def test_cron_run_success(self, mock_runner, mock_notify):
+        from services.orchestrator.main import _cron_run
+        OrchestratorHandler.runner = MagicMock()
+        result = {
+            "status": "completed",
+            "stages_completed": 5,
+            "stages_requested": 5,
+        }
+        OrchestratorHandler.runner.run.return_value = result
+        
+        with patch.dict(os.environ, {"RP_ORCHESTRATOR_CRON_ENABLED": "true"}):
+            _cron_run()
+            mock_notify.assert_called_once_with(result)

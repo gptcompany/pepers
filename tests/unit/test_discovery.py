@@ -87,11 +87,23 @@ class TestDiscoveryHandler:
         assert resp["papers_new"] == 0
         assert len(resp["errors"]) == 0
 
+    def test_handle_process_no_query(self, initialized_db):
+        handler = self._make_handler(str(initialized_db))
+        resp = handler.handle_process({})
+        assert resp is None
+        handler.send_error_json.assert_called_once()
+
     def test_handle_process_invalid_source(self, initialized_db):
         handler = self._make_handler(str(initialized_db))
         resp = handler.handle_process({"query": "test", "sources": ["invalid"]})
         assert resp is None
         handler.send_error_json.assert_called_once()
+
+    def test_upsert_paper_conflict(self, initialized_db, sample_paper_row):
+        db_path = str(initialized_db)
+        upsert_paper(db_path, sample_paper_row)
+        # Upserting again should update (implicitly covered)
+        upsert_paper(db_path, sample_paper_row)
 
 
 # ---------------------------------------------------------------------------

@@ -16,6 +16,7 @@ from unittest.mock import MagicMock, patch
 import pytest
 
 from shared.db import init_db, transaction
+from services.discovery.main import DiscoveryHandler
 from shared.server import BaseService
 from services.validator.main import ValidatorHandler
 from services.codegen.main import CodegenHandler
@@ -361,3 +362,92 @@ class TestPipelineStageProgression:
 
         assert _get_paper_stage(self.db_path, 1) == "validated"
         assert _count_formulas_by_stage(self.db_path, "validated") == 60
+
+
+@pytest.mark.e2e
+class TestFullPipelineE2E:
+    """Full system test from Discovery to Codegen."""
+
+    @pytest.fixture(autouse=True)
+    def setup(self, tmp_path):
+        self.db_path = str(tmp_path / "full_e2e.db")
+        init_db(self.db_path)
+        self.ports = {
+            "discovery": _get_free_port(),
+            "validator": _get_free_port(),
+            "codegen": _get_free_port(),
+        }
+        self.services = []
+        yield
+        for svc in self.services:
+            if svc.server:
+                svc.server.shutdown()
+        DiscoveryHandler._routes = None
+        ValidatorHandler._routes = None
+        CodegenHandler._routes = None
+
+    def _start_svc(self, name, handler_cls):
+        port = self.ports[name]
+        svc = BaseService(name, port, handler_cls, self.db_path)
+        self.services.append(svc)
+        t = threading.Thread(target=svc.run, daemon=True)
+        t.start()
+        time.sleep(0.3)
+
+    def _post(self, port, data):
+        body = json.dumps(data).encode()
+        req = urllib.request.Request(
+            f"http://localhost:{port}/process",
+            data=body, headers={"Content-Type": "application/json"}
+        )
+        with urllib.request.urlopen(req, timeout=10) as resp:
+            return json.loads(resp.read())
+
+    @patch("services.discovery.main.search_arxiv")
+    @patch("services.validator.main.CASClient")
+    @patch("services.codegen.main.generate_all")
+    def test_full_discovery_to_codegen_flow(self, mock_gen, mock_cas_cls, mock_arxiv):
+        # 1. Mock Discovery
+        mock_arxiv.return_value = [{
+            "arxiv_id": "2401.99999", "title": "E2E", "abstract": "Test",
+            "authors": "[]", "categories": "[]", "pdf_url": "http://pdf",
+            "published_date": "2024-01-01", "doi": None
+        }]
+        
+        # 2. Mock Validator
+        mock_res = MagicMock(engine="sympy", success=True, is_valid=True, simplified="x", error=None, time_ms=1)
+        mock_cas_client = mock_cas_cls.return_value
+        mock_cas_client.health.return_value = True
+        mock_cas_client.validate.return_value = MagicMock(results=[mock_res])
+        
+        # 3. Mock Codegen
+        mock_gen.return_value = [{"language": "python", "code": "pass", "metadata": {}, "error": None}]
+
+        # Run Discovery
+        self._start_svc("discovery", DiscoveryHandler)
+        self._post(self.ports["discovery"], {"query": "test"})
+        
+        # Inject analyzed status (skipping analyzer service for speed)
+        with transaction(self.db_path) as conn:
+            conn.execute("UPDATE papers SET stage='analyzed'")
+            # Manually inject formula (skipping extractor service)
+            conn.execute(
+                "INSERT INTO formulas (paper_id, latex, latex_hash, stage) "
+                "VALUES (1, 'E=mc^2', 'hash1', 'extracted')"
+            )
+            # Extracted papers need stage='extracted' to be picked by validator
+            conn.execute("UPDATE papers SET stage='extracted'")
+
+        # Run Validator
+        self._start_svc("validator", ValidatorHandler)
+        self._post(self.ports["validator"], {})
+        
+        assert _get_paper_stage(self.db_path, 1) == "validated"
+
+        # Run Codegen
+        self._start_svc("codegen", CodegenHandler)
+        with patch("services.codegen.main.explain_formulas_batch", return_value={}):
+            self._post(self.ports["codegen"], {})
+            
+        assert _get_paper_stage(self.db_path, 1) == "codegen"
+        assert _count_generated_code(self.db_path) == 1

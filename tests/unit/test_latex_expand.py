@@ -115,3 +115,36 @@ class TestExpandCustomNotations:
         formulas = [_formula(r"x \in \R")]
         result = expand_custom_notations(formulas, notations)
         assert result[0]["latex"] == r"x \in \mathbb{R}"
+
+
+class TestExpandFuzzing:
+    """Stress tests for malformed or tricky LaTeX input."""
+
+    def test_missing_argument_braces(self):
+        """Macro expects argument but braces are missing or EOF."""
+        notations = [{"name": "f", "body": "F(#1)", "nargs": 1}]
+        # Should not crash, just not expand or expand partially
+        formulas = [_formula(r"\f")]
+        expand_custom_notations(formulas, notations)
+
+    def test_unbalanced_braces(self):
+        """Macro arguments with unbalanced braces."""
+        notations = [{"name": "f", "body": "F(#1)", "nargs": 1}]
+        formulas = [_formula(r"\f{ x { y } ")]
+        expand_custom_notations(formulas, notations)
+
+    def test_recursive_definition_prevention(self):
+        """Macro body contains the macro itself (should not infinite loop)."""
+        notations = [{"name": "f", "body": r"\f{x}", "nargs": 0}]
+        formulas = [_formula(r"\f")]
+        # Implementation is non-recursive (single pass per notation)
+        result = expand_custom_notations(formulas, notations)
+        assert result[0]["latex"] == r"\f{x}"
+
+    def test_large_input_stability(self):
+        """Very large LaTeX string."""
+        notations = [{"name": "R", "body": "REAL", "nargs": 0}]
+        large_latex = r"\R " * 1000
+        formulas = [_formula(large_latex)]
+        result = expand_custom_notations(formulas, notations)
+        assert len(result[0]["latex"]) > len(large_latex)

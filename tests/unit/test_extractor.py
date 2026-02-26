@@ -736,6 +736,13 @@ class TestExtractorHelpers:
     def test_check_consistency_safe(self, initialized_db):
         _check_consistency(str(initialized_db))
 
+    def test_store_results_conflict(self, analyzed_paper_db):
+        db_path = str(analyzed_paper_db)
+        formula = Formula(paper_id=1, latex="x=1", formula_type="inline", context="c")
+        _store_results(db_path, 1, [formula])
+        # Calling again with same formula should not crash (UPDATE path)
+        _store_results(db_path, 1, [formula])
+
     def test_load_notations(self, initialized_db):
         db_path = str(initialized_db)
         from shared.db import transaction
@@ -789,6 +796,29 @@ class TestExtractorHelpers:
         assert row["stage"] == "failed"
         assert "extractor error" in row["error"]
         conn.close()
+
+    def test_query_papers_force_includes_failed(self, analyzed_paper_db):
+        db_path = str(analyzed_paper_db)
+        # Mark as failed
+        _mark_failed(db_path, 1, "err")
+        
+        # Without force: 0
+        papers = _query_papers(db_path, None, 10, False)
+        assert len(papers) == 0
+        
+        # With force + paper_id: 1
+        papers = _query_papers(db_path, 1, 10, True)
+        assert len(papers) == 1
+
+    def test_check_consistency_safe(self, initialized_db):
+        _check_consistency(str(initialized_db))
+
+    def test_store_results_conflict(self, analyzed_paper_db):
+        db_path = str(analyzed_paper_db)
+        formula = Formula(paper_id=1, latex="x=1", formula_type="inline", context="c")
+        _store_results(db_path, 1, [formula])
+        # Calling again with same formula should not crash (UPDATE path)
+        _store_results(db_path, 1, [formula])
 
 
 class TestExtractorHandler:

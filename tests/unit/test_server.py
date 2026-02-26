@@ -154,6 +154,13 @@ class TestBaseServiceAndHTTP:
                     return None
                 return {"valid": True}
 
+            @route("GET", "/reset")
+            def handle_reset(self):
+                # Trigger a ConnectionResetError during response sending
+                # This is hard to do reliably with a real socket from inside,
+                # but we can raise it to test the 'except' block in BaseHandler.
+                raise ConnectionResetError("reset by peer")
+
         self.service = BaseService(
             "test-svc", self.port, TestHandler, db_path="/tmp/test.db"
         )
@@ -272,6 +279,12 @@ class TestBaseServiceAndHTTP:
     def test_query_string_stripped(self):
         data = self._get("/ping?foo=bar")
         assert data["pong"] is True
+
+    def test_connection_reset_handled(self):
+        # Should return 500 or just be logged, but not crash the server
+        with pytest.raises(urllib.error.HTTPError) as exc_info:
+            urllib.request.urlopen(self._url("/reset"))
+        assert exc_info.value.code == 500
 
     def test_service_injects_metadata(self):
         class CheckHandler(BaseHandler):
