@@ -39,6 +39,13 @@ jobs:
           docker --version
           docker compose version
 
+      - name: Ensure .env exists
+        run: |
+          if [ ! -f .env ]; then
+            cp .env.example .env
+            echo "Created .env from .env.example"
+          fi
+
       - name: Bring up stack
         run: |
           set -euo pipefail
