@@ -11,7 +11,7 @@
 ![License](https://img.shields.io/github/license/gptcompany/pepers?style=flat-square)
 ![Last Commit](https://img.shields.io/github/last-commit/gptcompany/pepers?style=flat-square)
 ![Issues](https://img.shields.io/github/issues/gptcompany/pepers?style=flat-square)
-![Lines of Code](https://tokei.rs/b1/github/gptcompany/pepers?style=flat-square)
+![Lines of Code](https://sloc.xyz/github/gptcompany/pepers)
 
 **Paper Extraction, Processing, Evaluation, Retrieval & Synthesis**
 
