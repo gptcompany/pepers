@@ -210,8 +210,21 @@ mcp = FastMCP(
     "PePeRS",
     instructions=(
         "PePeRS (Paper Extraction, Processing, Evaluation, Retrieval & Synthesis) "
-        "is an academic paper processing pipeline. Use these tools to search papers, "
-        "extract formulas, validate math, generate code, and discover GitHub implementations."
+        "is an academic paper processing pipeline.\n\n"
+        "WORKFLOW ORDER:\n"
+        "1. run_pipeline(query, stages=5) → triggers async processing (returns run_id)\n"
+        "2. get_run_status(run_id) → poll until status='completed'\n"
+        "3. list_papers(stage='codegen') → see fully processed papers\n"
+        "4. get_paper(paper_id) → details + formulas for one paper\n"
+        "5. get_formulas(paper_id) → validated LaTeX formulas\n"
+        "6. get_generated_code(paper_id) → Python/C99/Rust code\n"
+        "7. search_github(paper_id) → find existing implementations\n\n"
+        "SEARCH (no pipeline needed):\n"
+        "- search_papers(query) → semantic search over already-processed papers\n\n"
+        "CUSTOM NOTATIONS (before extraction):\n"
+        "- add_notation / list_notations / remove_notation → define custom LaTeX macros\n\n"
+        "The pipeline is async: run_pipeline returns immediately, "
+        "use get_run_status to track progress."
     ),
     host="0.0.0.0",
     port=MCP_PORT,
@@ -594,3 +607,87 @@ def remove_notation(name: str) -> str:
         return _flavor("notation_deleted", name=name)
     msg = result.get("error", "Unknown error") if isinstance(result, dict) else "Bad response"
     return _flavor("error", msg=msg)
+
+
+# -- MCP Prompts (guided workflows for Claude Desktop users) --
+
+
+@mcp.prompt()
+def research_workflow(query: str) -> str:
+    """Full research workflow: discover papers, extract formulas, validate, generate code.
+
+    Use this when you want to process new papers on a topic end-to-end.
+    """
+    return (
+        f"## PePeRS Research Workflow\n\n"
+        f"**Topic:** {query}\n\n"
+        f"Execute these steps in order using PePeRS tools:\n\n"
+        f"### Step 1: Launch pipeline\n"
+        f'```\nrun_pipeline(query="{query}", stages=5)\n```\n'
+        f"Save the `run_id` from the response.\n\n"
+        f"### Step 2: Monitor progress\n"
+        f"```\nget_run_status(run_id=<id>)\n```\n"
+        f"Poll every 10-15 seconds until `status` is `completed`.\n\n"
+        f"### Step 3: Review results\n"
+        f'```\nlist_papers(stage="codegen")\n```\n'
+        f"This shows all papers that completed the full pipeline.\n\n"
+        f"### Step 4: Explore each paper\n"
+        f"For each interesting paper:\n"
+        f"- `get_paper(paper_id=<id>)` — full details + abstract\n"
+        f"- `get_formulas(paper_id=<id>)` — validated LaTeX formulas\n"
+        f"- `get_generated_code(paper_id=<id>)` — Python/C99/Rust code\n"
+        f"- `search_github(paper_id=<id>)` — existing implementations\n\n"
+        f"### Step 5: Semantic search\n"
+        f'```\nsearch_papers("{query}")\n```\n'
+        f"Search across all processed papers for related results.\n"
+    )
+
+
+@mcp.prompt()
+def paper_deep_dive(paper_id: int) -> str:
+    """Deep dive into a single paper: formulas, validations, code, GitHub repos.
+
+    Use this when you already have a paper_id and want to explore it fully.
+    """
+    return (
+        f"## PePeRS Paper Deep Dive\n\n"
+        f"**Paper ID:** {paper_id}\n\n"
+        f"Execute these steps to fully explore this paper:\n\n"
+        f"1. `get_paper(paper_id={paper_id})` — get title, abstract, metadata\n"
+        f"2. `get_formulas(paper_id={paper_id})` — all extracted and validated formulas\n"
+        f"3. `get_generated_code(paper_id={paper_id})` — generated code in all languages\n"
+        f"4. `search_github(paper_id={paper_id})` — find GitHub implementations\n\n"
+        f"After reviewing, summarize:\n"
+        f"- Key formulas and their validation status\n"
+        f"- Generated code quality and completeness\n"
+        f"- Available GitHub implementations\n"
+    )
+
+
+@mcp.prompt()
+def setup_notations() -> str:
+    """Set up custom LaTeX notations for a paper's macros before extraction.
+
+    Use this when papers use custom macros like \\Expect, \\Var, \\KL that
+    need to be expanded before CAS validation.
+    """
+    return (
+        "## PePeRS Custom Notation Setup\n\n"
+        "Custom notations expand LaTeX macros before CAS validation.\n\n"
+        "### Step 1: Check existing notations\n"
+        "```\nlist_notations()\n```\n\n"
+        "### Step 2: Add common notations\n"
+        "Examples:\n"
+        '```\nadd_notation(name="Expect", body="\\\\mathbb{E}\\\\left[#1\\\\right]", '
+        'nargs=1, description="Expected value")\n'
+        'add_notation(name="Var", body="\\\\mathrm{Var}\\\\left(#1\\\\right)", '
+        'nargs=1, description="Variance")\n'
+        'add_notation(name="KL", body="D_{\\\\mathrm{KL}}\\\\left(#1 \\\\| #2\\\\right)", '
+        'nargs=2, description="KL divergence")\n'
+        'add_notation(name="R", body="\\\\mathbb{R}", '
+        'nargs=0, description="Real numbers")\n```\n\n'
+        "### Step 3: Verify\n"
+        "```\nlist_notations()\n```\n\n"
+        "Notations apply to all **future** extractions. "
+        "Already-extracted formulas are not re-processed.\n"
+    )
