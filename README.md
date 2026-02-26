@@ -185,7 +185,7 @@ pepers/
 │   ├── codegen/         # Code gen + batch explain (:8774)
 │   ├── orchestrator/    # Pipeline + API + cron (:8775)
 │   └── mcp/             # MCP Server SSE (:8776)
-├── tests/               # 880+ tests (unit, integration, e2e)
+├── tests/               # Unit, integration, e2e
 ├── deploy/              # 7 systemd .service + .target
 ├── docker-compose.yml   # All services, host networking
 └── Dockerfile           # Multi-stage build
@@ -286,14 +286,11 @@ Claude: I'll use the PePeRS research workflow. Let me start the pipeline...
 
 No web frameworks. No ORMs. No message queues.
 
-## Stats
+## Technical Highlights
 
-- **8,500+ LOC** Python across 7 services + shared library
-- **880+ tests** (unit, integration, e2e) — all passing
-- **13 milestones** shipped (v1.0-v13.0)
-- **6 LLM providers** with configurable fallback chain
-- **4 CAS engines** for mathematical consensus (2 required + 2 optional)
-- **3 codegen languages** (Python, C99, Rust)
+- **6 LLM providers** with configurable fallback chain (Gemini, Claude, Codex, OpenRouter, Ollama, OpenAI)
+- **4 CAS engines** for mathematical consensus: SymPy + SageMath (required), MATLAB + WolframAlpha (optional)
+- **3 codegen targets** — Python, C99, Rust via SymPy `codegen()`
 
 ## External Dependencies
 
