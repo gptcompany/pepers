@@ -132,6 +132,15 @@ SUBCOMMANDS: dict[str, Callable[[Path], list]] = {
 }
 
 
+def _tag_tier(
+    steps: list, tier: str, tier_map: dict[str, str],
+) -> list:
+    """Register each step's name in tier_map and return the steps unchanged."""
+    for step in steps:
+        tier_map[step.name] = tier
+    return steps
+
+
 def _easy_mode(root: Path, console: Console) -> int:
     """Non-interactive setup: safe defaults, Docker-first, structured verdict."""
     from services.setup._checks import (
@@ -158,17 +167,14 @@ def _easy_mode(root: Path, console: Console) -> int:
     tier_map: dict[str, str] = {}
 
     # ── Core prerequisites ───────────────────────────────────
-    core_steps = [
+    core_steps = _tag_tier([
         PythonCheck(),
         UvCheck(),
         SQLiteCheck(),
         VenvCheck(root),
         DiskSpaceCheck(root),
-    ]
-    for s in core_steps:
-        tier_map[s.name] = TIER_CORE
-    results = run_noninteractive(core_steps, console)
-    all_results.extend(results)
+    ], TIER_CORE, tier_map)
+    all_results.extend(run_noninteractive(core_steps, console))
 
     # ── EnvConfig (auto-generate .env with defaults) ─────────
     env_cfg = EnvConfig(root)
@@ -181,22 +187,21 @@ def _easy_mode(root: Path, console: Console) -> int:
         all_results.append((env_cfg.name, "ok" if ok else "failed"))
 
     # ── Docker ───────────────────────────────────────────────
-    docker_steps = [
+    docker_steps = _tag_tier([
         DockerCheck(),
         DockerComposeCheck(),
         DockerComposeUp(root),
-    ]
-    for s in docker_steps:
-        tier_map[s.name] = TIER_CORE
-    results = run_noninteractive(docker_steps, console)
-    all_results.extend(results)
+    ], TIER_CORE, tier_map)
+    all_results.extend(run_noninteractive(docker_steps, console))
 
     # ── External services (check-only, no install) ───────────
-    external_steps = [ExternalServiceCheck(svc) for svc in _EXTERNAL_SERVICES]
-    for s in external_steps:
-        tier_map[s.name] = TIER_EXTERNAL
-    results = run_noninteractive(external_steps, console, check_only=True)
-    all_results.extend(results)
+    external_steps = _tag_tier(
+        [ExternalServiceCheck(svc) for svc in _EXTERNAL_SERVICES],
+        TIER_EXTERNAL, tier_map,
+    )
+    all_results.extend(
+        run_noninteractive(external_steps, console, check_only=True)
+    )
 
     # ── Health table (informational) ─────────────────────────
     console.print()
@@ -222,24 +227,27 @@ def main(argv: list[str] | None = None) -> int:
         _print_usage(console)
         return 0
 
-    from services.setup._runner import run_interactive_menu, run_steps
-
     if command == "easy":
         return _easy_mode(root, console)
-    elif command in {"all", "guided"}:
+
+    if command in {"all", "guided"}:
+        from services.setup._runner import run_interactive_menu
+
         console.print(WELCOME_GUIDE)
         steps = _all_steps(root)
         ok = run_interactive_menu(steps, console)
         return 0 if ok else 1
-    elif command in SUBCOMMANDS:
-        steps = SUBCOMMANDS[command](root)
-    else:
-        console.print(f"[red]Unknown command: {command}[/]")
-        _print_usage(console)
-        return 1
 
-    ok = run_steps(steps, console)
-    return 0 if ok else 1
+    if command in SUBCOMMANDS:
+        from services.setup._runner import run_steps
+
+        steps = SUBCOMMANDS[command](root)
+        ok = run_steps(steps, console)
+        return 0 if ok else 1
+
+    console.print(f"[red]Unknown command: {command}[/]")
+    _print_usage(console)
+    return 1
 
 
 if __name__ == "__main__":

@@ -207,6 +207,7 @@ def _print_summary(results: list[tuple[str, str]], console: Console) -> None:
         "failed": "[red]\u274c Failed[/]",
         "warn": "[yellow]\u26a0\ufe0f  Warning[/]",
         "pending": "[dim]\u2b1c Pending[/]",
+        "unavailable": "[dim]\u2b1c Unavailable[/]",
         "abort": "[red]\u274c Aborted[/]",
     }
     for name, status in results:

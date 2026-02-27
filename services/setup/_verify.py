@@ -203,18 +203,9 @@ def compute_verdict(
 def print_verdict(verdict: SetupVerdict, console: Console) -> None:
     """Print a coloured readiness banner with actionable details."""
     banners = {
-        Readiness.READY: (
-            "green",
-            "\u2705  READY",
-        ),
-        Readiness.READY_WITH_LIMITATIONS: (
-            "yellow",
-            "\u26a0\ufe0f  READY WITH LIMITATIONS",
-        ),
-        Readiness.NOT_READY: (
-            "red",
-            "\u274c  NOT READY",
-        ),
+        Readiness.READY: ("green", "\u2705  READY"),
+        Readiness.READY_WITH_LIMITATIONS: ("yellow", "\u26a0\ufe0f  READY WITH LIMITATIONS"),
+        Readiness.NOT_READY: ("red", "\u274c  NOT READY"),
     }
     colour, label = banners[verdict.readiness]
 

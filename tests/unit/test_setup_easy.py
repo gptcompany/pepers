@@ -76,13 +76,17 @@ class TestRunNoninteractive:
         import services.setup._runner as runner_mod
 
         source = inspect.getsource(runner_mod.run_noninteractive)
-        # Strip docstring by parsing AST and checking for questionary calls
         tree = ast.parse(source)
+        questionary_methods = {"confirm", "select", "text"}
         for node in ast.walk(tree):
-            if isinstance(node, ast.Attribute):
-                assert node.attr not in ("confirm", "select", "text") or (
-                    not isinstance(node.value, ast.Name)
-                    or node.value.id != "questionary"
+            if (
+                isinstance(node, ast.Attribute)
+                and isinstance(node.value, ast.Name)
+                and node.value.id == "questionary"
+                and node.attr in questionary_methods
+            ):
+                raise AssertionError(
+                    f"run_noninteractive calls questionary.{node.attr}"
                 )
 
     def test_multiple_steps_all_reported(self):
