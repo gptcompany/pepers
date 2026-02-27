@@ -472,13 +472,13 @@ class TestEnvConfig:
     @patch("questionary.confirm")
     @patch("questionary.select")
     def test_install_with_custom_vars(self, mock_select, mock_confirm, mock_text, tmp_path):
-        # 26 standard variables. All will ask for text except those with "choice:"
-        # Let's count them: 
-        # port (8), url (4), path (2), text (9), choice (3)
-        # Total text questions = 8 + 4 + 2 + 9 = 23
-        
+        # 27 standard variables. All will ask for text except those with "choice:"
+        # Let's count them:
+        # port (8), url (4), path (3), text (9), choice (3)
+        # Total text questions = 8 + 4 + 3 + 9 = 24
+
         # mock all standard text responses
-        standard_responses = ["std_val"] * 23
+        standard_responses = ["std_val"] * 24
         # then custom var loop: key, val, next key empty
         custom_responses = ["CUSTOM_K", "CUSTOM_V", ""]
         

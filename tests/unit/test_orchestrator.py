@@ -560,8 +560,19 @@ class TestOrchestratorHandler:
         handler = OrchestratorHandler.__new__(OrchestratorHandler)
         handler.runner = MagicMock()
         handler.runner.get_pipeline_status.return_value = {"active_runs": 0}
+        handler.runner._resolve_stages.return_value = [
+            ("discovery", 8770), ("analyzer", 8771), ("extractor", 8772),
+        ]
+        handler.runner.check_external_health.return_value = {
+            "all_healthy": True,
+            "deps": {
+                "cas": {"url": "http://localhost:8769", "healthy": True},
+                "rag": {"url": "http://localhost:8767", "healthy": True},
+                "ollama": {"url": "http://localhost:11434", "healthy": True},
+            },
+        }
         handler.send_json = MagicMock()
-        
+
         handler.handle_run({"query": "test", "stages": 3})
         
         handler.send_json.assert_called_once_with(

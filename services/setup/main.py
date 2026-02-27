@@ -6,6 +6,7 @@ Usage:
     pepers-setup config       # .env configuration only
     pepers-setup services     # external services check only
     pepers-setup docker       # Docker Compose only
+    pepers-setup down         # stop and remove containers
     pepers-setup verify       # aggregated health check only
 """
 
@@ -42,7 +43,7 @@ WELCOME_GUIDE = """\
 
 def _print_usage(console: Console) -> None:
     console.print(
-        "Usage: pepers-setup [all|check|config|services|docker|verify|help]",
+        "Usage: pepers-setup [all|check|config|services|docker|down|verify|help]",
         markup=False,
     )
 
@@ -101,6 +102,12 @@ def _docker_steps(root: Path) -> list:
     return get_all_steps(root)
 
 
+def _down_steps(root: Path) -> list:
+    from services.setup._docker import get_down_steps
+
+    return get_down_steps(root)
+
+
 def _verify_steps(_: Path) -> list:
     from services.setup._verify import AggregatedHealthCheck
 
@@ -112,6 +119,7 @@ SUBCOMMANDS: dict[str, Callable[[Path], list]] = {
     "config": _config_steps,
     "services": _services_steps,
     "docker": _docker_steps,
+    "down": _down_steps,
     "verify": _verify_steps,
 }
 

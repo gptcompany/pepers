@@ -12,6 +12,7 @@ from rich.console import Console
 _CONFIG_VARS: list[tuple[str, str, str, str]] = [
     ("RP_DB_PATH", "SQLite database path", "{root}/data/research.db", "path"),
     ("RP_DATA_DIR", "Data directory", "{root}/data", "path"),
+    ("PEPERS_DATA_DIR", "Docker data mount path (absolute recommended)", "{root}/data", "path"),
     ("RP_LOG_LEVEL", "Log level", "INFO", "choice:DEBUG,INFO,WARNING,ERROR"),
     ("RP_DISCOVERY_PORT", "Discovery service port", "8770", "port"),
     ("RP_ANALYZER_PORT", "Analyzer service port", "8771", "port"),

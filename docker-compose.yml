@@ -31,9 +31,9 @@ services:
       - RP_LOG_LEVEL=INFO
     env_file: .env
     volumes:
-      - ./data:/data
+      - ${PEPERS_DATA_DIR:-./data}:/data
     user: "${PEPERS_UID:-1000}:${PEPERS_GID:-1000}"
-    restart: unless-stopped
+    restart: always
     logging: *default-logging
     deploy: *default-deploy
     stop_grace_period: 10s
@@ -62,9 +62,9 @@ services:
       - HOME=/tmp
     env_file: .env
     volumes:
-      - ./data:/data
+      - ${PEPERS_DATA_DIR:-./data}:/data
     user: "${PEPERS_UID:-1000}:${PEPERS_GID:-1000}"
-    restart: unless-stopped
+    restart: always
     logging: *default-logging
     deploy: *default-deploy
     stop_grace_period: 10s
@@ -93,16 +93,16 @@ services:
       - RP_DB_PATH=/data/research.db
       - RP_EXTRACTOR_MAX_PAPERS=10
       - RP_EXTRACTOR_PDF_DIR=/data/pdfs
-      - RP_EXTRACTOR_PDF_HOST_DIR=${PEPERS_ROOT:-./}/data/pdfs
+      - RP_EXTRACTOR_PDF_HOST_DIR=${PEPERS_DATA_DIR:-./data}/pdfs
       - RP_EXTRACTOR_RAG_URL=http://localhost:8767
       - RP_EXTRACTOR_RAG_DATA_HOST=${RAG_DATA_HOST:-}
       - RP_LOG_LEVEL=INFO
     env_file: .env
     volumes:
-      - ./data:/data
+      - ${PEPERS_DATA_DIR:-./data}:/data
       - ${RAG_DATA_PATH:-./data}:/rag-data:ro
     user: "${PEPERS_UID:-1000}:${PEPERS_GID:-1000}"
-    restart: unless-stopped
+    restart: always
     logging: *default-logging
     deploy: *default-deploy
     stop_grace_period: 10s
@@ -134,9 +134,9 @@ services:
       - RP_LOG_LEVEL=INFO
     env_file: .env
     volumes:
-      - ./data:/data
+      - ${PEPERS_DATA_DIR:-./data}:/data
     user: "${PEPERS_UID:-1000}:${PEPERS_GID:-1000}"
-    restart: unless-stopped
+    restart: always
     logging: *default-logging
     deploy: *default-deploy
     stop_grace_period: 10s
@@ -169,9 +169,9 @@ services:
       - HOME=/tmp
     env_file: .env
     volumes:
-      - ./data:/data
+      - ${PEPERS_DATA_DIR:-./data}:/data
     user: "${PEPERS_UID:-1000}:${PEPERS_GID:-1000}"
-    restart: unless-stopped
+    restart: always
     logging: *default-logging
     deploy: *default-deploy
     stop_grace_period: 10s
@@ -210,9 +210,9 @@ services:
       - RP_LOG_LEVEL=INFO
     env_file: .env
     volumes:
-      - ./data:/data
+      - ${PEPERS_DATA_DIR:-./data}:/data
     user: "${PEPERS_UID:-1000}:${PEPERS_GID:-1000}"
-    restart: unless-stopped
+    restart: always
     logging: *default-logging
     deploy: *orchestrator-deploy
     stop_grace_period: 20s
@@ -242,9 +242,9 @@ services:
       - RP_MCP_FLAVOR=arcade
     env_file: .env
     volumes:
-      - ./data:/data
+      - ${PEPERS_DATA_DIR:-./data}:/data
     user: "${PEPERS_UID:-1000}:${PEPERS_GID:-1000}"
-    restart: unless-stopped
+    restart: always
     logging: *default-logging
     deploy: *default-deploy
     stop_grace_period: 10s

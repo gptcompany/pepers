@@ -105,9 +105,78 @@ class DockerComposeUp:
         return self.check()
 
 
+class DockerBootCheck:
+    name = "Docker boot persistence"
+    description = "Ensure Docker starts on system boot"
+
+    def check(self) -> bool:
+        try:
+            result = subprocess.run(
+                ["systemctl", "is-enabled", "docker"],
+                capture_output=True,
+                text=True,
+            )
+            return result.stdout.strip() == "enabled"
+        except FileNotFoundError:
+            # No systemd (e.g. macOS) — skip gracefully
+            return True
+
+    def install(self, console: Console) -> bool:
+        console.print(
+            "[yellow]Docker is not enabled at boot.[/]\n"
+            "Run: [bold]sudo systemctl enable docker[/]"
+        )
+        return False
+
+    def verify(self) -> bool:
+        return self.check()
+
+
+class DockerComposeDown:
+    name = "Docker Compose teardown"
+    description = "Stop and remove local containers"
+
+    def __init__(self, project_root: Path) -> None:
+        self._root = project_root
+
+    def check(self) -> bool:
+        try:
+            result = subprocess.run(
+                ["docker", "compose", "ps", "--quiet"],
+                cwd=self._root,
+                capture_output=True,
+                text=True,
+            )
+            return result.returncode == 0 and len(result.stdout.strip()) == 0
+        except (subprocess.CalledProcessError, FileNotFoundError):
+            return True  # No compose / no docker → nothing to tear down
+
+    def install(self, console: Console) -> bool:
+        console.print("[cyan]Running docker compose down...[/]")
+        try:
+            subprocess.run(
+                ["docker", "compose", "down"],
+                cwd=self._root,
+                check=True,
+                text=True,
+            )
+            return True
+        except subprocess.CalledProcessError as exc:
+            console.print(f"[red]docker compose down failed:[/] {exc}")
+            return False
+
+    def verify(self) -> bool:
+        return self.check()
+
+
+def get_down_steps(project_root: Path) -> list:
+    return [DockerComposeDown(project_root)]
+
+
 def get_all_steps(project_root: Path) -> list:
     return [
         DockerCheck(),
         DockerComposeCheck(),
+        DockerBootCheck(),
         DockerComposeUp(project_root),
     ]

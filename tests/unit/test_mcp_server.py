@@ -262,14 +262,33 @@ class TestMCPServerToolsExtended:
             assert "Error: too long" in res
 
     @patch("services.mcp.server._call_orchestrator")
-    def test_list_notations_success(self, mock_call):
-        from services.mcp.server import list_notations
-        mock_call.return_value = [{"name": "Expect", "body": "E", "nargs": 1, "description": "Exp"}]
+    def test_search_papers_invalid_response(self, mock_call):
+        from services.mcp.server import search_papers
+        mock_call.return_value = "not-a-dict"
         with patch("services.mcp.server.MCP_FLAVOR", "plain"):
-            res = list_notations()
-            assert "1 custom notations" in res
-            assert "**\\Expect**{#1}" in res
-            assert "_Exp_" in res
+            res = search_papers("q")
+            assert "Invalid orchestrator response type" in res
+
+    @patch("services.mcp.server._call_orchestrator")
+    def test_list_papers_invalid_response(self, mock_call):
+        from services.mcp.server import list_papers
+        mock_call.return_value = "not-a-list"
+        with patch("services.mcp.server.MCP_FLAVOR", "plain"):
+            res = list_papers()
+            assert "Unexpected response format" in res
+            
+    @patch("services.mcp.server._call_orchestrator")
+    def test_get_paper_long_abstract_and_many_formulas(self, mock_call):
+        from services.mcp.server import get_paper
+        mock_call.return_value = {
+            "id": 1, "title": "T", "stage": "s", "abstract": "A"*500,
+            "formulas": [{"latex": f"f_{i}"} for i in range(15)]
+        }
+        with patch("services.mcp.server.MCP_FLAVOR", "plain"):
+            res = get_paper(1)
+            assert "A"*300 in res
+            assert "A"*301 not in res
+            assert "and 5 more" in res
 
     @patch("services.mcp.server._call_orchestrator")
     def test_remove_notation_fail(self, mock_call):

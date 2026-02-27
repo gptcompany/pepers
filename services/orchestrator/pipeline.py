@@ -44,6 +44,21 @@ STAGE_ORDER: list[tuple[str, int]] = [
     ("codegen", 8774),
 ]
 
+# External dependencies checked before pipeline runs: (name, base_url, health_path)
+EXTERNAL_DEPS: list[tuple[str, str, str]] = [
+    ("cas", os.environ.get("RP_VALIDATOR_CAS_URL", "http://localhost:8769"), "/health"),
+    ("rag", os.environ.get("RP_EXTRACTOR_RAG_URL", "http://localhost:8767"), "/health"),
+    ("ollama", os.environ.get("RP_CODEGEN_OLLAMA_URL", "http://localhost:11434"), "/"),
+]
+
+# Which stages require which external deps (hard dependencies only).
+# Ollama is excluded: codegen uses it as last-resort fallback in the LLM chain,
+# not as a hard requirement.
+STAGE_EXTERNAL_DEPS: dict[str, list[str]] = {
+    "extractor": ["rag"],
+    "validator": ["cas"],
+}
+
 # Maps orchestrator params to per-service params
 STAGE_PARAMS: dict[str, dict[str, str]] = {
     "discovery": {"query": "query", "max_papers": "max_results"},
@@ -495,7 +510,38 @@ class PipelineRunner:
                 }
                 all_healthy = False
 
-        return {"all_healthy": all_healthy, "services": services}
+        external = self.check_external_health()
+        if not external["all_healthy"]:
+            all_healthy = False
+
+        return {
+            "all_healthy": all_healthy,
+            "services": services,
+            "external": external,
+        }
+
+    def check_external_health(self) -> dict:
+        """Check health of external dependencies (CAS, RAG, Ollama).
+
+        Returns:
+            Dict with all_healthy flag and per-dep status.
+        """
+        deps: dict[str, dict] = {}
+        all_healthy = True
+
+        for name, base_url, health_path in EXTERNAL_DEPS:
+            url = f"{base_url}{health_path}"
+            try:
+                resp = requests.get(url, timeout=3)
+                healthy = resp.status_code < 400
+            except requests.RequestException:
+                healthy = False
+
+            deps[name] = {"url": base_url, "healthy": healthy}
+            if not healthy:
+                all_healthy = False
+
+        return {"all_healthy": all_healthy, "deps": deps}
 
     @staticmethod
     def _generate_run_id() -> str:

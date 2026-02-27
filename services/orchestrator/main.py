@@ -99,6 +99,7 @@ class OrchestratorHandler(BaseHandler):
         max_papers = data.get("max_papers", 10)
         max_formulas = data.get("max_formulas", 50)
         force = data.get("force", False)
+        skip_preflight = data.get("skip_preflight", False)
 
         # Validate
         if paper_id is not None and not isinstance(paper_id, int):
@@ -111,6 +112,29 @@ class OrchestratorHandler(BaseHandler):
                 "stages must be between 1 and 5", "VALIDATION_ERROR", 400
             )
             return None
+
+        # Preflight: check only the external deps needed by requested stages
+        if not skip_preflight:
+            from services.orchestrator.pipeline import STAGE_EXTERNAL_DEPS
+
+            stage_list = self.runner._resolve_stages(query, paper_id, stages)
+            needed_deps = set()
+            for stage_name, _ in stage_list:
+                needed_deps.update(STAGE_EXTERNAL_DEPS.get(stage_name, []))
+
+            if needed_deps:
+                ext = self.runner.check_external_health()
+                down = [
+                    name for name, info in ext["deps"].items()
+                    if name in needed_deps and not info["healthy"]
+                ]
+                if down:
+                    self.send_error_json(
+                        f"External dependencies unavailable: {', '.join(down)}",
+                        "PREFLIGHT_FAILED",
+                        503,
+                    )
+                    return None
 
         run_id = PipelineRunner._generate_run_id()
 
