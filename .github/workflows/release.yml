@@ -36,4 +36,17 @@ jobs:
       - name: Semantic Release
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        run: semantic-release version --changelog --push --tag --vcs-release
+        shell: bash
+        run: |
+          set +e
+          output=$(semantic-release version --changelog --push --tag --vcs-release 2>&1)
+          status=$?
+          echo "$output"
+          if [ "$status" -eq 0 ]; then
+            exit 0
+          fi
+          if echo "$output" | grep -qiE "no release|no_release|nothing to release|NoRelease"; then
+            echo "No releasable changes detected; skipping release."
+            exit 0
+          fi
+          exit "$status"
