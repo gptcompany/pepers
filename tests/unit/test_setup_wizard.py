@@ -125,9 +125,9 @@ class TestNodeCheck:
         assert step.install(MagicMock()) is False
 
     @patch("platform.system", return_value="Darwin")
-    @patch("shutil.which", return_value="/usr/local/bin/brew")
-    @patch("subprocess.run", side_effect=subprocess.CalledProcessError(1, "brew"))
-    def test_install_macos_fails(self, mock_run, mock_which, mock_platform):
+    @patch("services.setup._cli_tools._ensure_macports", return_value=True)
+    @patch("subprocess.run", side_effect=subprocess.CalledProcessError(1, "port"))
+    def test_install_macos_fails(self, mock_run, mock_ensure, mock_platform):
         console = MagicMock()
         step = NodeCheck()
         assert step.install(console) is False
@@ -148,14 +148,16 @@ class TestOllamaCheck:
         assert step.check() is True
 
     @patch("platform.system", return_value="Darwin")
-    @patch("shutil.which", return_value="/usr/local/bin/brew")
+    @patch("services.setup._cli_tools._ensure_macports", return_value=True)
     @patch("subprocess.run")
-    def test_install_macos(self, mock_run, mock_which, mock_platform):
+    def test_install_macos(self, mock_run, mock_ensure, mock_platform):
         console = MagicMock()
         step = OllamaCheck()
         mock_run.return_value = MagicMock(returncode=0)
         assert step.install(console) is True
-        mock_run.assert_called_with(["brew", "install", "ollama"], check=True, text=True)
+        mock_run.assert_called_with(
+            ["sudo", "port", "install", "ollama"], check=True, text=True,
+        )
 
     @patch("platform.system", return_value="Linux")
     @patch("subprocess.run", side_effect=subprocess.CalledProcessError(1, "sh"))
