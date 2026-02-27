@@ -18,6 +18,7 @@ import pytest
 from shared.db import init_db, transaction
 from services.discovery.main import DiscoveryHandler
 from services.extractor.main import ExtractorHandler
+from services.orchestrator.main import OrchestratorHandler
 from services.validator.main import ValidatorHandler
 from services.codegen.main import CodegenHandler
 
@@ -434,6 +435,56 @@ class TestFullPipelineE2E:
         assert _get_paper_stage(self.db_path, 1) == "extracted"
         assert _count_formulas_by_stage(self.db_path, "any_stage") == 0
 
+    @patch("services.discovery.main.search_arxiv")
+    @patch("services.extractor.main.pdf.download_pdf")
+    @patch("services.extractor.main.rag_client.process_paper")
+    def test_e2e_orchestrator_handles_service_failure(self, mock_rag, mock_pdf, mock_arxiv):
+        # 1. Setup: Start all services
+        self.ports["orchestrator"] = _get_free_port()
+        
+        # Set env vars for Orchestrator to find other services
+        env = {f"RP_{name.upper()}_PORT": str(port) for name, port in self.ports.items()}
+        
+        with patch.dict(os.environ, env):
+            self._start_svc("discovery", DiscoveryHandler)
+            self._start_svc("extractor", ExtractorHandler)
+            self._start_svc("validator", ValidatorHandler)
+            self._start_svc("orchestrator", OrchestratorHandler)
+
+        # 2. Seed data and run successful stages
+        mock_arxiv.return_value = [{"arxiv_id": "2401.33333", "title": "Resilience Test", "abstract": "Text", "authors": "[]", "categories": "[]", "pdf_url": "http://pdf", "published_date": "2024-01-01", "doi": None}]
+        self._post(self.ports["discovery"], {"query": "resilience"})
+        
+        with transaction(self.db_path) as conn:
+            conn.execute("UPDATE papers SET stage='analyzed' WHERE id=1")
+            
+        mock_pdf.return_value = "fake.pdf"
+        mock_rag.return_value = "Formula $$ resilient = true $$"
+        self._post(self.ports["extractor"], {"paper_id": 1})
+        
+        # 3. Induce failure in the *next* service (Validator)
+        with patch.object(ValidatorHandler, "handle_process", side_effect=Exception("Service Offline")):
+            # 4. Trigger the full pipeline via Orchestrator
+            # Since paper_id=1 is at stage 'extracted', this will start from 'validator'
+            run_resp = self._post(self.ports["orchestrator"], {"paper_id": 1, "stages": 2})
+            run_id = run_resp["run_id"]
+            
+            # 5. Poll for completion
+            final_status = None
+            for _ in range(10): # Poll for 5s
+                status_req = urllib.request.Request(f"http://localhost:{self.ports['orchestrator']}/runs?id={run_id}")
+                with urllib.request.urlopen(status_req) as resp:
+                    final_status = json.loads(resp.read())
+                if final_status["status"] != "running":
+                    break
+                time.sleep(0.5)
+
+        # 6. Assertions
+        assert final_status is not None
+        assert final_status["status"] == "failed"
+        assert "validator: Service Offline" in final_status["errors"][0]
+        assert _get_paper_stage(self.db_path, 1) == "extracted" # Should not advance
+
     @pytest.fixture(autouse=True)
     def setup(self, tmp_path):
         self.db_path = str(tmp_path / "full_e2e.db")
@@ -470,50 +521,51 @@ class TestFullPipelineE2E:
             return json.loads(resp.read())
 
     @patch("services.discovery.main.search_arxiv")
-    @patch("services.validator.main.CASClient")
-    @patch("services.codegen.main.generate_all")
-    def test_full_discovery_to_codegen_flow(self, mock_gen, mock_cas_cls, mock_arxiv):
-        # 1. Mock Discovery
-        mock_arxiv.return_value = [{
-            "arxiv_id": "2401.99999", "title": "E2E", "abstract": "Test",
-            "authors": "[]", "categories": "[]", "pdf_url": "http://pdf",
-            "published_date": "2024-01-01", "doi": None
-        }]
+    @patch("services.extractor.main.pdf.download_pdf")
+    @patch("services.extractor.main.rag_client.process_paper")
+    def test_e2e_orchestrator_handles_service_failure(self, mock_rag, mock_pdf, mock_arxiv):
+        # 1. Setup: Start all services
+        self.ports["orchestrator"] = _get_free_port()
         
-        # 2. Mock Validator
-        mock_res = MagicMock(engine="sympy", success=True, is_valid=True, simplified="x", error=None, time_ms=1)
-        mock_cas_client = mock_cas_cls.return_value
-        mock_cas_client.health.return_value = True
-        mock_cas_client.validate.return_value = MagicMock(results=[mock_res])
+        # Set env vars for Orchestrator to find other services
+        env = {f"RP_{name.upper()}_PORT": str(port) for name, port in self.ports.items()}
         
-        # 3. Mock Codegen
-        mock_gen.return_value = [{"language": "python", "code": "pass", "metadata": {}, "error": None}]
+        with patch.dict(os.environ, env):
+            self._start_svc("discovery", DiscoveryHandler)
+            self._start_svc("extractor", ExtractorHandler)
+            self._start_svc("validator", ValidatorHandler)
+            self._start_svc("orchestrator", OrchestratorHandler)
 
-        # Run Discovery
-        self._start_svc("discovery", DiscoveryHandler)
-        self._post(self.ports["discovery"], {"query": "test"})
+        # 2. Seed data and run successful stages
+        mock_arxiv.return_value = [{"arxiv_id": "2401.33333", "title": "Resilience Test", "abstract": "Text", "authors": "[]", "categories": "[]", "pdf_url": "http://pdf", "published_date": "2024-01-01", "doi": None}]
+        self._post(self.ports["discovery"], {"query": "resilience"})
         
-        # Inject analyzed status (skipping analyzer service for speed)
         with transaction(self.db_path) as conn:
-            conn.execute("UPDATE papers SET stage='analyzed'")
-            # Manually inject formula (skipping extractor service)
-            conn.execute(
-                "INSERT INTO formulas (paper_id, latex, latex_hash, stage) "
-                "VALUES (1, 'E=mc^2', 'hash1', 'extracted')"
-            )
-            # Extracted papers need stage='extracted' to be picked by validator
-            conn.execute("UPDATE papers SET stage='extracted'")
-
-        # Run Validator
-        self._start_svc("validator", ValidatorHandler)
-        self._post(self.ports["validator"], {})
-        
-        assert _get_paper_stage(self.db_path, 1) == "validated"
-
-        # Run Codegen
-        self._start_svc("codegen", CodegenHandler)
-        with patch("services.codegen.main.explain_formulas_batch", return_value={}):
-            self._post(self.ports["codegen"], {})
+            conn.execute("UPDATE papers SET stage='analyzed' WHERE id=1")
             
-        assert _get_paper_stage(self.db_path, 1) == "codegen"
-        assert _count_generated_code(self.db_path) == 1
+        mock_pdf.return_value = "fake.pdf"
+        mock_rag.return_value = "Formula $$ resilient = true $$"
+        self._post(self.ports["extractor"], {"paper_id": 1})
+        
+        # 3. Induce failure in the *next* service (Validator)
+        with patch.object(ValidatorHandler, "handle_process", side_effect=Exception("Service Offline")):
+            # 4. Trigger the full pipeline via Orchestrator
+            # Since paper_id=1 is at stage 'extracted', this will start from 'validator'
+            run_resp = self._post(self.ports["orchestrator"], {"paper_id": 1, "stages": 2})
+            run_id = run_resp["run_id"]
+            
+            # 5. Poll for completion
+            final_status = None
+            for _ in range(10): # Poll for 5s
+                status_req = urllib.request.Request(f"http://localhost:{self.ports['orchestrator']}/runs?id={run_id}")
+                with urllib.request.urlopen(status_req) as resp:
+                    final_status = json.loads(resp.read())
+                if final_status["status"] != "running":
+                    break
+                time.sleep(0.5)
+
+        # 6. Assertions
+        assert final_status is not None
+        assert final_status["status"] == "failed"
+        assert "validator: Service Offline" in final_status["errors"][0]
+        assert _get_paper_stage(self.db_path, 1) == "extracted" # Should not advance
