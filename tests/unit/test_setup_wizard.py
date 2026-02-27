@@ -175,17 +175,35 @@ class TestOllamaCheck:
 # ── NpmCliTool ───────────────────────────────────────────────
 
 class TestNpmCliTool:
+    @patch("platform.system", return_value="Linux")
     @patch("shutil.which")
     @patch("subprocess.run")
-    def test_install_success(self, mock_run, mock_which):
-        # npm is found, binary is NOT found
+    def test_install_success_linux(self, mock_run, mock_which, mock_platform):
         mock_which.side_effect = lambda x: "/usr/bin/npm" if x == "npm" else None
         mock_run.return_value = MagicMock(returncode=0)
-        
+
         step = NpmCliTool("Test", "Desc", "test-bin", "test-pkg")
         console = MagicMock()
         assert step.install(console) is True
-        mock_run.assert_called_with(["npm", "install", "-g", "test-pkg"], check=True, capture_output=True, text=True)
+        mock_run.assert_called_with(
+            ["npm", "install", "-g", "test-pkg"],
+            check=True, capture_output=True, text=True,
+        )
+
+    @patch("platform.system", return_value="Darwin")
+    @patch("shutil.which")
+    @patch("subprocess.run")
+    def test_install_success_macos_uses_sudo(self, mock_run, mock_which, mock_platform):
+        mock_which.side_effect = lambda x: "/usr/bin/npm" if x == "npm" else None
+        mock_run.return_value = MagicMock(returncode=0)
+
+        step = NpmCliTool("Test", "Desc", "test-bin", "test-pkg")
+        console = MagicMock()
+        assert step.install(console) is True
+        mock_run.assert_called_with(
+            ["sudo", "npm", "install", "-g", "test-pkg"],
+            check=True, capture_output=True, text=True,
+        )
 
     @patch("shutil.which", return_value=None)
     def test_install_fails_no_npm(self, mock_which):
