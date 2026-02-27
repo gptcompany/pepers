@@ -300,7 +300,7 @@ No web frameworks. No ORMs. No message queues.
 | CAS Microservice | 8769 | For formula validation (SymPy + SageMath; optional MATLAB, WolframAlpha) | `cd cas-service && cas-setup` |
 | Ollama | 11434 | For local LLM (optional, fallback chain) | `curl -fsSL https://ollama.ai/install.sh \| sh` |
 
-Each external service has its own setup wizard. Run `pepers-setup services` to check their availability.
+Each external service has its own setup wizard. Run `pepers-setup services` to check availability and boot persistence (`systemd` / Docker restart policy / `@reboot`).
 
 ## License
 

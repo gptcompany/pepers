@@ -31,7 +31,12 @@ from services.setup._config import (
     EnvConfig,
 )
 from services.setup._mcp_config import McpConfigStep
-from services.setup._services import _EXTERNAL_SERVICES, ExternalServiceCheck
+from services.setup._services import (
+    _EXTERNAL_SERVICES,
+    ExternalServiceCheck,
+    ExternalServicePersistenceCheck,
+    get_all_steps as get_services_steps,
+)
 from services.setup._verify import _EXTERNAL, AggregatedHealthCheck
 
 
@@ -574,6 +579,8 @@ class TestExternalServiceCheck:
         assert by_name["RAG Service"]["env_urls"][0] == "RP_EXTRACTOR_RAG_URL"
         assert by_name["CAS Service"]["setup_cmd"] == "cas-setup"
         assert by_name["RAG Service"]["setup_cmd"] == "rag-setup"
+        assert "cas-service.service" in by_name["CAS Service"]["systemd_units"]
+        assert "raganything.service" in by_name["RAG Service"]["systemd_units"]
         assert "Ollama" not in by_name
 
     @patch("services.setup._services.subprocess.run")
@@ -650,6 +657,76 @@ class TestExternalServiceCheck:
             assert str(cwd) == str(repo_dir)
             assert "cas.main" in cmd
             assert str(python_bin) in cmd[0]
+
+
+class TestExternalServicePersistenceCheck:
+    @patch.object(ExternalServiceCheck, "check", return_value=True)
+    @patch.object(
+        ExternalServiceCheck,
+        "check_boot_persistence",
+        return_value=(True, "systemd:cas-service.service"),
+    )
+    def test_check_passes_when_persistent(self, mock_persist, mock_check):
+        svc = _EXTERNAL_SERVICES[0]
+        step = ExternalServicePersistenceCheck(svc)
+        assert step.check() is True
+
+    @patch.object(ExternalServiceCheck, "check", return_value=True)
+    @patch.object(
+        ExternalServiceCheck,
+        "check_boot_persistence",
+        return_value=(False, "missing"),
+    )
+    def test_check_fails_when_not_persistent(self, mock_persist, mock_check):
+        svc = _EXTERNAL_SERVICES[0]
+        step = ExternalServicePersistenceCheck(svc)
+        assert step.check() is False
+
+    @patch.object(ExternalServiceCheck, "check", return_value=False)
+    def test_check_skips_when_service_down(self, mock_check):
+        svc = _EXTERNAL_SERVICES[0]
+        step = ExternalServicePersistenceCheck(svc)
+        assert step.check() is True
+
+    @patch.object(ExternalServiceCheck, "check", return_value=False)
+    def test_install_skips_when_service_down(self, mock_check):
+        svc = _EXTERNAL_SERVICES[0]
+        step = ExternalServicePersistenceCheck(svc)
+        console = MagicMock()
+        assert step.install(console) is True
+        console.print.assert_called()
+
+    @patch.object(ExternalServiceCheck, "check", return_value=True)
+    @patch.object(
+        ExternalServiceCheck,
+        "check_boot_persistence",
+        return_value=(False, "missing"),
+    )
+    def test_install_shows_instructions_when_missing(self, mock_persist, mock_check):
+        svc = _EXTERNAL_SERVICES[0]
+        step = ExternalServicePersistenceCheck(svc)
+        console = MagicMock()
+        assert step.install(console) is False
+        console.print.assert_called()
+
+    def test_services_step_includes_reachability_and_persistence(self):
+        steps = get_services_steps()
+        assert len(steps) == len(_EXTERNAL_SERVICES) * 2
+        assert isinstance(steps[0], ExternalServiceCheck)
+        assert isinstance(steps[1], ExternalServicePersistenceCheck)
+
+    @patch("services.setup._services.subprocess.run")
+    def test_systemd_boot_enabled_detects_unit(self, mock_run):
+        mock_run.return_value = MagicMock(returncode=0, stdout="enabled\n")
+        svc = {
+            "name": "CAS Service",
+            "env_urls": ["RP_VALIDATOR_CAS_URL", "RP_CAS_URL"],
+            "default_url": "http://localhost:8769",
+            "health_path": "/health",
+            "systemd_units": ["cas-service.service"],
+        }
+        step = ExternalServiceCheck(svc)
+        assert step._systemd_boot_enabled() == "cas-service.service"
 
 
 # ── MCP config ───────────────────────────────────────────────
