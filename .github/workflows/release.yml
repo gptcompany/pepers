@@ -33,7 +33,19 @@ jobs:
       - name: Install python-semantic-release
         run: pip install python-semantic-release
 
+      - name: Check push permission
+        id: push_check
+        shell: bash
+        run: |
+          if git push --dry-run origin HEAD:main >/dev/null 2>&1; then
+            echo "can_push=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "can_push=false" >> "$GITHUB_OUTPUT"
+            echo "Skipping release: current token cannot push to main."
+          fi
+
       - name: Semantic Release
+        if: steps.push_check.outputs.can_push == 'true'
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         shell: bash
