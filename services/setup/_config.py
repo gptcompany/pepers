@@ -163,5 +163,20 @@ class EnvConfig:
         console.print(f"\n[green]Wrote {self._env_path}[/]")
         return True
 
+    def install_defaults(self, console: Console) -> bool:
+        """Non-interactive install: write .env with safe defaults.
+
+        Merges over any existing values — existing keys are preserved.
+        """
+        existing = _read_env_values(self._env_path)
+        lines: list[str] = []
+        for env_name, _desc, default, _validator in _CONFIG_VARS:
+            resolved = default.replace("{root}", str(self._root))
+            value = existing.get(env_name) or os.environ.get(env_name, "") or resolved
+            lines.append(f"{env_name}={value}")
+        self._env_path.write_text("\n".join(lines) + "\n")
+        console.print(f"  [green]\u2705 {self.name}[/] \u2014 generated .env with defaults")
+        return True
+
     def verify(self) -> bool:
         return self._env_path.exists() and self._env_path.stat().st_size > 0

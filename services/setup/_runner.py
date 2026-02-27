@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from collections.abc import Sequence
 from typing import Protocol
 
 import questionary
@@ -146,6 +147,51 @@ def run_interactive_menu(steps: list[SetupStep], console: Console) -> bool:
         final.append((step.name, "ok" if ok else "pending"))
     _print_summary(final, console)
     return all(s == "ok" for _, s in final)
+
+
+def run_noninteractive(
+    steps: Sequence[SetupStep],
+    console: Console,
+    *,
+    check_only: bool = False,
+) -> list[tuple[str, str]]:
+    """Execute steps non-interactively (no prompts, no questionary).
+
+    Returns list of (step_name, status) where status is
+    "ok" | "failed" | "unavailable".
+    """
+    results: list[tuple[str, str]] = []
+
+    for step in steps:
+        try:
+            ok = step.check()
+        except Exception:
+            ok = False
+
+        if ok:
+            console.print(f"  [green]\u2705 {step.name}[/] \u2014 already configured")
+            results.append((step.name, "ok"))
+            continue
+
+        if check_only:
+            console.print(f"  [dim]\u2b1c {step.name}[/] \u2014 unavailable")
+            results.append((step.name, "unavailable"))
+            continue
+
+        # Attempt install + verify
+        try:
+            success = step.install(console)
+        except Exception:
+            success = False
+
+        if success and step.verify():
+            console.print(f"  [green]\u2705 {step.name}[/] \u2014 verified!")
+            results.append((step.name, "ok"))
+        else:
+            console.print(f"  [red]\u274c {step.name}[/] \u2014 failed")
+            results.append((step.name, "failed"))
+
+    return results
 
 
 def _print_summary(results: list[tuple[str, str]], console: Console) -> None:

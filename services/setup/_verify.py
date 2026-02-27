@@ -3,6 +3,8 @@
 from __future__ import annotations
 
 import os
+from dataclasses import dataclass, field
+from enum import Enum
 
 import requests
 from rich.console import Console
@@ -128,3 +130,111 @@ class AggregatedHealthCheck:
 
     def verify(self) -> bool:
         return True
+
+
+# ── Easy-mode verdict ────────────────────────────────────────
+
+
+class Readiness(Enum):
+    READY = "ready"
+    READY_WITH_LIMITATIONS = "ready_with_limitations"
+    NOT_READY = "not_ready"
+
+
+@dataclass
+class SetupVerdict:
+    readiness: Readiness
+    core_ok: list[str] = field(default_factory=list)
+    core_failed: list[str] = field(default_factory=list)
+    external_ok: list[str] = field(default_factory=list)
+    external_down: list[str] = field(default_factory=list)
+    optional_skipped: list[str] = field(default_factory=list)
+
+
+# Tier classification for step names
+TIER_CORE = "core"
+TIER_EXTERNAL = "external"
+TIER_OPTIONAL = "optional"
+
+
+def compute_verdict(
+    results: list[tuple[str, str]],
+    tier_map: dict[str, str],
+) -> SetupVerdict:
+    """Classify results by tier and compute overall readiness."""
+    core_ok: list[str] = []
+    core_failed: list[str] = []
+    external_ok: list[str] = []
+    external_down: list[str] = []
+    optional_skipped: list[str] = []
+
+    for name, status in results:
+        tier = tier_map.get(name, TIER_OPTIONAL)
+        if tier == TIER_CORE:
+            if status == "ok":
+                core_ok.append(name)
+            else:
+                core_failed.append(name)
+        elif tier == TIER_EXTERNAL:
+            if status == "ok":
+                external_ok.append(name)
+            else:
+                external_down.append(name)
+        else:
+            optional_skipped.append(name)
+
+    if core_failed:
+        readiness = Readiness.NOT_READY
+    elif external_down:
+        readiness = Readiness.READY_WITH_LIMITATIONS
+    else:
+        readiness = Readiness.READY
+
+    return SetupVerdict(
+        readiness=readiness,
+        core_ok=core_ok,
+        core_failed=core_failed,
+        external_ok=external_ok,
+        external_down=external_down,
+        optional_skipped=optional_skipped,
+    )
+
+
+def print_verdict(verdict: SetupVerdict, console: Console) -> None:
+    """Print a coloured readiness banner with actionable details."""
+    banners = {
+        Readiness.READY: (
+            "green",
+            "\u2705  READY",
+        ),
+        Readiness.READY_WITH_LIMITATIONS: (
+            "yellow",
+            "\u26a0\ufe0f  READY WITH LIMITATIONS",
+        ),
+        Readiness.NOT_READY: (
+            "red",
+            "\u274c  NOT READY",
+        ),
+    }
+    colour, label = banners[verdict.readiness]
+
+    console.print()
+    console.print(f"[bold {colour}]\u2554{'═' * 50}\u2557[/]")
+    console.print(f"[bold {colour}]\u2551{label:^50}\u2551[/]")
+    console.print(f"[bold {colour}]\u255a{'═' * 50}\u255d[/]")
+
+    if verdict.core_failed:
+        console.print("\n[red]Core requirements missing:[/]")
+        for name in verdict.core_failed:
+            console.print(f"  \u2022 {name}")
+
+    if verdict.external_down:
+        console.print("\n[yellow]External services unavailable:[/]")
+        for name in verdict.external_down:
+            console.print(f"  \u2022 {name}")
+
+    if verdict.optional_skipped:
+        console.print(
+            "\n[dim]Optional tools not configured:[/]\n"
+            "  \u2022 Run [bold]pepers-setup guided[/] for full configuration"
+        )

@@ -54,7 +54,7 @@ jobs:
         run: uv run python -m services.setup.main --help
 
       - name: Setup wizard tests
-        run: uv run pytest -q tests/unit/test_setup_wizard.py
+        run: uv run pytest -q tests/unit/test_setup_wizard.py tests/unit/test_setup_easy.py
 
       - name: Unit suite (Linux only)
         if: runner.os == 'Linux'

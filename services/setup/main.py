@@ -1,7 +1,10 @@
 """PePeRS Setup Wizard -- CLI entry point.
 
 Usage:
-    pepers-setup              # interactive menu (all steps)
+    pepers-setup              # easy mode (non-interactive, safe defaults)
+    pepers-setup easy         # same as above
+    pepers-setup guided       # interactive menu (all steps)
+    pepers-setup all          # alias for guided (backward compat)
     pepers-setup check        # prerequisites only
     pepers-setup config       # .env configuration only
     pepers-setup services     # external services check only
@@ -43,8 +46,13 @@ WELCOME_GUIDE = """\
 
 def _print_usage(console: Console) -> None:
     console.print(
-        "Usage: pepers-setup [all|check|config|services|docker|down|verify|help]",
+        "Usage: pepers-setup [easy|guided|all|check|config|services|docker|down|verify|help]",
         markup=False,
+    )
+    console.print(
+        "[dim]  (default)  easy mode — non-interactive, safe defaults\n"
+        "  guided     interactive menu with free navigation\n"
+        "  all        alias for guided (backward compat)[/]"
     )
 
 
@@ -124,6 +132,83 @@ SUBCOMMANDS: dict[str, Callable[[Path], list]] = {
 }
 
 
+def _easy_mode(root: Path, console: Console) -> int:
+    """Non-interactive setup: safe defaults, Docker-first, structured verdict."""
+    from services.setup._checks import (
+        DiskSpaceCheck,
+        PythonCheck,
+        SQLiteCheck,
+        UvCheck,
+        VenvCheck,
+    )
+    from services.setup._config import EnvConfig
+    from services.setup._docker import DockerCheck, DockerComposeCheck, DockerComposeUp
+    from services.setup._runner import run_noninteractive
+    from services.setup._services import ExternalServiceCheck, _EXTERNAL_SERVICES
+    from services.setup._verify import (
+        AggregatedHealthCheck,
+        Readiness,
+        TIER_CORE,
+        TIER_EXTERNAL,
+        compute_verdict,
+        print_verdict,
+    )
+
+    all_results: list[tuple[str, str]] = []
+    tier_map: dict[str, str] = {}
+
+    # ── Core prerequisites ───────────────────────────────────
+    core_steps = [
+        PythonCheck(),
+        UvCheck(),
+        SQLiteCheck(),
+        VenvCheck(root),
+        DiskSpaceCheck(root),
+    ]
+    for s in core_steps:
+        tier_map[s.name] = TIER_CORE
+    results = run_noninteractive(core_steps, console)
+    all_results.extend(results)
+
+    # ── EnvConfig (auto-generate .env with defaults) ─────────
+    env_cfg = EnvConfig(root)
+    tier_map[env_cfg.name] = TIER_CORE
+    if env_cfg.check():
+        console.print(f"  [green]\u2705 {env_cfg.name}[/] \u2014 already configured")
+        all_results.append((env_cfg.name, "ok"))
+    else:
+        ok = env_cfg.install_defaults(console)
+        all_results.append((env_cfg.name, "ok" if ok else "failed"))
+
+    # ── Docker ───────────────────────────────────────────────
+    docker_steps = [
+        DockerCheck(),
+        DockerComposeCheck(),
+        DockerComposeUp(root),
+    ]
+    for s in docker_steps:
+        tier_map[s.name] = TIER_CORE
+    results = run_noninteractive(docker_steps, console)
+    all_results.extend(results)
+
+    # ── External services (check-only, no install) ───────────
+    external_steps = [ExternalServiceCheck(svc) for svc in _EXTERNAL_SERVICES]
+    for s in external_steps:
+        tier_map[s.name] = TIER_EXTERNAL
+    results = run_noninteractive(external_steps, console, check_only=True)
+    all_results.extend(results)
+
+    # ── Health table (informational) ─────────────────────────
+    console.print()
+    AggregatedHealthCheck().install(console)
+
+    # ── Verdict ──────────────────────────────────────────────
+    verdict = compute_verdict(all_results, tier_map)
+    print_verdict(verdict, console)
+
+    return 0 if verdict.readiness != Readiness.NOT_READY else 1
+
+
 def main(argv: list[str] | None = None) -> int:
     args = argv if argv is not None else sys.argv[1:]
     console = Console()
@@ -132,14 +217,16 @@ def main(argv: list[str] | None = None) -> int:
     console.print(f"[bold green]{BANNER}[/]")
     console.print(f"[dim]Project root: {root}[/]\n")
 
-    command = args[0] if args else "all"
+    command = args[0] if args else "easy"
     if command in {"-h", "--help", "help"}:
         _print_usage(console)
         return 0
 
     from services.setup._runner import run_interactive_menu, run_steps
 
-    if command == "all":
+    if command == "easy":
+        return _easy_mode(root, console)
+    elif command in {"all", "guided"}:
         console.print(WELCOME_GUIDE)
         steps = _all_steps(root)
         ok = run_interactive_menu(steps, console)
