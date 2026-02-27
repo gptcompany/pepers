@@ -61,4 +61,8 @@ jobs:
             echo "No releasable changes detected; skipping release."
             exit 0
           fi
+          if echo "$output" | grep -q "Failed to push branch (main) to remote"; then
+            echo "Release push blocked by branch policy/token; skipping release."
+            exit 0
+          fi
           exit "$status"
