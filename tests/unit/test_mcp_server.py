@@ -206,6 +206,13 @@ class TestMCPServerFlavors:
             res1 = _flavor("search_found", n=10)
             assert "10 papers acquired" in res1 or "10 papers locked" in res1 or "COMBO x10" in res1
 
+    def test_flavor_arcade_error(self):
+        from services.mcp.server import _flavor
+        with patch("services.mcp.server.MCP_FLAVOR", "arcade"):
+            res = _flavor("error", msg="fail")
+            assert "REKT!" in res or "GAME OVER!" in res or "CRITICAL HIT!" in res
+            assert "fail" in res
+
     def test_flavor_unknown_key(self):
         from services.mcp.server import _flavor
         with patch("services.mcp.server.MCP_FLAVOR", "plain"):

@@ -787,6 +787,25 @@ class TestExtractorHelpers:
         assert f_row["latex"] == r"x^2"
         conn.close()
 
+    def test_store_results_with_duplicates(self, analyzed_paper_db):
+        db_path = str(analyzed_paper_db)
+        formula = Formula(
+            paper_id=1,
+            latex=r"x^2",
+            formula_type="inline",
+            context="context"
+        )
+        # Store once
+        _store_results(db_path, 1, [formula])
+        # Store again (should hit 'continue' branch)
+        _store_results(db_path, 1, [formula])
+        
+        from shared.db import get_connection
+        conn = get_connection(db_path)
+        count = conn.execute("SELECT COUNT(*) FROM formulas WHERE paper_id=1").fetchone()[0]
+        assert count == 1
+        conn.close()
+
     def test_mark_failed(self, analyzed_paper_db):
         db_path = str(analyzed_paper_db)
         _mark_failed(db_path, 1, "extractor error")

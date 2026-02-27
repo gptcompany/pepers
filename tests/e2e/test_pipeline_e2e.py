@@ -17,7 +17,7 @@ import pytest
 
 from shared.db import init_db, transaction
 from services.discovery.main import DiscoveryHandler
-from shared.server import BaseService
+from services.extractor.main import ExtractorHandler
 from services.validator.main import ValidatorHandler
 from services.codegen.main import CodegenHandler
 
@@ -367,6 +367,72 @@ class TestPipelineStageProgression:
 @pytest.mark.e2e
 class TestFullPipelineE2E:
     """Full system test from Discovery to Codegen."""
+
+    @pytest.fixture(autouse=True)
+    def setup(self, tmp_path):
+        self.db_path = str(tmp_path / "full_e2e.db")
+        init_db(self.db_path)
+        self.ports = {
+            "discovery": _get_free_port(),
+            "extractor": _get_free_port(),
+            "validator": _get_free_port(),
+            "codegen": _get_free_port(),
+        }
+        self.services = []
+        yield
+        for svc in self.services:
+            if svc.server:
+                svc.server.shutdown()
+        # Reset routes to avoid side effects between tests
+        for handler in [DiscoveryHandler, ExtractorHandler, ValidatorHandler, CodegenHandler]:
+            if hasattr(handler, "_routes"):
+                handler._routes = None
+
+    def _start_svc(self, name, handler_cls):
+        port = self.ports[name]
+        svc = BaseService(name, port, handler_cls, self.db_path)
+        self.services.append(svc)
+        t = threading.Thread(target=svc.run, daemon=True)
+        t.start()
+        time.sleep(0.3)
+
+    def _post(self, port, data):
+        body = json.dumps(data).encode()
+        req = urllib.request.Request(
+            f"http://localhost:{port}/process",
+            data=body, headers={"Content-Type": "application/json"}
+        )
+        with urllib.request.urlopen(req, timeout=10) as resp:
+            return json.loads(resp.read())
+
+    @patch("services.discovery.main.search_arxiv")
+    @patch("services.extractor.main.pdf.download_pdf")
+    @patch("services.extractor.main.rag_client.process_paper")
+    def test_e2e_paper_with_no_formulas(self, mock_rag, mock_pdf, mock_arxiv):
+        # 1. Discovery finds a paper
+        mock_arxiv.return_value = [{"arxiv_id": "2401.11111", "title": "No Formulas", "abstract": "Text only", "authors": "[]", "categories": "[]", "pdf_url": "http://pdf", "published_date": "2024-01-01", "doi": None}]
+        self._start_svc("discovery", DiscoveryHandler)
+        self._post(self.ports["discovery"], {"query": "test"})
+        
+        # 2. Stage is now 'discovered', ready for analyzer
+        # We skip analyzer for simplicity
+        with transaction(self.db_path) as conn:
+            conn.execute("UPDATE papers SET stage='analyzed' WHERE id=1")
+
+        # 3. Extractor runs but finds no formulas
+        mock_pdf.return_value = "fake.pdf"
+        mock_rag.return_value = "This is a paper with no mathematical formulas."
+        self._start_svc("extractor", ExtractorHandler)
+        res = self._post(self.ports["extractor"], {"paper_id": 1})
+        
+        assert res["papers_processed"] == 1
+        assert res["formulas_extracted"] == 0
+
+        # 4. Final state check
+        # The paper should be marked as 'extracted' (since the step ran)
+        # but no formulas should be in the DB.
+        assert _get_paper_stage(self.db_path, 1) == "extracted"
+        assert _count_formulas_by_stage(self.db_path, "any_stage") == 0
 
     @pytest.fixture(autouse=True)
     def setup(self, tmp_path):

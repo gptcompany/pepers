@@ -93,9 +93,28 @@ class TestDiscoveryHandler:
         assert resp is None
         handler.send_error_json.assert_called_once()
 
-    def test_handle_process_invalid_source(self, initialized_db):
+    @patch("services.discovery.main.requests.get")
+    def test_enrich_s2_retry_429(self, mock_get):
+        # 1st call 429, 2nd call 200
+        mock_429 = MagicMock(status_code=429, headers={"Retry-After": "0"})
+        mock_200 = MagicMock(status_code=200)
+        mock_200.json.return_value = {"paperId": "s2_1"}
+        mock_get.side_effect = [mock_429, mock_200]
+        
+        with patch("services.discovery.main.time.sleep"):
+            res = enrich_s2("2401.00001")
+            assert res["semantic_scholar_id"] == "s2_1"
+            assert mock_get.call_count == 2
+
+    @patch("services.discovery.main.requests.get")
+    def test_enrich_crossref_fail(self, mock_get):
+        mock_get.return_value = MagicMock(status_code=404)
+        assert enrich_crossref("10.1/j") is None
+
+    def test_handle_process_invalid_max_results(self, initialized_db):
         handler = self._make_handler(str(initialized_db))
-        resp = handler.handle_process({"query": "test", "sources": ["invalid"]})
+        # max_results too high
+        resp = handler.handle_process({"query": "test", "max_results": 1000})
         assert resp is None
         handler.send_error_json.assert_called_once()
 

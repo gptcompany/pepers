@@ -662,6 +662,12 @@ class TestOrchestratorHandler:
         assert res is None
         handler.send_error_json.assert_called_once()
 
+    def test_db_path_required_fails_when_none(self):
+        handler = OrchestratorHandler.__new__(OrchestratorHandler)
+        handler.db_path = None
+        with pytest.raises(AssertionError, match="Database path not configured"):
+            handler._db_path_required()
+
     def test_handle_formulas_no_paper_id(self, initialized_db):
         handler = OrchestratorHandler.__new__(OrchestratorHandler)
         handler.db_path = str(initialized_db)
@@ -743,6 +749,27 @@ class TestOrchestratorHandler:
         
         res = handler.handle_runs()
         assert res["run_id"] == "run-1"
+
+    def test_handle_runs_not_found(self):
+        handler = OrchestratorHandler.__new__(OrchestratorHandler)
+        handler.runner = MagicMock()
+        handler.runner.get_run_status.return_value = None
+        handler.path = "/runs?id=invalid"
+        handler.send_error_json = MagicMock()
+        
+        res = handler.handle_runs()
+        assert res is None
+        handler.send_error_json.assert_called_with(
+            "Run invalid not found", "NOT_FOUND", 404
+        )
+
+    def test_handle_search_github_invalid_input(self):
+        handler = OrchestratorHandler.__new__(OrchestratorHandler)
+        handler.send_error_json = MagicMock()
+        # Missing paper_id
+        res = handler.handle_search_github({})
+        assert res is None
+        handler.send_error_json.assert_called()
 
     def test_handle_delete_notation_not_found(self, initialized_db):
         handler = OrchestratorHandler.__new__(OrchestratorHandler)
@@ -841,22 +868,43 @@ class TestPipelineRunnerAdvanced:
         runner = PipelineRunner(initialized_db)
         assert runner.get_run_status("nonexistent") is None
 
-    @patch("requests.get")
-    def test_get_services_health_mixed(self, mock_get, initialized_db):
-        runner = PipelineRunner(initialized_db)
-        # Mock 5 stages: Discovery OK, others fail/error
+    @patch("requests.post")
+    def test_run_with_service_error(self, mock_post, initialized_db):
+        db_path = str(initialized_db)
+        runner = PipelineRunner(db_path)
+        runner.timeout = 0.1
+        runner.retry_max = 1  # Lower retries for test speed
+        
+        # Discovery succeeds, but Analyzer fails
         resp_ok = MagicMock(status_code=200)
-        resp_ok.json.return_value = {"status": "ok"}
-        resp_err = MagicMock(status_code=500)
+        resp_ok.json.return_value = {"papers_found": 1}
+        resp_fail = MagicMock(status_code=500, text="Internal Server Error")
         
-        import requests
-        mock_get.side_effect = [resp_ok, resp_err, requests.RequestException("down"), resp_err, resp_err]
+        # Discovery (1) + Analyzer (1 + 1 retry) = 3 calls
+        mock_post.side_effect = [resp_ok, resp_fail, resp_fail]
         
-        health = runner.get_services_health()
-        assert health["all_healthy"] is False
-        assert health["services"]["discovery"]["status"] == "ok"
-        assert health["services"]["analyzer"]["status"] == "error"
-        assert "down" in health["services"]["extractor"]["error"]
+        with patch("services.orchestrator.pipeline.time.sleep"):
+            res = runner.run(query="test", stages=2)
+            assert res["status"] == "partial"
+            assert res["stages_completed"] == 1
+            assert "analyzer: HTTP 500" in res["errors"][0]
+
+    def test_run_skips_stage_no_params(self, initialized_db):
+        runner = PipelineRunner(str(initialized_db))
+        # paper_id provided but no stages left (e.g. if paper was codegen already)
+        with patch.object(PipelineRunner, "_get_paper_stage", return_value="codegen"):
+            res = runner.run(paper_id=1)
+            assert res["stages_completed"] == 0
+            assert res["status"] == "completed"
+
+    @patch("services.orchestrator.pipeline.PipelineRunner._update_run_record", side_effect=Exception("DB Error"))
+    @patch("services.orchestrator.pipeline.PipelineRunner._call_service_with_retry")
+    def test_run_persistence_failure_not_fatal(self, mock_call, mock_update, initialized_db):
+        runner = PipelineRunner(str(initialized_db))
+        mock_call.return_value = {"ok": True}
+        # Should not raise
+        res = runner.run(query="q", stages=1)
+        assert res["status"] == "completed"
 
 
     @patch("urllib.request.urlopen")

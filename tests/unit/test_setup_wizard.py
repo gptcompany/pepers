@@ -52,9 +52,18 @@ class TestPythonCheck:
         step = PythonCheck()
         assert step.verify() == step.check()
 
+    def test_install_fails(self):
+        step = PythonCheck()
+        assert step.install(MagicMock()) is False
+
 
 class TestDiskSpaceCheck:
     def test_check_passes_on_normal_system(self, tmp_path):
+        step = DiskSpaceCheck(tmp_path)
+        assert step.check() is True
+
+    def test_check_with_data_dir(self, tmp_path):
+        (tmp_path / "data").mkdir()
         step = DiskSpaceCheck(tmp_path)
         assert step.check() is True
 
@@ -301,6 +310,10 @@ class TestSQLiteCheck:
         with patch("services.setup._checks.sqlite3.sqlite_version_info", (3, 0, 0)):
             assert step.check() is False
 
+    def test_install_fails(self):
+        step = SQLiteCheck()
+        assert step.install(MagicMock()) is False
+
 
 # ── VenvCheck ────────────────────────────────────────────────
 
@@ -430,7 +443,56 @@ class TestEnvConfig:
         console = MagicMock()
         assert step.install(console) is False
 
-    def test_read_env_values_parses_simple_env_file(self, tmp_path):
+    def test_read_env_values_with_noise(self, tmp_path):
+        env_file = tmp_path / ".env"
+        env_file.write_text(
+            "# Comment\n"
+            " \n"
+            "VAR1=VAL1\n"
+            "VAR2 = VAL2 \n"
+            "INVALID_LINE\n"
+        )
+        values = _read_env_values(env_file)
+        assert values == {"VAR1": "VAL1", "VAR2": "VAL2"}
+
+    def test_validate_port_edge_cases(self):
+        assert _validate_port("1") is True
+        assert _validate_port("65535") is True
+        assert _validate_port("-1") == "Port must be 1-65535"
+        assert _validate_port("65536") == "Port must be 1-65535"
+        assert _validate_port("abc") == "Must be a number"
+
+    def test_validate_url_edge_cases(self):
+        assert _validate_url("http://localhost:80") is True
+        assert _validate_url("https://pepers.ai:443") is True
+        assert _validate_url("not-a-url") == "Must be a valid URL (e.g. http://localhost:8769)"
+        assert _validate_url("http://no-port") == "Must be a valid URL (e.g. http://localhost:8769)"
+
+    @patch("questionary.text")
+    @patch("questionary.confirm")
+    @patch("questionary.select")
+    def test_install_with_custom_vars(self, mock_select, mock_confirm, mock_text, tmp_path):
+        # 26 standard variables. All will ask for text except those with "choice:"
+        # Let's count them: 
+        # port (8), url (4), path (2), text (9), choice (3)
+        # Total text questions = 8 + 4 + 2 + 9 = 23
+        
+        # mock all standard text responses
+        standard_responses = ["std_val"] * 23
+        # then custom var loop: key, val, next key empty
+        custom_responses = ["CUSTOM_K", "CUSTOM_V", ""]
+        
+        mock_text.return_value.ask.side_effect = standard_responses + custom_responses
+        mock_select.return_value.ask.return_value = "std_choice"
+        mock_confirm.return_value.ask.side_effect = [True] # want custom vars
+        
+        step = EnvConfig(tmp_path)
+        console = MagicMock()
+        assert step.install(console) is True
+        
+        content = (tmp_path / ".env").read_text()
+        assert "CUSTOM_K=CUSTOM_V" in content
+        assert "std_val" in content
         env_file = tmp_path / ".env"
         env_file.write_text(
             "# comment\nRP_DB_PATH=data/research.db\nRP_LOG_LEVEL=INFO\nINVALID\n"
