@@ -147,8 +147,11 @@ class TestServicesHealth:
         err_resp = MagicMock()
         err_resp.status_code = 500
 
-        # 5 calls: discovery ok, analyzer ok, extractor fail, validator ok, codegen ok
-        mock_get.side_effect = [ok_resp, ok_resp, err_resp, ok_resp, ok_resp]
+        # 5 service calls + 3 external dep calls = 8 total
+        mock_get.side_effect = [
+            ok_resp, ok_resp, err_resp, ok_resp, ok_resp,  # services
+            ok_resp, ok_resp, ok_resp,                      # external: cas, rag, ollama
+        ]
 
         runner = PipelineRunner(str(initialized_db))
         result = runner.get_services_health()

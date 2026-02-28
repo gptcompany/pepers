@@ -29,6 +29,8 @@ htmlcov/
 .pytest_cache/
 .mypy_cache/
 .ruff_cache/
+.hypothesis/
+.mutmut-cache
 
 # Auto-generated / IDE
 .claude-flow/

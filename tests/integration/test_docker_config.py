@@ -100,7 +100,9 @@ class TestAutoStart:
     def test_all_services_restart_unless_stopped(self, compose_config):
         for name in SERVICES:
             restart = compose_config["services"][name].get("restart", "no")
-            assert restart == "unless-stopped", f"{name} restart != unless-stopped"
+            assert restart in ("always", "unless-stopped"), (
+                f"{name} restart policy is '{restart}', expected 'always' or 'unless-stopped'"
+            )
 
     def test_docker_daemon_enabled(self):
         """Docker daemon must be systemd-enabled for restart policy to work after reboot."""

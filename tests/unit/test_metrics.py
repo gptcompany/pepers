@@ -225,6 +225,8 @@ class TestErrorCount:
             urllib.request.urlopen(f"http://localhost:{self.port}/nonexistent")
         assert exc_info.value.code == 404
 
+        # Allow server thread to finish metrics bookkeeping under load
+        time.sleep(0.1)
         after = _sample_value("pepers_error_count_total", labels_404)
         assert after == before + 1
 
