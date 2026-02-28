@@ -71,6 +71,7 @@ class TestApplyConsensus:
         assert result.outcome == ConsensusOutcome.VALID
         assert result.engine_count == 2
         assert result.agree_count == 2
+        assert result.detail == "All 2 engines agree: valid"
 
     def test_both_invalid(self):
         """Both engines invalid → INVALID."""
@@ -80,6 +81,7 @@ class TestApplyConsensus:
         ])
         assert result.outcome == ConsensusOutcome.INVALID
         assert result.agree_count == 2
+        assert result.detail == "All 2 engines agree: invalid"
 
     def test_valid_invalid_disagreement(self):
         """SymPy valid, Maxima invalid → INVALID (disagreement)."""
@@ -88,7 +90,7 @@ class TestApplyConsensus:
             _engine_ok("maxima", valid=False),
         ])
         assert result.outcome == ConsensusOutcome.INVALID
-        assert "disagree" in result.detail.lower()
+        assert result.detail == "Engines disagree: 1 valid, 1 invalid"
 
     def test_invalid_valid_disagreement(self):
         """SymPy invalid, Maxima valid → INVALID (disagreement)."""
@@ -97,17 +99,20 @@ class TestApplyConsensus:
             _engine_ok("maxima", valid=True),
         ])
         assert result.outcome == ConsensusOutcome.INVALID
+        assert result.detail == "Engines disagree: 1 valid, 1 invalid"
 
     def test_valid_error(self):
         """One valid, one error → PARTIAL."""
         result = apply_consensus([_engine_ok("sympy"), _engine_err("maxima")])
         assert result.outcome == ConsensusOutcome.PARTIAL
         assert result.agree_count == 1
+        assert result.detail == "Only sympy succeeded, 1 engine(s) errored"
 
     def test_error_valid(self):
         """One error, one valid → PARTIAL."""
         result = apply_consensus([_engine_err("sympy"), _engine_ok("maxima")])
         assert result.outcome == ConsensusOutcome.PARTIAL
+        assert result.detail == "Only maxima succeeded, 1 engine(s) errored"
 
     def test_invalid_error(self):
         """One invalid, one error → PARTIAL."""
@@ -116,6 +121,7 @@ class TestApplyConsensus:
             _engine_err("maxima"),
         ])
         assert result.outcome == ConsensusOutcome.PARTIAL
+        assert result.detail == "Only sympy succeeded, 1 engine(s) errored"
 
     def test_error_invalid(self):
         """One error, one invalid → PARTIAL."""
@@ -124,34 +130,40 @@ class TestApplyConsensus:
             _engine_ok("maxima", valid=False),
         ])
         assert result.outcome == ConsensusOutcome.PARTIAL
+        assert result.detail == "Only maxima succeeded, 1 engine(s) errored"
 
     def test_both_error(self):
         """Both engines error → UNPARSEABLE."""
         result = apply_consensus([_engine_err("sympy"), _engine_err("maxima")])
         assert result.outcome == ConsensusOutcome.UNPARSEABLE
         assert result.agree_count == 0
+        assert result.detail == "All 2 engines failed to parse"
 
     def test_empty_results(self):
         """No engine results → UNPARSEABLE."""
         result = apply_consensus([])
         assert result.outcome == ConsensusOutcome.UNPARSEABLE
         assert result.engine_count == 0
+        assert result.detail == "All 0 engines failed to parse"
 
     def test_single_engine_valid(self):
         """Single engine valid → PARTIAL (insufficient for consensus)."""
         result = apply_consensus([_engine_ok("sympy")])
         assert result.outcome == ConsensusOutcome.PARTIAL
         assert result.engine_count == 1
+        assert result.detail == "Only sympy succeeded, 0 engine(s) errored"
 
     def test_single_engine_invalid(self):
         """Single engine invalid → PARTIAL (insufficient for consensus)."""
         result = apply_consensus([_engine_ok("sympy", valid=False)])
         assert result.outcome == ConsensusOutcome.PARTIAL
+        assert result.detail == "Only sympy succeeded, 0 engine(s) errored"
 
     def test_single_engine_error(self):
         """Single engine error → UNPARSEABLE."""
         result = apply_consensus([_engine_err("sympy")])
         assert result.outcome == ConsensusOutcome.UNPARSEABLE
+        assert result.detail == "All 1 engines failed to parse"
 
     def test_three_engines_all_valid(self):
         """Three engines all valid → VALID."""
@@ -162,6 +174,7 @@ class TestApplyConsensus:
         ])
         assert result.outcome == ConsensusOutcome.VALID
         assert result.agree_count == 3
+        assert result.detail == "All 3 engines agree: valid"
 
     def test_three_engines_two_valid_one_invalid(self):
         """Three engines, 2 valid + 1 invalid → INVALID (not unanimous)."""
@@ -171,6 +184,7 @@ class TestApplyConsensus:
             _engine_ok("matlab", valid=False),
         ])
         assert result.outcome == ConsensusOutcome.INVALID
+        assert result.detail == "Engines disagree: 2 valid, 1 invalid"
 
     def test_three_engines_two_valid_one_error(self):
         """Three engines, 2 valid + 1 error → VALID (fallback: 2 agree)."""
@@ -181,7 +195,7 @@ class TestApplyConsensus:
         ])
         assert result.outcome == ConsensusOutcome.VALID
         assert result.agree_count == 2
-        assert "fallback" in result.detail
+        assert result.detail == "All 2 engines agree: valid (matlab errored, fallback used)"
 
     def test_three_engines_two_invalid_one_error(self):
         """Three engines, 2 invalid + 1 error → INVALID (fallback: 2 agree)."""
@@ -192,7 +206,7 @@ class TestApplyConsensus:
         ])
         assert result.outcome == ConsensusOutcome.INVALID
         assert result.agree_count == 2
-        assert "fallback" in result.detail
+        assert result.detail == "All 2 engines agree: invalid (matlab errored, fallback used)"
 
     def test_three_engines_one_valid_two_error(self):
         """Three engines, 1 valid + 2 error → PARTIAL (only 1 succeeded)."""
@@ -203,6 +217,19 @@ class TestApplyConsensus:
         ])
         assert result.outcome == ConsensusOutcome.PARTIAL
         assert result.agree_count == 1
+        assert result.detail == "Only sympy succeeded, 2 engine(s) errored"
+
+    def test_four_engines_two_valid_two_error(self):
+        """Four engines, 2 valid + 2 error → VALID (fallback: 2 agree, list errors)."""
+        result = apply_consensus([
+            _engine_ok("sympy"),
+            _engine_ok("maxima"),
+            _engine_err("matlab"),
+            _engine_err("mathematica"),
+        ])
+        assert result.outcome == ConsensusOutcome.VALID
+        assert result.agree_count == 2
+        assert result.detail == "All 2 engines agree: valid (matlab, mathematica errored, fallback used)"
 
 
 class TestConsensusResult:

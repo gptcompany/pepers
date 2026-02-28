@@ -69,6 +69,13 @@ class TestResolveStages:
         assert stages[0][0] == "extractor"
         assert len(stages) == 2
 
+    @patch.object(PipelineRunner, "_get_paper_stage", return_value="extracted")
+    def test_paper_id_from_extracted(self, mock_stage):
+        """Paper currently extracted → starts from validator."""
+        stages = self.runner._resolve_stages(query=None, paper_id=42, stages=2)
+        assert stages[0][0] == "validator"
+        assert len(stages) == 2
+
     @patch.object(PipelineRunner, "_get_paper_stage", return_value="validated")
     def test_paper_id_from_validated(self, mock_stage):
         stages = self.runner._resolve_stages(query=None, paper_id=42, stages=5)
@@ -793,7 +800,69 @@ class TestOrchestratorHandler:
 
 
 class TestPipelineRunnerAdvanced:
-    """Tests for PipelineRunner's advanced logic (retries, batching, cleanup)."""
+    """Tests for PipelineRunner's advanced logic (retries, batching, cleanup, health)."""
+
+    def test_check_external_health_all_ok(self, initialized_db):
+        runner = PipelineRunner(initialized_db)
+        with patch("requests.get") as mock_get:
+            mock_resp = MagicMock(status_code=200)
+            mock_get.return_value = mock_resp
+            
+            res = runner.check_external_health()
+            assert res["all_healthy"] is True
+            assert res["deps"]["cas"]["healthy"] is True
+            assert res["deps"]["rag"]["healthy"] is True
+            assert res["deps"]["ollama"]["healthy"] is True
+            assert mock_get.call_count == 3
+
+    def test_check_external_health_one_fail(self, initialized_db):
+        runner = PipelineRunner(initialized_db)
+        with patch("requests.get") as mock_get:
+            # cas ok, rag fail, ollama ok
+            resp_ok = MagicMock(status_code=200)
+            resp_fail = MagicMock(status_code=500)
+            mock_get.side_effect = [resp_ok, resp_fail, resp_ok]
+            
+            res = runner.check_external_health()
+            assert res["all_healthy"] is False
+            assert res["deps"]["cas"]["healthy"] is True
+            assert res["deps"]["rag"]["healthy"] is False
+            assert res["deps"]["ollama"]["healthy"] is True
+
+    def test_get_services_health_all_ok(self, initialized_db):
+        runner = PipelineRunner(initialized_db)
+        with patch("requests.get") as mock_get:
+            mock_resp = MagicMock(status_code=200)
+            mock_resp.json.return_value = {"status": "ok"}
+            mock_get.return_value = mock_resp
+            
+            res = runner.get_services_health()
+            assert res["all_healthy"] is True
+            assert len(res["services"]) == 5
+            for name in ["discovery", "analyzer", "extractor", "validator", "codegen"]:
+                assert res["services"][name]["status"] == "ok"
+
+    def test_get_services_health_one_fail(self, initialized_db):
+        runner = PipelineRunner(initialized_db)
+        with patch("requests.get") as mock_get:
+            # 5 service checks + 3 external checks = 8 calls
+            # Let's make analyzer fail (2nd service)
+            resp_ok = MagicMock(status_code=200)
+            resp_ok.json.return_value = {"status": "ok"}
+            resp_fail = MagicMock(status_code=500)
+            
+            # Service calls: discovery, analyzer, extractor, validator, codegen
+            # External calls: cas, rag, ollama
+            mock_get.side_effect = [
+                resp_ok, resp_fail, resp_ok, resp_ok, resp_ok, # services
+                resp_ok, resp_ok, resp_ok                      # external
+            ]
+            
+            res = runner.get_services_health()
+            assert res["all_healthy"] is False
+            assert res["services"]["discovery"]["status"] == "ok"
+            assert res["services"]["analyzer"]["status"] == "error"
+            assert res["services"]["extractor"]["status"] == "ok"
 
     @patch("requests.post")
     def test_call_service_with_retry_success_after_failure(self, mock_post, initialized_db):
@@ -835,6 +904,19 @@ class TestPipelineRunnerAdvanced:
             runner._call_service_with_retry("http://test", {})
         assert mock_post.call_count == 1
 
+    def test_merge_batch_results_empty(self):
+        """Empty batch results returns default structure."""
+        merged = PipelineRunner._merge_batch_results([], "validator")
+        assert merged["service"] == "validator"
+        assert merged["formulas_processed"] == 0
+
+    def test_merge_batch_results_single(self):
+        """Single batch result is returned as is (with iterations)."""
+        batch = [{"formulas_processed": 5, "success": True}]
+        merged = PipelineRunner._merge_batch_results(batch, "validator")
+        assert merged["formulas_processed"] == 5
+        assert merged["batch_iterations"] == 1
+
     def test_merge_batch_results_validator(self):
         batch = [
             {"formulas_processed": 10, "formulas_valid": 8, "formulas_invalid": 2},
@@ -846,16 +928,30 @@ class TestPipelineRunnerAdvanced:
         assert merged["formulas_invalid"] == 3
         assert merged["batch_iterations"] == 2
 
-    def test_merge_batch_results_codegen(self):
+    def test_merge_batch_results_codegen_complex(self):
+        """Test merging codegen results with mixed languages and errors."""
         batch = [
-            {"formulas_processed": 1, "code_generated": {"python": 1}, "errors": []},
-            {"formulas_processed": 1, "code_generated": {"python": 1, "rust": 1}, "errors": ["err1"]},
+            {
+                "formulas_processed": 1,
+                "code_generated": {"python": 1, "c99": 1},
+                "errors": [],
+                "explanations_generated": 2,
+            },
+            {
+                "formulas_processed": 2,
+                "code_generated": {"python": 1, "rust": 1},
+                "errors": ["some error"],
+                "explanations_generated": 1,
+            },
         ]
         merged = PipelineRunner._merge_batch_results(batch, "codegen")
-        assert merged["formulas_processed"] == 2
+        assert merged["formulas_processed"] == 3
         assert merged["code_generated"]["python"] == 2
+        assert merged["code_generated"]["c99"] == 1
         assert merged["code_generated"]["rust"] == 1
-        assert merged["errors"] == ["err1"]
+        assert merged["explanations_generated"] == 3
+        assert merged["errors"] == ["some error"]
+        assert merged["batch_iterations"] == 2
 
     def test_cleanup_stuck_runs(self, initialized_db):
         db_path = str(initialized_db)
