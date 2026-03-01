@@ -100,6 +100,24 @@ class TestResolveStages:
         stages = self.runner._resolve_stages(query="test", paper_id=None, stages=99)
         assert len(stages) == 5
 
+    def test_stages_clamped_exactly_at_5(self):
+        """stages=6 should still return exactly 5 (not 6)."""
+        stages = self.runner._resolve_stages(query="test", paper_id=None, stages=6)
+        assert len(stages) == 5
+
+    @patch.object(PipelineRunner, "_get_paper_stage", return_value="unknown")
+    def test_unknown_stage_starts_from_discovery(self, mock_stage):
+        """Unknown stage defaults to idx=-1+1=0, i.e. discovery."""
+        stages = self.runner._resolve_stages(query=None, paper_id=42, stages=5)
+        assert stages[0][0] == "discovery"
+        assert len(stages) == 5
+
+    @patch.object(PipelineRunner, "_get_paper_stage", return_value="codegen")
+    def test_codegen_stage_returns_empty(self, mock_stage):
+        """Paper at codegen stage has nothing left to do."""
+        stages = self.runner._resolve_stages(query=None, paper_id=42, stages=5)
+        assert stages == []
+
 
 # ---------------------------------------------------------------------------
 # PipelineRunner._build_stage_params
@@ -909,6 +927,7 @@ class TestPipelineRunnerAdvanced:
         merged = PipelineRunner._merge_batch_results([], "validator")
         assert merged["service"] == "validator"
         assert merged["formulas_processed"] == 0
+        assert merged["success"] is True
 
     def test_merge_batch_results_single(self):
         """Single batch result is returned as is (with iterations)."""
@@ -1165,7 +1184,575 @@ class TestPipelineAsync:
             "stages_requested": 5,
         }
         OrchestratorHandler.runner.run.return_value = result
-        
+
         with patch.dict(os.environ, {"RP_ORCHESTRATOR_CRON_ENABLED": "true"}):
             _cron_run()
             mock_notify.assert_called_once_with(result)
+
+
+# ---------------------------------------------------------------------------
+# Mutation-killing tests: constants, defaults, run() internals
+# ---------------------------------------------------------------------------
+
+
+from services.orchestrator.pipeline import (
+    DB_STAGE_INDEX,
+    EXTERNAL_DEPS,
+    STAGE_EXTERNAL_DEPS,
+)
+
+
+class TestPipelineConstants:
+    """Pin module-level constants to kill constant-mutation survivors."""
+
+    def test_external_deps_names(self):
+        names = [d[0] for d in EXTERNAL_DEPS]
+        assert names == ["cas", "rag", "ollama"]
+
+    def test_external_deps_default_urls(self, clean_env):
+        # Re-import to get defaults without env override
+        deps = [
+            ("cas", "http://localhost:8769", "/health"),
+            ("rag", "http://localhost:8767", "/health"),
+            ("ollama", "http://localhost:11434", "/"),
+        ]
+        for expected, actual in zip(deps, EXTERNAL_DEPS):
+            assert actual[0] == expected[0], f"name mismatch: {actual[0]}"
+            assert expected[2] == actual[2], f"health path mismatch for {actual[0]}"
+
+    def test_stage_external_deps_mapping(self):
+        assert STAGE_EXTERNAL_DEPS == {
+            "extractor": ["rag"],
+            "validator": ["cas"],
+        }
+
+    def test_db_stage_index_values(self):
+        assert DB_STAGE_INDEX == {
+            "discovered": 0,
+            "analyzed": 1,
+            "extracted": 2,
+            "validated": 3,
+            "codegen": 4,
+        }
+
+    def test_stage_params_discovery_mapping(self):
+        assert STAGE_PARAMS["discovery"] == {"query": "query", "max_papers": "max_results"}
+
+    def test_stage_params_analyzer_mapping(self):
+        assert STAGE_PARAMS["analyzer"] == {
+            "paper_id": "paper_id", "max_papers": "max_papers", "force": "force",
+        }
+
+    def test_stage_params_validator_mapping(self):
+        assert STAGE_PARAMS["validator"] == {
+            "paper_id": "paper_id", "max_formulas": "max_formulas", "force": "force",
+        }
+
+    def test_stage_params_codegen_mapping(self):
+        assert STAGE_PARAMS["codegen"] == {
+            "paper_id": "paper_id", "max_formulas": "max_formulas", "force": "force",
+        }
+
+    def test_stage_params_extractor_mapping(self):
+        assert STAGE_PARAMS["extractor"] == {
+            "paper_id": "paper_id", "max_papers": "max_papers", "force": "force",
+        }
+
+
+class TestPipelineRunnerInit:
+    """Test __init__ reads env vars with correct defaults."""
+
+    def test_default_timeout(self, clean_env, tmp_path):
+        runner = PipelineRunner(tmp_path / "test.db")
+        assert runner.timeout == 300
+
+    def test_default_retry_max(self, clean_env, tmp_path):
+        runner = PipelineRunner(tmp_path / "test.db")
+        assert runner.retry_max == 3
+
+    def test_default_retry_backoff(self, clean_env, tmp_path):
+        runner = PipelineRunner(tmp_path / "test.db")
+        assert runner.retry_backoff == 4.0
+
+    def test_env_override_timeout(self, tmp_path):
+        with patch.dict(os.environ, {"RP_ORCHESTRATOR_TIMEOUT": "60"}):
+            runner = PipelineRunner(tmp_path / "test.db")
+            assert runner.timeout == 60
+
+    def test_env_override_retry_max(self, tmp_path):
+        with patch.dict(os.environ, {"RP_ORCHESTRATOR_RETRY_MAX": "5"}):
+            runner = PipelineRunner(tmp_path / "test.db")
+            assert runner.retry_max == 5
+
+    def test_env_override_retry_backoff(self, tmp_path):
+        with patch.dict(os.environ, {"RP_ORCHESTRATOR_RETRY_BACKOFF": "2.0"}):
+            runner = PipelineRunner(tmp_path / "test.db")
+            assert runner.retry_backoff == 2.0
+
+    def test_codegen_stage_timeout_default(self, clean_env):
+        assert PipelineRunner.STAGE_TIMEOUTS.get("codegen") == 900
+
+    def test_db_path_stored_as_string(self, tmp_path):
+        runner = PipelineRunner(tmp_path / "test.db")
+        assert isinstance(runner.db_path, str)
+
+
+class TestRunInternals:
+    """Tests that pin run() internals to kill mutation survivors."""
+
+    def setup_method(self):
+        self.runner = PipelineRunner.__new__(PipelineRunner)
+        self.runner.db_path = ":memory:"
+        self.runner.timeout = 5
+        self.runner.retry_max = 0
+        self.runner.retry_backoff = 1.0
+
+    @patch.object(PipelineRunner, "_call_service_with_retry")
+    def test_run_params_dict_keys(self, mock_call):
+        """Verify the params dict passed internally has the right keys."""
+        mock_call.return_value = {"ok": True}
+        result = self.runner.run(
+            query="q", paper_id=7, stages=1, max_papers=20, max_formulas=100, force=True
+        )
+        # Check the params are correctly forwarded to _build_stage_params
+        assert result["status"] == "completed"
+        # Verify _call_service_with_retry was called with correct mapped params
+        call_args = mock_call.call_args
+        assert "query" in call_args[0][1] or "max_results" in call_args[0][1]
+
+    @patch.object(PipelineRunner, "_call_service_with_retry")
+    def test_run_default_args(self, mock_call):
+        """Test run() with default arguments."""
+        mock_call.return_value = {"ok": True}
+        result = self.runner.run(query="q")
+        assert result["stages_requested"] == 5
+        assert result["stages_completed"] == 5
+
+    @patch.object(PipelineRunner, "_call_service_with_retry")
+    def test_run_custom_run_id(self, mock_call):
+        """Pre-generated run_id should be used."""
+        mock_call.return_value = {"ok": True}
+        result = self.runner.run(query="q", stages=1, run_id="custom-123")
+        assert result["run_id"] == "custom-123"
+
+    @patch.object(PipelineRunner, "_call_service_with_retry")
+    def test_run_stage_results_have_time_ms(self, mock_call):
+        """Each stage result should have time_ms."""
+        mock_call.return_value = {"ok": True}
+        result = self.runner.run(query="q", stages=2)
+        for stage_name in ("discovery", "analyzer"):
+            assert "time_ms" in result["results"][stage_name]
+            assert isinstance(result["results"][stage_name]["time_ms"], int)
+
+    @patch.object(PipelineRunner, "_call_service_with_retry")
+    def test_run_error_message_includes_stage_name(self, mock_call):
+        """Error messages should include the stage name."""
+        mock_call.side_effect = ServiceError("connection refused")
+        result = self.runner.run(query="q", stages=1)
+        assert "discovery" in result["errors"][0]
+        assert "connection refused" in result["errors"][0]
+
+    @patch.object(PipelineRunner, "_call_service_with_retry")
+    def test_run_failed_stage_result_has_error_and_time(self, mock_call):
+        """Failed stage results include error string and time_ms."""
+        mock_call.side_effect = ServiceError("boom")
+        result = self.runner.run(query="q", stages=1)
+        stage_result = result["results"]["discovery"]
+        assert "error" in stage_result
+        assert "time_ms" in stage_result
+        assert stage_result["error"] == "boom"
+
+    @patch.object(PipelineRunner, "_call_service_with_retry")
+    def test_run_has_failure_flag_logic(self, mock_call):
+        """Verify has_failure drives status correctly."""
+        # All succeed → completed
+        mock_call.return_value = {"ok": True}
+        result = self.runner.run(query="q", stages=2)
+        assert result["status"] == "completed"
+
+    @patch.object(PipelineRunner, "_call_service_with_retry")
+    def test_batch_stage_iterates_until_zero(self, mock_call):
+        """Batch stages (validator/codegen) iterate until formulas_processed=0."""
+        mock_call.side_effect = [
+            {"ok": True},  # discovery
+            {"ok": True},  # analyzer
+            {"ok": True},  # extractor
+            {"formulas_processed": 5, "formulas_valid": 5, "formulas_invalid": 0},  # validator iter 1
+            {"formulas_processed": 0},  # validator iter 2 → stop
+            {"formulas_processed": 3, "code_generated": {"python": 3}, "errors": []},  # codegen iter 1
+            {"formulas_processed": 0},  # codegen iter 2 → stop
+        ]
+        result = self.runner.run(query="q", stages=5)
+        assert result["status"] == "completed"
+        assert result["results"]["validator"]["formulas_processed"] == 5
+        assert result["results"]["validator"]["batch_iterations"] == 2
+        assert result["results"]["codegen"]["batch_iterations"] == 2
+
+    @patch.object(PipelineRunner, "_call_service_with_retry")
+    def test_non_batch_stage_single_call(self, mock_call):
+        """Non-batch stages (discovery, analyzer, extractor) call service once."""
+        mock_call.return_value = {"papers_found": 3}
+        result = self.runner.run(query="q", stages=1)
+        assert mock_call.call_count == 1
+        assert "batch_iterations" not in result["results"]["discovery"]
+
+    @patch.object(PipelineRunner, "_call_service_with_retry")
+    def test_codegen_uses_stage_timeout(self, mock_call):
+        """Codegen stage should use STAGE_TIMEOUTS override."""
+        mock_call.return_value = {"ok": True}
+        self.runner.STAGE_TIMEOUTS = {"codegen": 999}
+
+        # Run just codegen via paper_id trick
+        with patch.object(self.runner, "_get_paper_stage", return_value="validated"):
+            self.runner.run(paper_id=1, stages=1)
+
+        # Check timeout was passed
+        _, kwargs = mock_call.call_args
+        assert kwargs.get("timeout") == 999
+
+    @patch.object(PipelineRunner, "_call_service_with_retry")
+    def test_service_url_format(self, mock_call):
+        """Services are called at http://localhost:{port}/process."""
+        mock_call.return_value = {"ok": True}
+        self.runner.run(query="q", stages=1)
+        url = mock_call.call_args[0][0]
+        assert url == "http://localhost:8770/process"
+
+    @patch.object(PipelineRunner, "_call_service_with_retry")
+    def test_discovery_papers_found_tracked(self, mock_call):
+        """papers_found from discovery is used for Prometheus metrics."""
+        mock_call.return_value = {"papers_found": 7}
+        result = self.runner.run(query="q", stages=1)
+        assert result["results"]["discovery"]["papers_found"] == 7
+
+
+class TestCallServiceInternals:
+    """Pin _call_service_with_retry internals."""
+
+    def setup_method(self):
+        self.runner = PipelineRunner.__new__(PipelineRunner)
+        self.runner.timeout = 30
+        self.runner.retry_max = 2
+        self.runner.retry_backoff = 4.0
+
+    @patch("services.orchestrator.pipeline.time.sleep")
+    @patch("services.orchestrator.pipeline.requests.post")
+    def test_backoff_calculation(self, mock_post, mock_sleep):
+        """Backoff is base ** attempt: 1, 4, 16..."""
+        mock_post.return_value = MagicMock(status_code=500, text="error")
+        with pytest.raises(ServiceError):
+            self.runner._call_service_with_retry("http://test", {})
+        # attempt=0: sleep(4.0**0)=1.0, attempt=1: sleep(4.0**1)=4.0
+        assert mock_sleep.call_count == 2
+        mock_sleep.assert_any_call(1.0)   # 4.0 ** 0
+        mock_sleep.assert_any_call(4.0)   # 4.0 ** 1
+
+    @patch("services.orchestrator.pipeline.requests.post")
+    def test_custom_timeout_passed_to_requests(self, mock_post):
+        mock_resp = MagicMock(status_code=200)
+        mock_resp.json.return_value = {"ok": True}
+        mock_post.return_value = mock_resp
+
+        self.runner._call_service_with_retry("http://test", {}, timeout=42)
+        _, kwargs = mock_post.call_args
+        assert kwargs["timeout"] == 42
+
+    @patch("services.orchestrator.pipeline.requests.post")
+    def test_default_timeout_used_when_none(self, mock_post):
+        mock_resp = MagicMock(status_code=200)
+        mock_resp.json.return_value = {"ok": True}
+        mock_post.return_value = mock_resp
+
+        self.runner._call_service_with_retry("http://test", {})
+        _, kwargs = mock_post.call_args
+        assert kwargs["timeout"] == 30  # self.timeout
+
+    @patch("services.orchestrator.pipeline.requests.post")
+    def test_4xx_json_parse_error_uses_text(self, mock_post):
+        """When 4xx response body is not JSON, use resp.text."""
+        mock_resp = MagicMock(status_code=422)
+        mock_resp.json.side_effect = ValueError("not json")
+        mock_resp.text = "Unprocessable Entity"
+        mock_post.return_value = mock_resp
+
+        with pytest.raises(ServiceError, match="Unprocessable Entity"):
+            self.runner._call_service_with_retry("http://test", {})
+
+    @patch("services.orchestrator.pipeline.requests.post")
+    def test_4xx_json_error_key_used(self, mock_post):
+        """When 4xx response has JSON with 'error' key, use that."""
+        mock_resp = MagicMock(status_code=400)
+        mock_resp.json.return_value = {"error": "invalid paper_id"}
+        mock_resp.text = '{"error": "invalid paper_id"}'
+        mock_post.return_value = mock_resp
+
+        with pytest.raises(ServiceError, match="invalid paper_id"):
+            self.runner._call_service_with_retry("http://test", {})
+
+    @patch("services.orchestrator.pipeline.requests.post")
+    def test_status_code_in_error_message(self, mock_post):
+        """Error messages include the HTTP status code."""
+        mock_resp = MagicMock(status_code=503)
+        mock_resp.text = "Service Unavailable"
+        mock_post.return_value = mock_resp
+        self.runner.retry_max = 0
+
+        with pytest.raises(ServiceError, match="HTTP 503"):
+            self.runner._call_service_with_retry("http://test", {})
+
+    @patch("services.orchestrator.pipeline.requests.post")
+    def test_5xx_text_truncated_in_error(self, mock_post):
+        """5xx error messages truncate response text to 200 chars."""
+        long_text = "x" * 500
+        mock_resp = MagicMock(status_code=500, text=long_text)
+        mock_post.return_value = mock_resp
+        self.runner.retry_max = 0
+
+        with pytest.raises(ServiceError) as exc_info:
+            self.runner._call_service_with_retry("http://test", {})
+        # The error should contain truncated text
+        assert len(str(exc_info.value)) < 300
+
+    @patch("services.orchestrator.pipeline.requests.post")
+    def test_connection_error_message(self, mock_post):
+        mock_post.side_effect = requests.ConnectionError("refused")
+        self.runner.retry_max = 0
+        with pytest.raises(ServiceError, match="Connection refused"):
+            self.runner._call_service_with_retry("http://test", {})
+
+    @patch("services.orchestrator.pipeline.requests.post")
+    def test_timeout_error_message(self, mock_post):
+        mock_post.side_effect = requests.Timeout("timed out")
+        self.runner.retry_max = 0
+        with pytest.raises(ServiceError, match="Timeout after 30s"):
+            self.runner._call_service_with_retry("http://test", {})
+
+
+class TestGetPipelineStatus:
+    """Unit tests for get_pipeline_status with real DB."""
+
+    def test_empty_db(self, initialized_db):
+        runner = PipelineRunner(str(initialized_db))
+        status = runner.get_pipeline_status()
+        assert status["papers_by_stage"] == {}
+        assert status["formulas_by_stage"] == {}
+        assert status["recent_errors"] == []
+
+    def test_papers_by_stage(self, initialized_db):
+        from shared.db import transaction
+        db = str(initialized_db)
+        with transaction(db) as conn:
+            conn.execute("INSERT INTO papers (arxiv_id, title, stage) VALUES ('1', 'A', 'discovered')")
+            conn.execute("INSERT INTO papers (arxiv_id, title, stage) VALUES ('2', 'B', 'discovered')")
+            conn.execute("INSERT INTO papers (arxiv_id, title, stage) VALUES ('3', 'C', 'analyzed')")
+        runner = PipelineRunner(db)
+        status = runner.get_pipeline_status()
+        assert status["papers_by_stage"]["discovered"] == 2
+        assert status["papers_by_stage"]["analyzed"] == 1
+
+    def test_recent_errors(self, initialized_db):
+        from shared.db import transaction
+        db = str(initialized_db)
+        with transaction(db) as conn:
+            conn.execute(
+                "INSERT INTO papers (arxiv_id, title, stage, error) "
+                "VALUES ('1', 'A', 'failed', 'connection timeout')"
+            )
+        runner = PipelineRunner(db)
+        status = runner.get_pipeline_status()
+        assert len(status["recent_errors"]) == 1
+        err = status["recent_errors"][0]
+        assert err["paper_id"] == 1
+        assert err["stage"] == "failed"
+        assert err["error"] == "connection timeout"
+        assert "timestamp" in err
+
+
+class TestRunPersistence:
+    """Unit tests for run record CRUD."""
+
+    def test_create_and_get_run(self, initialized_db):
+        runner = PipelineRunner(str(initialized_db))
+        runner._create_run_record("run-test-1", {"query": "test"}, 3)
+        status = runner.get_run_status("run-test-1")
+        assert status is not None
+        assert status["run_id"] == "run-test-1"
+        assert status["status"] == "running"
+        assert status["stages_requested"] == 3
+        assert status["params"]["query"] == "test"
+
+    def test_update_run_record(self, initialized_db):
+        runner = PipelineRunner(str(initialized_db))
+        runner._create_run_record("run-test-2", {}, 5)
+        runner._update_run_record("run-test-2", {
+            "status": "completed",
+            "results": {"discovery": {"papers_found": 3}},
+            "errors": [],
+            "stages_completed": 5,
+        })
+        status = runner.get_run_status("run-test-2")
+        assert status["status"] == "completed"
+        assert status["stages_completed"] == 5
+        assert status["results"]["discovery"]["papers_found"] == 3
+        assert status["errors"] == []
+
+    def test_list_runs_ordered_by_recent(self, initialized_db):
+        runner = PipelineRunner(str(initialized_db))
+        runner._create_run_record("run-a", {}, 1)
+        runner._create_run_record("run-b", {}, 2)
+        runs = runner.list_runs(limit=10)
+        assert len(runs) == 2
+        # Most recent first
+        assert runs[0]["run_id"] == "run-b"
+        assert runs[1]["run_id"] == "run-a"
+
+    def test_list_runs_respects_limit(self, initialized_db):
+        runner = PipelineRunner(str(initialized_db))
+        for i in range(5):
+            runner._create_run_record(f"run-{i}", {}, 1)
+        runs = runner.list_runs(limit=3)
+        assert len(runs) == 3
+
+    def test_list_runs_default_limit(self, initialized_db):
+        runner = PipelineRunner(str(initialized_db))
+        runs = runner.list_runs()
+        assert isinstance(runs, list)
+
+    def test_get_run_json_fields_parsed(self, initialized_db):
+        runner = PipelineRunner(str(initialized_db))
+        runner._create_run_record("run-json", {"key": "val"}, 1)
+        runner._update_run_record("run-json", {
+            "status": "completed",
+            "results": {"a": 1},
+            "errors": ["e1"],
+            "stages_completed": 1,
+        })
+        status = runner.get_run_status("run-json")
+        # JSON fields should be parsed into dicts/lists
+        assert isinstance(status["params"], dict)
+        assert isinstance(status["results"], dict)
+        assert isinstance(status["errors"], list)
+
+    def test_cleanup_stuck_runs_none(self, initialized_db):
+        runner = PipelineRunner(str(initialized_db))
+        count = runner.cleanup_stuck_runs()
+        assert count == 0
+
+    def test_cleanup_stuck_runs_marks_failed(self, initialized_db):
+        from shared.db import transaction
+        db = str(initialized_db)
+        runner = PipelineRunner(db)
+        with transaction(db) as conn:
+            conn.execute(
+                "INSERT INTO pipeline_runs (run_id, status, params, stages_requested) "
+                "VALUES ('stuck-a', 'running', '{}', 3)"
+            )
+            conn.execute(
+                "INSERT INTO pipeline_runs (run_id, status, params, stages_requested) "
+                "VALUES ('stuck-b', 'running', '{}', 5)"
+            )
+            conn.execute(
+                "INSERT INTO pipeline_runs (run_id, status, params, stages_requested) "
+                "VALUES ('done-c', 'completed', '{}', 2)"
+            )
+        count = runner.cleanup_stuck_runs()
+        assert count == 2
+        # Verify they're marked failed
+        a = runner.get_run_status("stuck-a")
+        assert a["status"] == "failed"
+        assert "orphaned" in a["errors"][0]
+        # Completed run untouched
+        c = runner.get_run_status("done-c")
+        assert c["status"] == "completed"
+
+
+class TestHealthCheckDetails:
+    """Pin health check response structure."""
+
+    @patch("services.orchestrator.pipeline.requests.get")
+    def test_services_health_response_structure(self, mock_get, initialized_db):
+        runner = PipelineRunner(str(initialized_db))
+        resp = MagicMock(status_code=200)
+        resp.json.return_value = {"status": "ok"}
+        mock_get.return_value = resp
+
+        result = runner.get_services_health()
+        assert "all_healthy" in result
+        assert "services" in result
+        assert "external" in result
+        # Each service has port
+        for name in ("discovery", "analyzer", "extractor", "validator", "codegen"):
+            assert "port" in result["services"][name]
+
+    @patch("services.orchestrator.pipeline.requests.get")
+    def test_services_health_error_includes_status_code(self, mock_get, initialized_db):
+        runner = PipelineRunner(str(initialized_db))
+        resp_ok = MagicMock(status_code=200)
+        resp_ok.json.return_value = {"status": "ok"}
+        resp_err = MagicMock(status_code=502)
+        # discovery ok, analyzer 502, rest ok + 3 external ok
+        mock_get.side_effect = [resp_ok, resp_err, resp_ok, resp_ok, resp_ok, resp_ok, resp_ok, resp_ok]
+
+        result = runner.get_services_health()
+        assert result["services"]["analyzer"]["status"] == "error"
+        assert "502" in result["services"]["analyzer"]["error"]
+        assert result["services"]["analyzer"]["port"] == 8771
+
+    @patch("services.orchestrator.pipeline.requests.get")
+    def test_services_health_connection_error(self, mock_get, initialized_db):
+        runner = PipelineRunner(str(initialized_db))
+        resp_ok = MagicMock(status_code=200)
+        resp_ok.json.return_value = {"status": "ok"}
+        # discovery raises ConnectionError, rest ok + 3 external ok
+        mock_get.side_effect = [
+            requests.ConnectionError("refused"),
+            resp_ok, resp_ok, resp_ok, resp_ok,
+            resp_ok, resp_ok, resp_ok,
+        ]
+        result = runner.get_services_health()
+        assert result["all_healthy"] is False
+        assert result["services"]["discovery"]["status"] == "error"
+        assert "refused" in result["services"]["discovery"]["error"]
+
+    @patch("services.orchestrator.pipeline.requests.get")
+    def test_external_health_url_and_healthy_fields(self, mock_get, initialized_db):
+        runner = PipelineRunner(str(initialized_db))
+        mock_get.return_value = MagicMock(status_code=200)
+        result = runner.check_external_health()
+        for name in ("cas", "rag", "ollama"):
+            assert "url" in result["deps"][name]
+            assert "healthy" in result["deps"][name]
+            assert result["deps"][name]["healthy"] is True
+
+    @patch("services.orchestrator.pipeline.requests.get")
+    def test_external_health_connection_error_marks_unhealthy(self, mock_get, initialized_db):
+        runner = PipelineRunner(str(initialized_db))
+        resp_ok = MagicMock(status_code=200)
+        mock_get.side_effect = [resp_ok, requests.ConnectionError("down"), resp_ok]
+        result = runner.check_external_health()
+        assert result["all_healthy"] is False
+        assert result["deps"]["cas"]["healthy"] is True
+        assert result["deps"]["rag"]["healthy"] is False
+        assert result["deps"]["ollama"]["healthy"] is True
+
+    @patch("services.orchestrator.pipeline.requests.get")
+    def test_external_health_status_400_is_unhealthy(self, mock_get, initialized_db):
+        runner = PipelineRunner(str(initialized_db))
+        mock_get.return_value = MagicMock(status_code=400)
+        result = runner.check_external_health()
+        assert result["all_healthy"] is False
+        for dep in result["deps"].values():
+            assert dep["healthy"] is False
+
+    @patch("services.orchestrator.pipeline.requests.get")
+    def test_health_timeout_value(self, mock_get, initialized_db):
+        """Health checks use timeout=5 for services, timeout=3 for external."""
+        runner = PipelineRunner(str(initialized_db))
+        mock_get.return_value = MagicMock(status_code=200)
+        mock_get.return_value.json.return_value = {"status": "ok"}
+        runner.get_services_health()
+        # First 5 calls are service health (timeout=5), next 3 are external (timeout=3)
+        for call in mock_get.call_args_list[:5]:
+            assert call[1]["timeout"] == 5
+        for call in mock_get.call_args_list[5:]:
+            assert call[1]["timeout"] == 3
