@@ -60,6 +60,10 @@ jobs:
         if: runner.os == 'Linux'
         run: uv run pytest tests/unit --cov=services --cov-report=term --cov-report=json
 
+      - name: Property tests (Linux only)
+        if: runner.os == 'Linux'
+        run: uv run pytest tests/property -v
+
       - name: Extract coverage percentage
         if: runner.os == 'Linux'
         id: cov

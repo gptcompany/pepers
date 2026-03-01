@@ -1210,6 +1210,7 @@ dependencies = [
 
 [package.optional-dependencies]
 dev = [
+    { name = "hypothesis" },
     { name = "pytest" },
     { name = "pytest-asyncio" },
     { name = "pytest-cov" },
@@ -1221,7 +1222,6 @@ setup = [
 
 [package.dev-dependencies]
 dev = [
-    { name = "hypothesis" },
     { name = "mutmut" },
 ]
 
@@ -1232,6 +1232,7 @@ requires-dist = [
     { name = "apscheduler", specifier = "==3.11.2" },
     { name = "arxiv", specifier = "==2.4.0" },
     { name = "google-genai", specifier = "==1.64.0" },
+    { name = "hypothesis", marker = "extra == 'dev'", specifier = ">=6.151.9" },
     { name = "mcp", specifier = "==1.26.0" },
     { name = "prometheus-client", specifier = "==0.24.1" },
     { name = "pydantic", specifier = "==2.12.5" },
@@ -1246,10 +1247,7 @@ requires-dist = [
 provides-extras = ["dev", "setup"]
 
 [package.metadata.requires-dev]
-dev = [
-    { name = "hypothesis", specifier = ">=6.151.9" },
-    { name = "mutmut", specifier = "==2.4.5" },
-]
+dev = [{ name = "mutmut", specifier = "==2.4.5" }]
 
 [[package]]
 name = "pluggy"
