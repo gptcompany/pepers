@@ -28,6 +28,7 @@ services:
     environment:
       - RP_DISCOVERY_PORT=8770
       - RP_DB_PATH=/data/research.db
+      - RP_DISCOVERY_SOURCES=arxiv,openalex
       - RP_LOG_LEVEL=INFO
     env_file: .env
     volumes:
