@@ -42,4 +42,8 @@ htmlcov/
 .planning/
 *.zip
 *.md
+!README.md
 *.j2
+
+# Gemini CLI
+.gemini/settings.json
