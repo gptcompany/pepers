@@ -122,6 +122,8 @@ class TestRequestCount:
         )
         urllib.request.urlopen(req)
 
+        # Allow server thread to finish metrics bookkeeping
+        time.sleep(0.1)
         after = _sample_value("pepers_request_count_total", labels)
         assert after == before + 1
 
@@ -162,6 +164,8 @@ class TestRequestDuration:
 
         urllib.request.urlopen(f"http://localhost:{self.port}/slow")
 
+        # Allow server thread to finish metrics bookkeeping
+        time.sleep(0.1)
         after_sum = _sample_value("pepers_request_duration_seconds_sum", sum_labels)
         increment = after_sum - before_sum
         assert increment >= 0.05, f"Duration too low: {increment}"
@@ -209,6 +213,8 @@ class TestErrorCount:
             urllib.request.urlopen(f"http://localhost:{self.port}/fail")
         assert exc_info.value.code == 500
 
+        # Allow server thread to finish metrics bookkeeping
+        time.sleep(0.1)
         after = _sample_value("pepers_error_count_total", labels_500)
         assert after == before + 1
 
@@ -267,6 +273,8 @@ class TestExcludedEndpoints:
         for _ in range(3):
             urllib.request.urlopen(f"http://localhost:{self.port}/metrics")
 
+        # Allow server thread to finish metrics bookkeeping (if any)
+        time.sleep(0.1)
         after = _sample_value("pepers_request_count_total", labels)
         assert after == before, (
             f"Expected no increment for /metrics, got {after - before}"
@@ -283,6 +291,8 @@ class TestExcludedEndpoints:
 
         urllib.request.urlopen(f"http://localhost:{self.port}/health")
 
+        # Allow server thread to finish metrics bookkeeping (if any)
+        time.sleep(0.1)
         after = _sample_value("pepers_request_count_total", labels)
         assert after == before, (
             f"Expected no increment for /health, got {after - before}"
