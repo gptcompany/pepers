@@ -23,6 +23,7 @@ build/
 
 # Coverage
 .coverage
+coverage.json
 htmlcov/
 
 # Caches
