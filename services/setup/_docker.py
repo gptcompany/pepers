@@ -172,13 +172,14 @@ class DockerComposeUp:
                 return False
 
         console.print(f"[cyan]Running docker compose up -d ({compose.name})...[/]")
+        console.print(
+            "[dim]This may take a few minutes; Docker will print progress below.[/]"
+        )
         try:
             subprocess.run(
                 ["docker", "compose", "up", "-d"],
                 cwd=self._root,
                 check=True,
-                text=True,
-                capture_output=True,
             )
             return True
         except subprocess.CalledProcessError as exc:
