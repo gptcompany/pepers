@@ -1,4 +1,4 @@
-"""Step: system prerequisites (Git, Curl, Pip, Sudo, Python, uv, SQLite, dotenvx, disk space)."""
+"""Step: system prerequisites (Git, Curl, Sudo, Python, uv, SQLite, dotenvx, disk space)."""
 
 from __future__ import annotations
 
@@ -106,6 +106,19 @@ class UvCheck:
 
     def install(self, console: Console) -> bool:
         console.print("[cyan]Installing uv...[/]")
+        # Prefer native uv installer; fallback to python -m pip.
+        if shutil.which("curl") is not None:
+            try:
+                subprocess.run(
+                    ["sh", "-c", "curl -LsSf https://astral.sh/uv/install.sh | sh"],
+                    check=True,
+                    capture_output=True,
+                    text=True,
+                )
+                return True
+            except (subprocess.CalledProcessError, FileNotFoundError):
+                pass
+
         try:
             subprocess.run(
                 [sys.executable, "-m", "pip", "install", "uv"],
@@ -116,7 +129,7 @@ class UvCheck:
             return True
         except (subprocess.CalledProcessError, FileNotFoundError):
             console.print(
-                "[yellow]Could not install uv via pip.[/]\n"
+                "[yellow]Could not install uv automatically.[/]\n"
                 "Try: curl -LsSf https://astral.sh/uv/install.sh | sh"
             )
             return False
@@ -236,7 +249,6 @@ def get_all_steps(project_root: Path) -> list:
     return [
         GitCheck(),
         CurlCheck(),
-        PipCheck(),
         SudoCheck(),
         PythonCheck(),
         UvCheck(),
