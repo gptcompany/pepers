@@ -29,7 +29,7 @@ BANNER = r"""
  | |_) |  _| | |_) |  _| | |_) \___ \
  |  __/| |___|  __/| |___|  _ < ___) |
  |_|   |_____|_|   |_____|_| \_\____/
-                 Setup Wizard
+              PePeRS Setup Wizard
 """
 
 WELCOME_GUIDE = """\
