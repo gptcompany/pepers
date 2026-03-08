@@ -166,6 +166,20 @@ class ExternalServiceCheck:
             return value.rstrip("/")
         return f"http://{value}".rstrip("/")
 
+    def _runtime_env_overrides(self) -> dict[str, str]:
+        """Propagate selected custom endpoint into child setup processes."""
+        url = self._active_url or self._url()
+        parsed = urlparse(url)
+        port = parsed.port
+        host = parsed.hostname or "localhost"
+        overrides: dict[str, str] = {}
+        if self.name == "CAS Service" and port is not None:
+            overrides["CAS_PORT"] = str(port)
+        if self.name == "RAG Service" and port is not None:
+            overrides["RAG_PORT"] = str(port)
+            overrides["RAG_HOST"] = host
+        return overrides
+
     def _probe_url(self, base_url: str, timeout: int = 3, *, strict_identity: bool = False) -> bool:
         health = base_url.rstrip("/") + self._svc["health_path"]
         try:
@@ -513,8 +527,8 @@ class ExternalServiceCheck:
                 if not raw:
                     continue
                 custom = self._normalize_user_url(raw)
+                self._active_url = custom
                 if self._probe_url(custom):
-                    self._active_url = custom
                     if _ask_confirm_safe(
                         f"Save {custom} to .env?",
                         default=True,
@@ -524,6 +538,11 @@ class ExternalServiceCheck:
                 console.print(
                     f"[yellow]{self.name} not reachable at {custom}{self._svc['health_path']}[/]"
                 )
+                if _ask_confirm_safe(
+                    f"Keep {custom} as target URL for next install/start attempt and save to .env?",
+                    default=True,
+                ):
+                    self._persist_url(custom, console)
                 continue
 
             # Install/start selected.
@@ -584,10 +603,12 @@ class ExternalServiceCheck:
 
     def _run_setup_install(self, console: Console) -> bool:
         setup_cmd = self._svc.get("setup_cmd")
+        runtime_env = os.environ.copy()
+        runtime_env.update(self._runtime_env_overrides())
         if isinstance(setup_cmd, str) and shutil.which(setup_cmd):
             console.print(f"[cyan]Launching {setup_cmd}...[/]")
             try:
-                result = subprocess.run([setup_cmd], check=False)
+                result = subprocess.run([setup_cmd], env=runtime_env, check=False)
             except OSError as exc:
                 console.print(f"[red]Failed to launch {setup_cmd}:[/] {exc}")
             else:
@@ -611,6 +632,7 @@ class ExternalServiceCheck:
                     f"{env_extra['PYTHONPATH']}:{run_env['PYTHONPATH']}"
                 )
             run_env.update(env_extra)
+            run_env.update(self._runtime_env_overrides())
             try:
                 result = subprocess.run(cmd, cwd=cwd, env=run_env, check=False)
             except OSError as exc:
