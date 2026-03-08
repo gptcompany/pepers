@@ -90,6 +90,7 @@ def _ask_text_safe(prompt: str, default: str = "") -> str:
 
 class ExternalServiceCheck:
     """Check a single external service."""
+    auto_reconcile_when_configured = True
 
     def __init__(self, svc: dict, project_root: Path | None = None) -> None:
         self._svc = svc

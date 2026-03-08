@@ -46,15 +46,24 @@ def _run_single_step(step: SetupStep, console: Console) -> str:
     Returns status: "ok" | "skipped" | "failed" | "warn" | "abort".
     """
     with console.status(f"[bold cyan]Checking {step.name}...[/]"):
-        if step.check():
-            console.print(f"  [green]\u2705 {step.name}[/] \u2014 already configured")
-            return "ok"
+        is_configured = step.check()
 
-    if not questionary.confirm(
-        f"Configure {step.name}?", default=True
-    ).ask():
-        console.print(f"  [yellow]\u23ed\ufe0f  {step.name}[/] \u2014 skipped")
-        return "skipped"
+    auto_reconcile_flag = getattr(step, "auto_reconcile_when_configured", False) is True
+    if is_configured and not auto_reconcile_flag:
+        console.print(f"  [green]\u2705 {step.name}[/] \u2014 already configured")
+        return "ok"
+    if is_configured:
+        console.print(
+            f"  [green]\u2705 {step.name}[/] \u2014 already configured "
+            "(running automatic reconcile)"
+        )
+
+    if not is_configured:
+        if not questionary.confirm(
+            f"Configure {step.name}?", default=True
+        ).ask():
+            console.print(f"  [yellow]\u23ed\ufe0f  {step.name}[/] \u2014 skipped")
+            return "skipped"
 
     success = step.install(console)
     if not success:
