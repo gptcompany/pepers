@@ -104,15 +104,22 @@ Default local ports: `:8770-:8776` (override in `.env`).
 ```bash
 git clone https://github.com/gptcompany/pepers.git
 cd pepers
-uv sync --extra setup
-uv run pepers-setup   # Step-by-step by default
+./pepers-setup        # Step-by-step by default (auto-bootstrap)
 # use --non-interactive for quick start
-# or: source .venv/bin/activate && pepers-setup
+# or: ./pepers-setup --non-interactive
 ```
 
 The wizard checks prerequisites, configures `.env`, verifies external services, and optionally starts Docker Compose.
 
 Subcommands: `pepers-setup easy | walkthrough | guided | check | config | services | docker | verify`
+
+Optional (global command from any folder):
+
+```bash
+cd /path/to/pepers
+sudo ln -sf "$(pwd)/pepers-setup" /usr/local/bin/pepers-setup
+pepers-setup
+```
 
 ### Option 2: Docker
 
@@ -145,7 +152,7 @@ python3 -c "from shared.db import init_db; init_db('data/research.db')"
 
 ```bash
 # Run the setup wizard first
-uv run pepers-setup
+./pepers-setup
 
 # Run all services (Docker)
 docker compose up -d
@@ -173,8 +180,14 @@ curl -X POST http://localhost:8775/search \
 
 ### macOS note: `pepers-setup` not found
 
-If you see `zsh: command not found: pepers-setup` after `uv sync`, you likely didn’t activate the venv.
-Use `uv run pepers-setup` or `source .venv/bin/activate`.
+If `pepers-setup` is not found globally, run it from the repo root:
+
+```bash
+cd /path/to/pepers
+./pepers-setup
+```
+
+`./pepers-setup` auto-installs `uv` (if missing), creates `.venv`, and starts the wizard.
 
 ### Clean-room Docker setup (macOS)
 

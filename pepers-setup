@@ -1,0 +1,43 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+VENV_SETUP="${ROOT_DIR}/.venv/bin/pepers-setup"
+
+ensure_uv() {
+  if command -v uv >/dev/null 2>&1; then
+    return 0
+  fi
+
+  echo "uv not found. Installing uv..."
+  if ! command -v curl >/dev/null 2>&1; then
+    echo "Error: curl is required to install uv automatically."
+    echo "Install curl, then rerun ./pepers-setup"
+    return 1
+  fi
+
+  curl -LsSf https://astral.sh/uv/install.sh | sh
+  export PATH="$HOME/.local/bin:$PATH"
+
+  if ! command -v uv >/dev/null 2>&1; then
+    echo "Error: uv installation did not expose 'uv' in PATH."
+    echo "Open a new terminal or run: export PATH=\"\$HOME/.local/bin:\$PATH\""
+    return 1
+  fi
+  return 0
+}
+
+if [[ -x "${VENV_SETUP}" ]]; then
+  exec "${VENV_SETUP}" "$@"
+fi
+
+ensure_uv
+
+echo "Bootstrapping PePeRS setup environment..."
+uv sync --extra setup
+
+if [[ -x "${VENV_SETUP}" ]]; then
+  exec "${VENV_SETUP}" "$@"
+fi
+
+exec uv run pepers-setup "$@"
