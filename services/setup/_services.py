@@ -620,6 +620,9 @@ class ExternalServiceCheck:
                 console.print(f"[red]Failed to launch {setup_cmd}:[/] {exc}")
             else:
                 if result.returncode == 0:
+                    # Child setup may report success while Docker keeps stale containers.
+                    # Reconcile compose stack automatically when available.
+                    self._auto_reconcile_docker_service(console, Path.cwd(), runtime_env)
                     return True
                 console.print(f"[red]{setup_cmd} failed (exit {result.returncode})[/]")
 
@@ -631,6 +634,7 @@ class ExternalServiceCheck:
 
         if fallback is not None:
             cmd, cwd, env_extra, display = fallback
+            self._refresh_repo_best_effort(cwd, console)
             console.print(f"[cyan]Launching local setup: {display}[/]")
             run_env = os.environ.copy()
             if "PYTHONPATH" in env_extra and run_env.get("PYTHONPATH"):
@@ -646,11 +650,111 @@ class ExternalServiceCheck:
                 console.print(f"[red]Failed to launch local setup:[/] {exc}")
             else:
                 if result.returncode == 0:
+                    # Child setup may report success while Docker keeps stale containers.
+                    # Reconcile compose stack automatically when available.
+                    self._auto_reconcile_docker_service(console, cwd, run_env)
                     return True
                 console.print(f"[red]Local setup failed (exit {result.returncode})[/]")
 
         console.print(f"[dim]{self._svc['setup_hint']}[/]")
         return False
+
+    def _refresh_repo_best_effort(self, repo_dir: Path, console: Console) -> None:
+        """Try to fast-forward local child repo before running its setup."""
+        if shutil.which("git") is None:
+            return
+        if not (repo_dir / ".git").exists():
+            return
+        try:
+            fetch = subprocess.run(
+                ["git", "-C", str(repo_dir), "fetch", "origin"],
+                check=False,
+                capture_output=True,
+                text=True,
+                timeout=20,
+            )
+            if fetch.returncode != 0:
+                return
+            branch = subprocess.run(
+                ["git", "-C", str(repo_dir), "rev-parse", "--abbrev-ref", "HEAD"],
+                check=False,
+                capture_output=True,
+                text=True,
+                timeout=10,
+            )
+            current = branch.stdout.strip() or "main"
+            pull = subprocess.run(
+                ["git", "-C", str(repo_dir), "pull", "--ff-only", "origin", current],
+                check=False,
+                capture_output=True,
+                text=True,
+                timeout=25,
+            )
+            if pull.returncode == 0 and ("Already up to date" not in (pull.stdout or "")):
+                console.print(f"[dim]Updated {repo_dir.name} before setup.[/]")
+        except Exception:
+            # Best effort only.
+            return
+
+    def _compose_file(self, repo_dir: Path) -> Path | None:
+        for name in ("docker-compose.yml", "docker-compose.yaml", "compose.yml", "compose.yaml"):
+            candidate = repo_dir / name
+            if candidate.exists():
+                return candidate
+        return None
+
+    def _auto_reconcile_docker_service(
+        self,
+        console: Console,
+        repo_dir: Path,
+        run_env: dict[str, str],
+    ) -> None:
+        """Best-effort docker reconcile after child setup success.
+
+        This prevents stale containers/images from surviving repeated setup runs.
+        """
+        if shutil.which("docker") is None:
+            return
+        compose = self._compose_file(repo_dir)
+        if compose is None:
+            return
+
+        cmd_base = ["docker", "compose"]
+        env = os.environ.copy()
+        env.update(run_env)
+
+        # Use dotenvx when available in child repo to honor encrypted .env files.
+        dotenvx = shutil.which("dotenvx")
+        env_file = repo_dir / ".env"
+        if dotenvx and env_file.exists():
+            cmd_base = ["dotenvx", "run", "-f", str(env_file), "--", "docker", "compose"]
+
+        console.print(
+            f"[cyan]Reconciling {self.name} docker stack ({repo_dir.name}/{compose.name})...[/]"
+        )
+        console.print("[dim]Running compose up with --build --force-recreate.[/]")
+        try:
+            res = subprocess.run(
+                [*cmd_base, "up", "-d", "--build", "--force-recreate"],
+                cwd=repo_dir,
+                env=env,
+                check=False,
+            )
+            if res.returncode == 0:
+                return
+
+            console.print(
+                "[yellow]Compose reconcile with rebuild failed; retrying plain up -d.[/]"
+            )
+            subprocess.run(
+                [*cmd_base, "up", "-d"],
+                cwd=repo_dir,
+                env=env,
+                check=False,
+            )
+        except Exception:
+            # Best effort only; main flow still relies on health verification.
+            return
 
     def help(self, console: Console) -> None:
         console.print(f"[bold]{self.name} setup help[/]")
