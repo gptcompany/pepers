@@ -105,12 +105,14 @@ Default local ports: `:8770-:8776` (override in `.env`).
 git clone https://github.com/gptcompany/pepers.git
 cd pepers
 uv sync --extra setup
-pepers-setup          # Interactive guided setup
+uv run pepers-setup   # Step-by-step by default
+# use --non-interactive for quick start
+# or: source .venv/bin/activate && pepers-setup
 ```
 
 The wizard checks prerequisites, configures `.env`, verifies external services, and optionally starts Docker Compose.
 
-Subcommands: `pepers-setup check | config | services | docker | verify`
+Subcommands: `pepers-setup easy | walkthrough | guided | check | config | services | docker | verify`
 
 ### Option 2: Docker
 
@@ -143,7 +145,7 @@ python3 -c "from shared.db import init_db; init_db('data/research.db')"
 
 ```bash
 # Run the setup wizard first
-pepers-setup
+uv run pepers-setup
 
 # Run all services (Docker)
 docker compose up -d
@@ -167,6 +169,32 @@ curl http://localhost:8775/runs?id=<run_id>
 curl -X POST http://localhost:8775/search \
   -H "Content-Type: application/json" \
   -d '{"query": "optimal portfolio allocation"}'
+```
+
+### macOS note: `pepers-setup` not found
+
+If you see `zsh: command not found: pepers-setup` after `uv sync`, you likely didn’t activate the venv.
+Use `uv run pepers-setup` or `source .venv/bin/activate`.
+
+### Clean-room Docker setup (macOS)
+
+If you want a fully isolated, disposable setup on macOS (fresh `.env`, fresh containers, no state):
+
+```bash
+mkdir -p ~/pepers-clean && cd ~/pepers-clean
+git clone https://github.com/gptcompany/pepers.git
+cd pepers
+cp .env.example .env
+
+export COMPOSE_PROJECT_NAME=pepers_clean
+docker compose up -d --build
+
+# quick health checks
+curl -fsS http://localhost:8775/health | python -m json.tool
+curl -fsS http://localhost:8776/sse --max-time 3 || true
+
+# teardown + remove volumes
+docker compose down -v
 ```
 
 ## Architecture

@@ -4,10 +4,10 @@ on:
   workflow_dispatch:
     inputs:
       runner_labels_json:
-        description: 'Runner labels JSON (e.g. ["self-hosted","linux","ws"])'
+        description: 'Runner labels JSON (e.g. ["self-hosted","Linux","X64","shared"])'
         required: true
         type: string
-        default: '["self-hosted","linux"]'
+        default: '["self-hosted","Linux","X64","shared"]'
       rebuild_images:
         description: Rebuild Docker images before validation
         required: true

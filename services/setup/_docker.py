@@ -4,6 +4,9 @@ from __future__ import annotations
 
 import shutil
 import subprocess
+import time
+from platform import system
+from pathlib import Path
 from pathlib import Path
 
 from rich.console import Console
@@ -21,6 +24,10 @@ class DockerCheck:
             "[yellow]Docker is not installed.[/]\n"
             "Install from https://docs.docker.com/get-docker/"
         )
+        if system() == "Darwin":
+            console.print(
+                "[dim]On macOS: install Docker Desktop and launch it once.[/]"
+            )
         return False
 
     def verify(self) -> bool:
@@ -48,7 +55,72 @@ class DockerComposeCheck:
             "[yellow]docker compose not available.[/]\n"
             "Ensure Docker Desktop or docker-compose-plugin is installed."
         )
+        if system() == "Darwin":
+            console.print(
+                "[dim]On macOS: Docker Compose is bundled with Docker Desktop.[/]"
+            )
         return False
+
+
+def _docker_daemon_ready() -> bool:
+    try:
+        subprocess.run(
+            ["docker", "info"],
+            check=True,
+            capture_output=True,
+            text=True,
+        )
+        return True
+    except (subprocess.CalledProcessError, FileNotFoundError):
+        return False
+
+
+def _wait_for_docker_daemon(timeout_s: int = 60) -> bool:
+    start = time.time()
+    while time.time() - start < timeout_s:
+        if _docker_daemon_ready():
+            return True
+        time.sleep(2)
+    return False
+
+
+def _maybe_start_docker_desktop(console: Console) -> None:
+    if system() != "Darwin":
+        return
+    try:
+        import questionary
+
+        if questionary.confirm(
+            "Docker Desktop is not running. Open it now?",
+            default=True,
+        ).ask():
+            docker_app = Path("/Applications/Docker.app")
+            if docker_app.exists():
+                subprocess.run(["open", "-a", "Docker"], check=False)
+            else:
+                console.print(
+                    "[yellow]Docker Desktop not found at /Applications/Docker.app.[/]"
+                )
+                console.print(
+                    "[dim]Install from https://docs.docker.com/desktop/install/mac-install/[/]"
+                )
+                console.print(
+                    "[dim]Or via Homebrew: brew install --cask docker[/]"
+                )
+                console.print(
+                    "[dim]macOS 12+: Docker Desktop installs under /Applications (requires admin password).[/]"
+                )
+                return
+            console.print("[dim]Waiting for Docker Desktop...[/]")
+            if _wait_for_docker_daemon(90):
+                console.print("[green]Docker Desktop is ready.[/]")
+            else:
+                console.print("[yellow]Docker Desktop did not become ready yet.[/]")
+    except Exception:
+        # Non-interactive fallback
+        console.print(
+            "[yellow]Docker Desktop not running. Start it and retry.[/]"
+        )
 
     def verify(self) -> bool:
         return self.check()
@@ -88,6 +160,17 @@ class DockerComposeUp:
             console.print("[dim]No docker-compose file found, skipping.[/]")
             return True
 
+        if not _docker_daemon_ready():
+            console.print("[yellow]Docker daemon is not running.[/]")
+            if system() == "Darwin":
+                _maybe_start_docker_desktop(console)
+            else:
+                console.print(
+                    "[dim]Try: sudo systemctl start docker (Linux)[/]"
+                )
+            if not _docker_daemon_ready():
+                return False
+
         console.print(f"[cyan]Running docker compose up -d ({compose.name})...[/]")
         try:
             subprocess.run(
@@ -95,10 +178,15 @@ class DockerComposeUp:
                 cwd=self._root,
                 check=True,
                 text=True,
+                capture_output=True,
             )
             return True
         except subprocess.CalledProcessError as exc:
             console.print(f"[red]docker compose up failed:[/] {exc}")
+            if "docker.sock" in (exc.stderr or ""):
+                console.print(
+                    "[yellow]Docker is installed but not running. Start Docker Desktop and retry.[/]"
+                )
             return False
 
     def verify(self) -> bool:

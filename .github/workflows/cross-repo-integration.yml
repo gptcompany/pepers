@@ -26,7 +26,7 @@ permissions:
 
 jobs:
   validate:
-    runs-on: [self-hosted, linux]
+    runs-on: [self-hosted, Linux, X64, muletto]
     timeout-minutes: 20
 
     steps:
@@ -74,7 +74,7 @@ jobs:
             *) echo "Unknown service"; exit 1 ;;
           esac
           echo "Checking $URL (skipped on GitHub-hosted runners)"
-          curl -fsS --max-time 5 "$URL" | python -m json.tool || echo "Service not reachable (expected on ubuntu-latest)"
+          curl -fsS --max-time 5 "$URL" | python -m json.tool || echo "Service not reachable (expected on self-hosted Linux)"
 
       - name: Probe local PePeRS stack (optional)
         if: ${{ github.event_name == 'repository_dispatch' || inputs.require_pepers_stack }}
@@ -91,7 +91,7 @@ jobs:
             http://localhost:8775/health
           do
             echo "Checking $url"
-            curl -fsS --max-time 5 "$url" >/dev/null || echo "Not reachable (expected on ubuntu-latest)"
+            curl -fsS --max-time 5 "$url" >/dev/null || echo "Not reachable (expected on self-hosted Linux)"
           done
           # MCP (8776) exposes SSE streaming — TCP check only
           timeout 5 bash -c 'cat < /dev/null > /dev/tcp/localhost/8776' 2>/dev/null && echo "OK  MCP port 8776" || echo "WARN  MCP port 8776 not listening"

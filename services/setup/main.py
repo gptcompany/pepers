@@ -1,10 +1,12 @@
 """PePeRS Setup Wizard -- CLI entry point.
 
 Usage:
-    pepers-setup              # easy mode (non-interactive, safe defaults)
+    pepers-setup              # step-by-step (default)
     pepers-setup easy         # same as above
+    pepers-setup walkthrough  # linear, step-by-step prompts
     pepers-setup guided       # interactive menu (all steps)
     pepers-setup all          # alias for guided (backward compat)
+    pepers-setup --non-interactive   # quick start, no prompts
     pepers-setup check        # prerequisites only
     pepers-setup config       # .env configuration only
     pepers-setup services     # external services check only
@@ -46,12 +48,14 @@ WELCOME_GUIDE = """\
 
 def _print_usage(console: Console) -> None:
     console.print(
-        "Usage: pepers-setup [easy|guided|all|check|config|services|docker|down|verify|help]",
+        "Usage: pepers-setup [easy|walkthrough|guided|all|check|config|services|docker|down|verify|help|--non-interactive]",
         markup=False,
     )
     console.print(
-        "[dim]  (default)  easy mode — non-interactive, safe defaults\n"
+        "[dim]  (default)  walkthrough — step-by-step prompts\n"
+        "  --non-interactive quick start (no prompts)\n"
         "  guided     interactive menu with free navigation\n"
+        "  walkthrough step-by-step prompts (linear)\n"
         "  all        alias for guided (backward compat)[/]"
     )
 
@@ -221,14 +225,55 @@ def main(argv: list[str] | None = None) -> int:
 
     console.print(f"[bold green]{BANNER}[/]")
     console.print(f"[dim]Project root: {root}[/]\n")
+    console.print(
+        "[dim]Tip: use --non-interactive for a quick start without prompts.[/]\n"
+    )
 
-    command = args[0] if args else "easy"
+    if "--non-interactive" in args:
+        command = "easy"
+        args = [a for a in args if a != "--non-interactive"]
+    else:
+        command = args[0] if args else "walkthrough"
     if command in {"-h", "--help", "help"}:
         _print_usage(console)
         return 0
 
+    if command == "choose":
+        import questionary
+
+        choice = questionary.select(
+            "How would you like to set up PePeRS?",
+            choices=[
+                questionary.Choice(
+                    "Quick start (automatic)",
+                    value="easy",
+                ),
+                questionary.Choice(
+                    "Step-by-step (guided prompts)",
+                    value="walkthrough",
+                ),
+                questionary.Choice(
+                    "Interactive menu (pick steps)",
+                    value="guided",
+                ),
+                questionary.Choice("Exit", value="exit"),
+            ],
+        ).ask()
+        if choice in {None, "exit"}:
+            console.print("[yellow]Setup aborted by user.[/]")
+            return 1
+        command = choice
+
     if command == "easy":
         return _easy_mode(root, console)
+
+    if command == "walkthrough":
+        from services.setup._runner import run_steps
+
+        console.print(WELCOME_GUIDE)
+        steps = _all_steps(root)
+        ok = run_steps(steps, console)
+        return 0 if ok else 1
 
     if command in {"all", "guided"}:
         from services.setup._runner import run_interactive_menu

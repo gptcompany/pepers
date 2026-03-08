@@ -25,12 +25,12 @@ concurrency:
 
 jobs:
   test:
-    name: "${{ matrix.os }} / py${{ matrix.python-version }}"
-    runs-on: ${{ matrix.os }}
+    name: "self-hosted / py${{ matrix.python-version }}"
+    runs-on: ${{ matrix.runner }}
     strategy:
       fail-fast: false
       matrix:
-        os: [ubuntu-latest, macos-latest]
+        runner: [[self-hosted, Linux, X64, muletto]]
         python-version: ["3.11"]
 
     steps:
