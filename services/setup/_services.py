@@ -275,17 +275,22 @@ class ExternalServiceCheck:
         if repo_dir is None:
             return None
 
-        venv_python = repo_dir / ".venv" / "bin" / "python"
-        if not venv_python.exists():
-            return None
-
         env = {"PYTHONHASHSEED": "0"}
         if self._svc.get("local_module_needs_pythonpath"):
             env["PYTHONPATH"] = str(repo_dir)
+        venv_python = repo_dir / ".venv" / "bin" / "python"
+        if venv_python.exists():
+            cmd = [str(venv_python), "-m", module_name]
+            display = f"{venv_python} -m {module_name}"
+            return cmd, repo_dir, env, display
 
-        cmd = [str(venv_python), "-m", module_name]
-        display = f"{venv_python} -m {module_name}"
-        return cmd, repo_dir, env, display
+        # Fresh clone path: run through uv even before local .venv exists.
+        if shutil.which("uv") is not None:
+            cmd = ["uv", "run", "python", "-m", module_name]
+            display = f"uv run python -m {module_name}"
+            return cmd, repo_dir, env, display
+
+        return None
 
     def _ensure_local_repo(self, console: Console) -> Path | None:
         repo_name = self._svc.get("local_repo")
