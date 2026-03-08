@@ -6,6 +6,7 @@ import json
 import os
 import shutil
 import subprocess
+import sys
 from pathlib import Path
 from urllib.parse import urlparse
 
@@ -48,6 +49,10 @@ _EXTERNAL_SERVICES = [
         ),
     },
 ]
+
+
+def _is_macos() -> bool:
+    return sys.platform == "darwin"
 
 
 class ExternalServiceCheck:
@@ -278,6 +283,17 @@ class ExternalServiceCheck:
         console.print(f"[dim]{self._svc['setup_hint']}[/]")
         return False  # can't auto-install external services
 
+    def help(self, console: Console) -> None:
+        console.print(f"[bold]{self.name} setup help[/]")
+        console.print(f"[dim]URL:[/] {self._url()}")
+        env_urls = self._svc.get("env_urls")
+        if isinstance(env_urls, list) and env_urls:
+            console.print("[dim]Environment overrides:[/]")
+            for key in env_urls:
+                if isinstance(key, str):
+                    console.print(f"  {key}")
+        console.print(f"[dim]{self._svc['setup_hint']}[/]")
+
     def verify(self) -> bool:
         return self.check()
 
@@ -314,6 +330,17 @@ class ExternalServicePersistenceCheck:
         console.print(
             f"[yellow]{self._svc['name']} is reachable but not boot-persistent.[/]"
         )
+        if _is_macos():
+            console.print("[dim]Recommended (macOS):[/]")
+            console.print(
+                "  Use launchctl with the service's launchd plist "
+                "(see rag-service/cas-service docs)."
+            )
+            console.print(
+                "  Or run via Docker with restart policy enabled."
+            )
+            return False
+
         units = self._svc.get("systemd_units")
         if isinstance(units, list) and units:
             console.print("[dim]Recommended (systemd):[/]")

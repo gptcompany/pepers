@@ -28,6 +28,18 @@ class SetupStep(Protocol):
         ...
 
 
+def _print_step_help(step: SetupStep, console: Console) -> None:
+    if hasattr(step, "help") and callable(getattr(step, "help")):
+        try:
+            step.help(console)  # type: ignore[attr-defined]
+            return
+        except Exception:
+            pass
+    desc = getattr(step, "description", "")
+    if desc:
+        console.print(f"[dim]{desc}[/]")
+
+
 def _run_single_step(step: SetupStep, console: Console) -> str:
     """Execute check -> install -> verify for a single step.
 
@@ -46,21 +58,30 @@ def _run_single_step(step: SetupStep, console: Console) -> str:
 
     success = step.install(console)
     if not success:
-        action = questionary.select(
-            f"{step.name} failed. What to do?",
-            choices=["Skip and continue", "Retry", "Abort"],
-        ).ask()
-        if action == "Abort":
-            console.print("[bold red]Setup aborted.[/]")
-            return "abort"
-        if action == "Retry":
-            success = step.install(console)
-            if not success:
-                console.print(
-                    f"  [red]\u274c {step.name}[/] \u2014 retry failed, skipping"
-                )
-                return "failed"
-        else:
+        while True:
+            action = questionary.select(
+                f"{step.name} failed. What to do?",
+                choices=[
+                    "Show setup help",
+                    "Retry",
+                    "Skip and continue",
+                    "Abort",
+                ],
+            ).ask()
+            if action == "Abort":
+                console.print("[bold red]Setup aborted.[/]")
+                return "abort"
+            if action == "Show setup help":
+                _print_step_help(step, console)
+                continue
+            if action == "Retry":
+                success = step.install(console)
+                if not success:
+                    console.print(
+                        f"  [red]\u274c {step.name}[/] \u2014 retry failed, skipping"
+                    )
+                    return "failed"
+                break
             return "skipped"
 
     if step.verify():
