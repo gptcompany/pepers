@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import os
+import sys
 from pathlib import Path
 
 import questionary
@@ -79,6 +80,15 @@ def _validate_url(val: str) -> bool | str:
     return "Must be a valid URL (e.g. http://localhost:8769)"
 
 
+def _print_env_hint(console: Console, env_path: Path) -> None:
+    console.print(f"[dim].env path:[/] {env_path}")
+    if sys.platform == "darwin":
+        console.print(f"[dim]Open in TextEdit:[/] open -e \"{env_path}\"")
+        console.print(f"[dim]Open in VS Code:[/] code \"{env_path}\"")
+    else:
+        console.print(f"[dim]Open in editor:[/] $EDITOR \"{env_path}\"")
+
+
 class EnvConfig:
     name = "Environment configuration (.env)"
     description = "Core service ports, URLs, defaults, and orchestration settings"
@@ -106,6 +116,8 @@ class EnvConfig:
             "[dim]Press Enter to accept defaults. "
             "API keys are managed separately via dotenvx.[/]\n"
         )
+        _print_env_hint(console, self._env_path)
+        console.print()
 
         existing_values = _read_env_values(self._env_path)
         lines: list[str] = []
@@ -161,6 +173,7 @@ class EnvConfig:
         env_content = "\n".join(lines) + "\n"
         self._env_path.write_text(env_content)
         console.print(f"\n[green]Wrote {self._env_path}[/]")
+        _print_env_hint(console, self._env_path)
         return True
 
     def install_defaults(self, console: Console) -> bool:
@@ -176,6 +189,7 @@ class EnvConfig:
             lines.append(f"{env_name}={value}")
         self._env_path.write_text("\n".join(lines) + "\n")
         console.print(f"  [green]\u2705 {self.name}[/] \u2014 generated .env with defaults")
+        _print_env_hint(console, self._env_path)
         return True
 
     def verify(self) -> bool:
