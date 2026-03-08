@@ -83,7 +83,7 @@ def _all_steps(root: Path) -> list:
         *checks_steps(root),
         *cli_tools_steps(),
         EnvConfig(root),
-        *services_steps(),
+        *services_steps(root),
         McpConfigStep(),
         *docker_steps(root),
         AggregatedHealthCheck(),
@@ -102,10 +102,10 @@ def _config_steps(root: Path) -> list:
     return [EnvConfig(root)]
 
 
-def _services_steps(_: Path) -> list:
+def _services_steps(root: Path) -> list:
     from services.setup._services import get_all_steps
 
-    return get_all_steps()
+    return get_all_steps(root)
 
 
 def _docker_steps(root: Path) -> list:
@@ -200,7 +200,7 @@ def _easy_mode(root: Path, console: Console) -> int:
 
     # ── External services (check-only, no install) ───────────
     external_steps = _tag_tier(
-        [ExternalServiceCheck(svc) for svc in _EXTERNAL_SERVICES],
+        [ExternalServiceCheck(svc, project_root=root) for svc in _EXTERNAL_SERVICES],
         TIER_EXTERNAL, tier_map,
     )
     all_results.extend(
@@ -234,6 +234,8 @@ def main(argv: list[str] | None = None) -> int:
         args = [a for a in args if a != "--non-interactive"]
     else:
         command = args[0] if args else "walkthrough"
+    if not sys.stdin.isatty() and command in {"walkthrough", "choose"}:
+        command = "easy"
     if command in {"-h", "--help", "help"}:
         _print_usage(console)
         return 0

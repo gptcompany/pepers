@@ -7,6 +7,7 @@ import os
 import shutil
 import subprocess
 import sys
+import time
 from pathlib import Path
 from urllib.parse import urlparse
 
@@ -21,6 +22,7 @@ _EXTERNAL_SERVICES = [
         "default_url": "http://localhost:8769",
         "health_path": "/health",
         "setup_cmd": "cas-setup",
+        "guided_install": True,
         "description": "CAS validation (SymPy, SageMath, MATLAB, WolframAlpha)",
         "local_repo": "cas-service",
         "local_module": "cas_service.setup.main",
@@ -37,6 +39,7 @@ _EXTERNAL_SERVICES = [
         "default_url": "http://localhost:8767",
         "health_path": "/health",
         "setup_cmd": "rag-setup",
+        "guided_install": True,
         "description": "PDF extraction + knowledge graph via RAGAnything",
         "local_repo": "rag-service",
         "local_module": "scripts.setup",
@@ -55,21 +58,95 @@ def _is_macos() -> bool:
     return sys.platform == "darwin"
 
 
+def _ask_select_safe(prompt: str, choices: list[str], default: str) -> str:
+    try:
+        answer = questionary.select(
+            prompt,
+            choices=choices,
+            default=default,
+        ).ask()
+    except EOFError:
+        return default
+    return answer or default
+
+
+def _ask_confirm_safe(prompt: str, default: bool = True) -> bool:
+    try:
+        answer = questionary.confirm(prompt, default=default).ask()
+    except EOFError:
+        return default
+    if answer is None:
+        return default
+    return bool(answer)
+
+
+def _ask_text_safe(prompt: str, default: str = "") -> str:
+    try:
+        answer = questionary.text(prompt, default=default).ask()
+    except EOFError:
+        return default
+    return (answer or default).strip()
+
+
 class ExternalServiceCheck:
     """Check a single external service."""
 
-    def __init__(self, svc: dict) -> None:
+    def __init__(self, svc: dict, project_root: Path | None = None) -> None:
         self._svc = svc
+        self._project_root = project_root
         self.name = svc["name"]
         self.description = svc.get("description", "")
+        self._active_url: str | None = None
+
+    def _env_path(self) -> Path | None:
+        if self._project_root is None:
+            return None
+        return self._project_root / ".env"
+
+    def _read_env_file(self) -> dict[str, str]:
+        env_path = self._env_path()
+        if env_path is None or not env_path.exists():
+            return {}
+        values: dict[str, str] = {}
+        for raw_line in env_path.read_text().splitlines():
+            line = raw_line.strip()
+            if not line or line.startswith("#") or "=" not in line:
+                continue
+            key, value = line.split("=", 1)
+            values[key.strip()] = value.strip()
+        return values
+
+    def _persist_url(self, url: str, console: Console) -> None:
+        env_urls = self._svc.get("env_urls")
+        if not isinstance(env_urls, list) or not env_urls:
+            return
+        key = next((k for k in env_urls if isinstance(k, str)), None)
+        if key is None:
+            return
+        env_path = self._env_path()
+        if env_path is None:
+            return
+        values = self._read_env_file()
+        values[key] = url
+        lines = [f"{k}={v}" for k, v in values.items()]
+        env_path.write_text("\n".join(lines) + "\n")
+        os.environ[key] = url
+        console.print(f"[green]Saved {key}={url} in {env_path}[/]")
 
     def _url(self) -> str:
+        if self._active_url:
+            return self._active_url
+
         env_urls = self._svc.get("env_urls")
+        env_file_values = self._read_env_file()
         if isinstance(env_urls, list):
             for key in env_urls:
                 val = os.environ.get(key, "").strip()
                 if val:
                     return val
+                file_val = env_file_values.get(key, "").strip()
+                if file_val:
+                    return file_val
         env_url = self._svc.get("env_url")
         if isinstance(env_url, str):
             val = os.environ.get(env_url, "").strip()
@@ -81,6 +158,87 @@ class ExternalServiceCheck:
         parsed = urlparse(self._url())
         return parsed.port
 
+    def _normalize_user_url(self, raw: str) -> str:
+        value = raw.strip()
+        if value.isdigit():
+            return f"http://localhost:{value}"
+        if value.startswith(("http://", "https://")):
+            return value.rstrip("/")
+        return f"http://{value}".rstrip("/")
+
+    def _probe_url(self, base_url: str, timeout: int = 3) -> bool:
+        health = base_url.rstrip("/") + self._svc["health_path"]
+        try:
+            resp = requests.get(health, timeout=timeout)
+            return resp.status_code < 500
+        except (requests.ConnectionError, requests.Timeout):
+            return False
+
+    def _discovery_candidates(self) -> list[str]:
+        candidates: list[str] = []
+
+        def add(url: str) -> None:
+            value = url.strip().rstrip("/")
+            if value and value not in candidates:
+                candidates.append(value)
+
+        add(self._svc["default_url"])
+        env_urls = self._svc.get("env_urls")
+        env_values = self._read_env_file()
+        if isinstance(env_urls, list):
+            for key in env_urls:
+                if not isinstance(key, str):
+                    continue
+                add(os.environ.get(key, ""))
+                add(env_values.get(key, ""))
+
+        default_port = urlparse(self._svc["default_url"]).port
+        if default_port is not None:
+            for port in (default_port - 2, default_port - 1, default_port, default_port + 1, default_port + 2):
+                if port > 0:
+                    add(f"http://localhost:{port}")
+
+        if shutil.which("docker") is not None:
+            try:
+                result = subprocess.run(
+                    ["docker", "ps", "--format", "{{.Ports}}"],
+                    capture_output=True,
+                    text=True,
+                    check=False,
+                )
+            except OSError:
+                result = None
+            if result and result.returncode == 0:
+                for line in result.stdout.splitlines():
+                    parts = line.replace(",", " ").split()
+                    for part in parts:
+                        if "->" not in part:
+                            continue
+                        host_side = part.split("->", 1)[0]
+                        if ":" in host_side:
+                            port = host_side.rsplit(":", 1)[-1]
+                            if port.isdigit():
+                                add(f"http://localhost:{port}")
+
+        return candidates
+
+    def _discover_running_url(self, console: Console | None = None) -> str | None:
+        candidates = self._discovery_candidates()
+        for url in candidates:
+            if self._probe_url(url):
+                if console is not None and url != self._svc["default_url"]:
+                    console.print(f"[green]{self.name} discovered at {url}[/]")
+                return url
+        return None
+
+    def _wait_until_healthy(self, timeout_s: int = 90) -> bool:
+        start = time.time()
+        while time.time() - start < timeout_s:
+            if self.check():
+                return True
+            time.sleep(2)
+        return False
+
     def _local_setup_fallback(self) -> tuple[list[str], Path, dict[str, str], str] | None:
         """Return local repo fallback command when CLI is not installed in PATH."""
         repo_name = self._svc.get("local_repo")
@@ -89,7 +247,7 @@ class ExternalServiceCheck:
             return None
 
         # Prefer a sibling repo next to pepers, but fall back to CWD parent when run elsewhere.
-        pepers_root = Path(__file__).resolve().parents[2]
+        pepers_root = self._project_root or Path(__file__).resolve().parents[2]
         candidate_roots = [
             pepers_root.parent / repo_name,
             Path.cwd().resolve().parent / repo_name,
@@ -109,6 +267,34 @@ class ExternalServiceCheck:
         cmd = [str(venv_python), "-m", module_name]
         display = f"{venv_python} -m {module_name}"
         return cmd, repo_dir, env, display
+
+    def _ensure_local_repo(self, console: Console) -> Path | None:
+        repo_name = self._svc.get("local_repo")
+        if not isinstance(repo_name, str):
+            return None
+        base = (self._project_root or Path(__file__).resolve().parents[2]).parent
+        target = base / repo_name
+        if target.exists():
+            return target
+
+        clone_url = f"https://github.com/gptcompany/{repo_name}.git"
+        if not _ask_confirm_safe(
+            f"{repo_name} repo not found. Clone {clone_url} now?",
+            default=True,
+        ):
+            return None
+        try:
+            result = subprocess.run(
+                ["git", "clone", clone_url, str(target)],
+                check=False,
+            )
+        except OSError as exc:
+            console.print(f"[red]Failed to launch git clone:[/] {exc}")
+            return None
+        if result.returncode != 0:
+            console.print(f"[red]git clone failed for {clone_url}[/]")
+            return None
+        return target
 
     def _systemd_boot_enabled(self) -> str | None:
         units = self._svc.get("systemd_units")
@@ -229,21 +415,111 @@ class ExternalServiceCheck:
         return False, "missing"
 
     def check(self) -> bool:
-        url = self._url().rstrip("/") + self._svc["health_path"]
-        try:
-            resp = requests.get(url, timeout=5)
-            return resp.status_code < 500
-        except (requests.ConnectionError, requests.Timeout):
-            return False
+        configured = self._url()
+        if self._probe_url(configured, timeout=5):
+            self._active_url = configured
+            return True
+        discovered = self._discover_running_url()
+        if discovered:
+            self._active_url = discovered
+            return True
+        return False
 
     def install(self, console: Console) -> bool:
+        if self._svc.get("guided_install"):
+            return self._install_guided(console)
+        return self._install_legacy(console)
+
+    def _install_guided(self, console: Console) -> bool:
+        console.print(f"[yellow]{self.name} is not reachable at {self._url()}[/]")
+        while True:
+            action = _ask_select_safe(
+                f"How should setup proceed for {self.name}?",
+                [
+                    "Use default service URL",
+                    "Auto-discover service URL",
+                    "Enter custom URL/port",
+                    "Install/start service now (recommended)",
+                    "Show setup help",
+                    "Skip for now",
+                ],
+                default="Install/start service now (recommended)",
+            )
+
+            if action == "Skip for now" or action is None:
+                return False
+
+            if action == "Show setup help":
+                self.help(console)
+                continue
+
+            if action == "Use default service URL":
+                default_url = self._svc["default_url"].rstrip("/")
+                self._active_url = default_url
+                if _ask_confirm_safe(
+                    f"Save default URL {default_url} to .env?",
+                    default=True,
+                ):
+                    self._persist_url(default_url, console)
+                if self._probe_url(default_url):
+                    return True
+                console.print(
+                    f"[yellow]{self.name} not reachable at {default_url}{self._svc['health_path']}[/]"
+                )
+                continue
+
+            if action == "Auto-discover service URL":
+                discovered = self._discover_running_url(console)
+                if not discovered:
+                    console.print(f"[yellow]No running {self.name} endpoint discovered.[/]")
+                    continue
+                self._active_url = discovered
+                if _ask_confirm_safe(
+                    f"Save {discovered} to .env?",
+                    default=True,
+                ):
+                    self._persist_url(discovered, console)
+                return True
+
+            if action == "Enter custom URL/port":
+                raw = _ask_text_safe(
+                    "Enter full URL (e.g. http://localhost:9999) or just port (e.g. 9999):",
+                    default=self._url(),
+                )
+                if not raw:
+                    continue
+                custom = self._normalize_user_url(raw)
+                if self._probe_url(custom):
+                    self._active_url = custom
+                    if _ask_confirm_safe(
+                        f"Save {custom} to .env?",
+                        default=True,
+                    ):
+                        self._persist_url(custom, console)
+                    return True
+                console.print(
+                    f"[yellow]{self.name} not reachable at {custom}{self._svc['health_path']}[/]"
+                )
+                continue
+
+            # Install/start selected.
+            if self._run_setup_install(console):
+                if self._wait_until_healthy():
+                    return True
+                console.print(
+                    f"[yellow]{self.name} setup completed but health endpoint is still unreachable.[/]"
+                )
+            else:
+                console.print(f"[yellow]{self.name} setup did not complete successfully.[/]")
+
+    def _install_legacy(self, console: Console) -> bool:
         console.print(f"[yellow]{self.name} is not reachable at {self._url()}[/]")
         setup_cmd = self._svc.get("setup_cmd")
         if isinstance(setup_cmd, str) and shutil.which(setup_cmd):
-            if questionary.confirm(
+            if _ask_confirm_safe(
                 f"Launch {setup_cmd} now?",
                 default=True,
-            ).ask():
+            ):
                 try:
                     result = subprocess.run([setup_cmd], check=False)
                 except OSError as exc:
@@ -258,12 +534,11 @@ class ExternalServiceCheck:
             fallback = self._local_setup_fallback()
             if fallback is not None:
                 cmd, cwd, env_extra, display = fallback
-                if questionary.confirm(
+                if _ask_confirm_safe(
                     f"Launch local setup wizard from {cwd.name}? ({display})",
                     default=True,
-                ).ask():
+                ):
                     run_env = os.environ.copy()
-                    # Preserve existing PYTHONPATH if present.
                     if "PYTHONPATH" in env_extra and run_env.get("PYTHONPATH"):
                         env_extra = env_extra.copy()
                         env_extra["PYTHONPATH"] = (
@@ -281,7 +556,48 @@ class ExternalServiceCheck:
                             f"[red]Local setup failed (exit {result.returncode})[/]"
                         )
         console.print(f"[dim]{self._svc['setup_hint']}[/]")
-        return False  # can't auto-install external services
+        return False
+
+    def _run_setup_install(self, console: Console) -> bool:
+        setup_cmd = self._svc.get("setup_cmd")
+        if isinstance(setup_cmd, str) and shutil.which(setup_cmd):
+            console.print(f"[cyan]Launching {setup_cmd}...[/]")
+            try:
+                result = subprocess.run([setup_cmd], check=False)
+            except OSError as exc:
+                console.print(f"[red]Failed to launch {setup_cmd}:[/] {exc}")
+            else:
+                if result.returncode == 0:
+                    return True
+                console.print(f"[red]{setup_cmd} failed (exit {result.returncode})[/]")
+
+        fallback = self._local_setup_fallback()
+        if fallback is None:
+            repo = self._ensure_local_repo(console)
+            if repo is not None:
+                fallback = self._local_setup_fallback()
+
+        if fallback is not None:
+            cmd, cwd, env_extra, display = fallback
+            console.print(f"[cyan]Launching local setup: {display}[/]")
+            run_env = os.environ.copy()
+            if "PYTHONPATH" in env_extra and run_env.get("PYTHONPATH"):
+                env_extra = env_extra.copy()
+                env_extra["PYTHONPATH"] = (
+                    f"{env_extra['PYTHONPATH']}:{run_env['PYTHONPATH']}"
+                )
+            run_env.update(env_extra)
+            try:
+                result = subprocess.run(cmd, cwd=cwd, env=run_env, check=False)
+            except OSError as exc:
+                console.print(f"[red]Failed to launch local setup:[/] {exc}")
+            else:
+                if result.returncode == 0:
+                    return True
+                console.print(f"[red]Local setup failed (exit {result.returncode})[/]")
+
+        console.print(f"[dim]{self._svc['setup_hint']}[/]")
+        return False
 
     def help(self, console: Console) -> None:
         console.print(f"[bold]{self.name} setup help[/]")
@@ -301,9 +617,9 @@ class ExternalServiceCheck:
 class ExternalServicePersistenceCheck:
     """Ensure a reachable external service survives reboot."""
 
-    def __init__(self, svc: dict) -> None:
+    def __init__(self, svc: dict, project_root: Path | None = None) -> None:
         self._svc = svc
-        self._health = ExternalServiceCheck(svc)
+        self._health = ExternalServiceCheck(svc, project_root=project_root)
         self.name = f"{svc['name']} boot persistence"
         self.description = "Reboot survival via systemd/docker/@reboot"
 
@@ -354,9 +670,9 @@ class ExternalServicePersistenceCheck:
         return self.check()
 
 
-def get_all_steps() -> list:
+def get_all_steps(project_root: Path | None = None) -> list:
     steps: list = []
     for svc in _EXTERNAL_SERVICES:
-        steps.append(ExternalServiceCheck(svc))
-        steps.append(ExternalServicePersistenceCheck(svc))
+        steps.append(ExternalServiceCheck(svc, project_root=project_root))
+        steps.append(ExternalServicePersistenceCheck(svc, project_root=project_root))
     return steps

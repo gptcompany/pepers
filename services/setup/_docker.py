@@ -180,6 +180,7 @@ class DockerComposeUp:
                 ["docker", "compose", "up", "-d"],
                 cwd=self._root,
                 check=True,
+                text=True,
             )
             return True
         except subprocess.CalledProcessError as exc:
