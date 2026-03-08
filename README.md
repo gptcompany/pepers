@@ -18,7 +18,7 @@
 7 Python microservices that discover academic papers, extract LaTeX formulas, validate math with CAS engines, and generate production code. Includes an MCP Server with HTTP + SSE interfaces for Claude Desktop/Cursor integration. No frameworks, no hallucinations — every formula is algebraically verified.
 
 > [!TIP]
-> **Academic Inspiration**: This project is inspired by the research of mathematician <a href="https://www.cmup.pt/user/555" target="_blank">Samuel A. Lopes</a> (University of Porto). His work in representation theory and algebraic structures informs the structural rigor that PePeRS strives to preserve when bridging the gap between theoretical mathematical expression and automated computational synthesis.
+> **Academic Inspiration**: This project is inspired by the research of mathematician <a href="https://www.cmup.pt/user/555" target="_blank">Samuel A. Lopes</a> PhD (University of Porto). His work in representation theory and algebraic structures informs the structural rigor that PePeRS strives to preserve when bridging the gap between theoretical mathematical expression and automated computational synthesis.
 
 **LLM access modes supported**
 - Local models (via `Ollama`)
