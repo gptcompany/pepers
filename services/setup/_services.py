@@ -625,6 +625,15 @@ class ExternalServiceCheck:
                     # Reconcile compose stack automatically when available.
                     self._auto_reconcile_docker_service(console, Path.cwd(), runtime_env)
                     return True
+                # Child setup may return non-zero when optional steps are left pending.
+                # Treat it as success if service is actually reachable.
+                if self.check():
+                    console.print(
+                        f"[yellow]{setup_cmd} exited {result.returncode}, "
+                        f"but {self.name} is reachable. Continuing.[/]"
+                    )
+                    self._auto_reconcile_docker_service(console, Path.cwd(), runtime_env)
+                    return True
                 console.print(f"[red]{setup_cmd} failed (exit {result.returncode})[/]")
 
         fallback = self._local_setup_fallback()
@@ -653,6 +662,15 @@ class ExternalServiceCheck:
                 if result.returncode == 0:
                     # Child setup may report success while Docker keeps stale containers.
                     # Reconcile compose stack automatically when available.
+                    self._auto_reconcile_docker_service(console, cwd, run_env)
+                    return True
+                # Child setup may return non-zero when optional steps are left pending.
+                # Treat it as success if service is actually reachable.
+                if self.check():
+                    console.print(
+                        f"[yellow]Local setup exited {result.returncode}, "
+                        f"but {self.name} is reachable. Continuing.[/]"
+                    )
                     self._auto_reconcile_docker_service(console, cwd, run_env)
                     return True
                 console.print(f"[red]Local setup failed (exit {result.returncode})[/]")

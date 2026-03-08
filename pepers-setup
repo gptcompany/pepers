@@ -4,6 +4,18 @@ set -euo pipefail
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 VENV_SETUP="${ROOT_DIR}/.venv/bin/pepers-setup"
 
+install_user_command() {
+  local user_bin="${HOME}/.local/bin"
+  mkdir -p "${user_bin}"
+  ln -sf "${ROOT_DIR}/pepers-setup" "${user_bin}/pepers-setup"
+  echo "Installed: ${user_bin}/pepers-setup -> ${ROOT_DIR}/pepers-setup"
+  if [[ ":${PATH}:" != *":${user_bin}:"* ]]; then
+    echo "Add to PATH (zsh):"
+    echo "  echo 'export PATH=\"\$HOME/.local/bin:\$PATH\"' >> ~/.zshrc"
+    echo "  source ~/.zshrc"
+  fi
+}
+
 ensure_uv() {
   if command -v uv >/dev/null 2>&1; then
     return 0
@@ -28,10 +40,19 @@ ensure_uv() {
 }
 
 if [[ -x "${VENV_SETUP}" ]]; then
+  if [[ "${1:-}" == "--install-user-cmd" ]]; then
+    install_user_command
+    exit 0
+  fi
   exec "${VENV_SETUP}" "$@"
 fi
 
 ensure_uv
+
+if [[ "${1:-}" == "--install-user-cmd" ]]; then
+  install_user_command
+  exit 0
+fi
 
 echo "Bootstrapping PePeRS setup environment..."
 uv sync --extra setup

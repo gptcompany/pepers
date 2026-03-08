@@ -117,6 +117,10 @@ Optional (global command from any folder):
 
 ```bash
 cd /path/to/pepers
+./pepers-setup --install-user-cmd   # installs ~/.local/bin/pepers-setup (no sudo)
+pepers-setup
+
+# system-wide alternative
 sudo ln -sf "$(pwd)/pepers-setup" /usr/local/bin/pepers-setup
 pepers-setup
 ```
