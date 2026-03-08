@@ -166,11 +166,30 @@ class ExternalServiceCheck:
             return value.rstrip("/")
         return f"http://{value}".rstrip("/")
 
-    def _probe_url(self, base_url: str, timeout: int = 3) -> bool:
+    def _probe_url(self, base_url: str, timeout: int = 3, *, strict_identity: bool = False) -> bool:
         health = base_url.rstrip("/") + self._svc["health_path"]
         try:
             resp = requests.get(health, timeout=timeout)
-            return resp.status_code < 500
+            if resp.status_code >= 500:
+                return False
+            if not strict_identity:
+                return True
+            # Tighten discovery to avoid false positives from unrelated /health endpoints.
+            if self.name == "CAS Service":
+                try:
+                    data = resp.json()
+                except ValueError:
+                    return False
+                service = str(data.get("service", "")).lower()
+                return "cas" in service and data.get("status") == "ok"
+            if self.name == "RAG Service":
+                try:
+                    data = resp.json()
+                except ValueError:
+                    return False
+                service = str(data.get("service", "")).lower()
+                return ("rag" in service or "rag_initialized" in data) and data.get("status") == "ok"
+            return True
         except (requests.ConnectionError, requests.Timeout):
             return False
 
@@ -225,7 +244,7 @@ class ExternalServiceCheck:
     def _discover_running_url(self, console: Console | None = None) -> str | None:
         candidates = self._discovery_candidates()
         for url in candidates:
-            if self._probe_url(url):
+            if self._probe_url(url, strict_identity=True):
                 if console is not None and url != self._svc["default_url"]:
                     console.print(f"[green]{self.name} discovered at {url}[/]")
                 return url
@@ -624,6 +643,9 @@ class ExternalServicePersistenceCheck:
         self.description = "Reboot survival via systemd/docker/@reboot"
 
     def check(self) -> bool:
+        if _is_macos():
+            # On macOS we don't enforce persistence as a blocking requirement.
+            return True
         # If service is currently down, skip persistence gating here.
         # Reachability is handled by ExternalServiceCheck.
         if not self._health.check():
