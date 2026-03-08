@@ -5,6 +5,8 @@ from __future__ import annotations
 import json
 import os
 import platform
+import shutil
+import subprocess
 from pathlib import Path
 
 from rich.console import Console
@@ -54,6 +56,8 @@ class McpConfigStep:
 
     def install(self, console: Console) -> bool:
         port = os.environ.get("RP_MCP_PORT", "8776")
+        url = f"http://localhost:{port}/sse"
+        cli_ok = self._install_with_claude_cli(console, url)
         target_paths = self._config_paths()
         updated_paths: list[Path] = []
         errors: list[str] = []
@@ -90,7 +94,7 @@ class McpConfigStep:
 
             servers["pepers"] = {
                 "type": "sse",
-                "url": f"http://localhost:{port}/sse",
+                "url": url,
             }
 
             try:
@@ -107,15 +111,64 @@ class McpConfigStep:
             console.print(f"[green]Added PePeRS MCP server to {path}[/]")
         
         if updated_paths:
-            console.print(f"[dim]URL: http://localhost:{port}/sse[/]")
+            console.print(f"[dim]URL: {url}[/]")
             if errors:
                 console.print(
                     f"[yellow]Completed with warnings ({len(errors)} file(s) skipped).[/]"
                 )
             return True
             
+        if cli_ok:
+            console.print(
+                "[yellow]Claude CLI MCP add succeeded, but no config file could be updated locally.[/]"
+            )
+            return True
+
         if errors:
             console.print("[yellow]Could not update any Claude configuration files.[/]")
+        return False
+
+    def _install_with_claude_cli(self, console: Console, url: str) -> bool:
+        """Try built-in Claude MCP command first."""
+        if shutil.which("claude") is None:
+            return False
+        cmd = [
+            "claude",
+            "mcp",
+            "add",
+            "--scope",
+            "user",
+            "--transport",
+            "sse",
+            "pepers",
+            url,
+        ]
+        try:
+            result = subprocess.run(
+                cmd,
+                capture_output=True,
+                text=True,
+                timeout=20,
+                check=False,
+            )
+        except (OSError, subprocess.TimeoutExpired) as exc:
+            console.print(f"[yellow]Claude MCP CLI add skipped:[/] {exc}")
+            return False
+
+        if result.returncode == 0:
+            console.print("[green]Configured MCP via Claude CLI built-in command.[/]")
+            return True
+
+        stderr = (result.stderr or "").strip().lower()
+        # If already present, we still consider CLI path effective.
+        if "already" in stderr and "exists" in stderr:
+            console.print("[dim]Claude CLI MCP entry already exists.[/]")
+            return True
+
+        console.print(
+            f"[yellow]Claude CLI MCP add failed (continuing with file fallback):[/] "
+            f"{(result.stderr or result.stdout or '').strip()[:200]}"
+        )
         return False
 
     def verify(self) -> bool:
