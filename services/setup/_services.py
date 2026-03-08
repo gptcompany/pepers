@@ -180,7 +180,7 @@ class ExternalServiceCheck:
             overrides["RAG_HOST"] = host
         return overrides
 
-    def _probe_url(self, base_url: str, timeout: int = 3, *, strict_identity: bool = False) -> bool:
+    def _probe_url(self, base_url: str, timeout: int = 3, *, strict_identity: bool = True) -> bool:
         health = base_url.rstrip("/") + self._svc["health_path"]
         try:
             resp = requests.get(health, timeout=timeout)
@@ -300,6 +300,9 @@ class ExternalServiceCheck:
 
         # Fresh clone path: run through uv even before local .venv exists.
         if shutil.which("uv") is not None:
+            if not (repo_dir / ".venv").exists():
+                print(f"Initializing .venv for {repo_name}...")
+                subprocess.run(["uv", "sync"], cwd=repo_dir, check=False)
             cmd = ["uv", "run", "python", "-m", module_name]
             display = f"uv run python -m {module_name}"
             return cmd, repo_dir, env, display
@@ -314,6 +317,10 @@ class ExternalServiceCheck:
         target = base / repo_name
         if target.exists():
             return target
+
+        if not shutil.which("git"):
+            console.print(f"[red]git is not installed. Cannot clone {repo_name}.[/]")
+            return None
 
         clone_url = f"https://github.com/gptcompany/{repo_name}.git"
         if not _ask_confirm_safe(
@@ -454,7 +461,7 @@ class ExternalServiceCheck:
 
     def check(self) -> bool:
         configured = self._url()
-        if self._probe_url(configured, timeout=5):
+        if self._probe_url(configured, timeout=5, strict_identity=True):
             self._active_url = configured
             return True
         discovered = self._discover_running_url()
@@ -499,7 +506,7 @@ class ExternalServiceCheck:
                     default=True,
                 ):
                     self._persist_url(default_url, console)
-                if self._probe_url(default_url):
+                if self._probe_url(default_url, strict_identity=True):
                     return True
                 console.print(
                     f"[yellow]{self.name} not reachable at {default_url}{self._svc['health_path']}[/]"
@@ -528,7 +535,7 @@ class ExternalServiceCheck:
                     continue
                 custom = self._normalize_user_url(raw)
                 self._active_url = custom
-                if self._probe_url(custom):
+                if self._probe_url(custom, strict_identity=True):
                     if _ask_confirm_safe(
                         f"Save {custom} to .env?",
                         default=True,
@@ -647,14 +654,15 @@ class ExternalServiceCheck:
 
     def help(self, console: Console) -> None:
         console.print(f"[bold]{self.name} setup help[/]")
-        console.print(f"[dim]URL:[/] {self._url()}")
+        console.print(f"Target URL: [cyan]{self._url()}[/]")
         env_urls = self._svc.get("env_urls")
         if isinstance(env_urls, list) and env_urls:
-            console.print("[dim]Environment overrides:[/]")
+            console.print("Environment overrides:")
             for key in env_urls:
                 if isinstance(key, str):
-                    console.print(f"  {key}")
-        console.print(f"[dim]{self._svc['setup_hint']}[/]")
+                    console.print(f"  - {key}")
+        console.print("\n[bold]Practical Instructions:[/]")
+        console.print(f"{self._svc['setup_hint']}")
 
     def verify(self) -> bool:
         return self.check()
@@ -704,7 +712,7 @@ class ExternalServicePersistenceCheck:
             console.print(
                 "  Or run via Docker with restart policy enabled."
             )
-            return False
+            return True
 
         units = self._svc.get("systemd_units")
         if isinstance(units, list) and units:

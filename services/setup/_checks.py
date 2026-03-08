@@ -1,4 +1,4 @@
-"""Step: system prerequisites (Python, uv, SQLite, dotenvx, disk space)."""
+"""Step: system prerequisites (Git, Curl, Pip, Sudo, Python, uv, SQLite, dotenvx, disk space)."""
 
 from __future__ import annotations
 
@@ -9,6 +9,73 @@ import sys
 from pathlib import Path
 
 from rich.console import Console
+
+
+class GitCheck:
+    name = "git"
+    description = "Version control system"
+
+    def check(self) -> bool:
+        return shutil.which("git") is not None
+
+    def install(self, console: Console) -> bool:
+        console.print("[yellow]git is missing. Auto-install not supported.[/]")
+        console.print("Please install git manually (e.g. brew install git, apt-get install git) and retry.")
+        return False
+
+    def verify(self) -> bool:
+        return self.check()
+
+
+class CurlCheck:
+    name = "curl"
+    description = "Command line tool for transferring data"
+
+    def check(self) -> bool:
+        return shutil.which("curl") is not None
+
+    def install(self, console: Console) -> bool:
+        console.print("[yellow]curl is missing. Auto-install not supported.[/]")
+        console.print("Please install curl manually and retry.")
+        return False
+
+    def verify(self) -> bool:
+        return self.check()
+
+
+class PipCheck:
+    name = "pip (Python package manager)"
+    description = "Required to bootstrap uv"
+
+    def check(self) -> bool:
+        try:
+            subprocess.run([sys.executable, "-m", "pip", "--version"], check=True, capture_output=True)
+            return True
+        except (subprocess.CalledProcessError, FileNotFoundError):
+            return False
+
+    def install(self, console: Console) -> bool:
+        console.print("[yellow]pip is missing.[/]\n"
+                      "Ensure your Python installation includes pip.")
+        return False
+
+    def verify(self) -> bool:
+        return self.check()
+
+
+class SudoCheck:
+    name = "sudo availability"
+    description = "Required for package installations"
+
+    def check(self) -> bool:
+        return shutil.which("sudo") is not None
+
+    def install(self, console: Console) -> bool:
+        console.print("[yellow]sudo is not available. Some auto-installs may fail.[/]")
+        return True  # Best effort, do not block
+
+    def verify(self) -> bool:
+        return True
 
 
 class PythonCheck:
@@ -41,7 +108,7 @@ class UvCheck:
         console.print("[cyan]Installing uv...[/]")
         try:
             subprocess.run(
-                ["pip", "install", "uv"],
+                [sys.executable, "-m", "pip", "install", "uv"],
                 check=True,
                 capture_output=True,
                 text=True,
@@ -167,6 +234,10 @@ class DiskSpaceCheck:
 
 def get_all_steps(project_root: Path) -> list:
     return [
+        GitCheck(),
+        CurlCheck(),
+        PipCheck(),
+        SudoCheck(),
         PythonCheck(),
         UvCheck(),
         SQLiteCheck(),

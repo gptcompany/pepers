@@ -194,7 +194,7 @@ class TestNpmCliTool:
     @patch("shutil.which")
     @patch("subprocess.run")
     def test_install_success_macos_uses_sudo(self, mock_run, mock_which, mock_platform):
-        mock_which.side_effect = lambda x: "/usr/bin/npm" if x == "npm" else None
+        mock_which.side_effect = lambda x: "/usr/bin/npm" if x == "npm" else ("/usr/bin/port" if x == "port" else None)
         mock_run.return_value = MagicMock(returncode=0)
 
         step = NpmCliTool("Test", "Desc", "test-bin", "test-pkg")
@@ -577,6 +577,7 @@ class TestExternalServiceCheck:
     @patch("requests.get")
     def test_check_prefers_new_env_key_over_legacy(self, mock_get):
         mock_get.return_value.status_code = 200
+        mock_get.return_value.json.return_value = {"service": "cas_service", "status": "ok"}
         svc = {
             "name": "CAS Service",
             "env_urls": ["RP_VALIDATOR_CAS_URL", "RP_CAS_URL"],

@@ -25,6 +25,10 @@ def _has_port() -> bool:
     return shutil.which("port") is not None
 
 
+def _has_brew() -> bool:
+    return shutil.which("brew") is not None
+
+
 _MACOS_NAMES: dict[int, str] = {
     12: "12-Monterey",
     13: "13-Ventura",
@@ -40,6 +44,9 @@ def _ensure_macports(console: Console) -> bool:
         return True
 
     ver = platform.mac_ver()[0]
+    if not ver:
+        return False
+        
     major = int(ver.split(".")[0])
     os_label = _MACOS_NAMES.get(major)
     if not os_label:
@@ -120,10 +127,27 @@ class NodeCheck:
 
     def install(self, console: Console) -> bool:
         if _is_macos():
-            if not _ensure_macports(console):
-                return False
-            console.print("[cyan]Installing Node.js via MacPorts...[/]")
-            cmd = ["sudo", "port", "install", "nodejs20"]
+            if _ensure_macports(console):
+                console.print("[cyan]MacPorts selected (preferred on macOS). Installing Node.js via MacPorts...[/]")
+                try:
+                    subprocess.run(["sudo", "port", "install", "nodejs20"], check=True, text=True)
+                    return True
+                except subprocess.CalledProcessError as exc:
+                    console.print(f"[red]MacPorts install failed:[/] {exc}")
+            
+            if _has_brew():
+                console.print("[cyan]Falling back to Homebrew. Installing Node.js...[/]")
+                try:
+                    subprocess.run(["brew", "install", "node"], check=True, text=True)
+                    return True
+                except subprocess.CalledProcessError as exc:
+                    console.print(f"[red]Homebrew install failed:[/] {exc}")
+            
+            console.print(
+                "[yellow]Install Node.js manually from https://nodejs.org[/]"
+            )
+            return False
+
         elif _is_linux():
             console.print("[cyan]Installing Node.js via nodesource...[/]")
             cmd = [
@@ -131,17 +155,17 @@ class NodeCheck:
                 "curl -fsSL https://deb.nodesource.com/setup_20.x | "
                 "sudo -E bash - && sudo apt-get install -y nodejs",
             ]
+            try:
+                subprocess.run(cmd, check=True, text=True)
+                return True
+            except subprocess.CalledProcessError as exc:
+                console.print(f"[red]Install failed:[/] {exc}")
+                return False
         else:
             console.print(
                 "[yellow]Unsupported platform. "
                 "Install Node.js from https://nodejs.org[/]"
             )
-            return False
-        try:
-            subprocess.run(cmd, check=True, text=True)
-            return True
-        except subprocess.CalledProcessError as exc:
-            console.print(f"[red]Install failed:[/] {exc}")
             return False
 
     def verify(self) -> bool:
@@ -157,23 +181,38 @@ class OllamaCheck:
 
     def install(self, console: Console) -> bool:
         if _is_macos():
-            if not _ensure_macports(console):
-                return False
-            console.print("[cyan]Installing Ollama via MacPorts...[/]")
-            cmd = ["sudo", "port", "install", "ollama"]
+            if _ensure_macports(console):
+                console.print("[cyan]MacPorts selected (preferred on macOS). Installing Ollama via MacPorts...[/]")
+                try:
+                    subprocess.run(["sudo", "port", "install", "ollama"], check=True, text=True)
+                    return True
+                except subprocess.CalledProcessError as exc:
+                    console.print(f"[red]MacPorts install failed:[/] {exc}")
+            
+            if _has_brew():
+                console.print("[cyan]Falling back to Homebrew. Installing Ollama...[/]")
+                try:
+                    subprocess.run(["brew", "install", "--cask", "ollama"], check=True, text=True)
+                    return True
+                except subprocess.CalledProcessError as exc:
+                    console.print(f"[red]Homebrew install failed:[/] {exc}")
+            
+            console.print("[yellow]Install Ollama manually from https://ollama.ai[/]")
+            return False
+
         elif _is_linux():
             console.print("[cyan]Installing Ollama...[/]")
             cmd = ["sh", "-c", "curl -fsSL https://ollama.ai/install.sh | sh"]
+            try:
+                subprocess.run(cmd, check=True, text=True)
+                return True
+            except subprocess.CalledProcessError as exc:
+                console.print(f"[red]Install failed:[/] {exc}")
+                return False
         else:
             console.print(
                 "[yellow]Install Ollama from https://ollama.ai[/]"
             )
-            return False
-        try:
-            subprocess.run(cmd, check=True, text=True)
-            return True
-        except subprocess.CalledProcessError as exc:
-            console.print(f"[red]Install failed:[/] {exc}")
             return False
 
     def verify(self) -> bool:
@@ -205,10 +244,13 @@ class NpmCliTool:
             )
             return False
         console.print(f"[cyan]Installing {self._npm_package}...[/]")
+        
         # MacPorts Node.js requires sudo for global npm installs
         cmd = ["npm", "install", "-g", self._npm_package]
-        if _is_macos():
+        if _is_macos() and _has_port():
+            # If using macports, usually we need sudo for global npm
             cmd = ["sudo"] + cmd
+        
         try:
             subprocess.run(
                 cmd,
