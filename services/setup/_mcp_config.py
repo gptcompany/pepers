@@ -49,8 +49,8 @@ class McpConfigStep:
             except (json.JSONDecodeError, OSError):
                 continue
                 
-        # If there are files and at least one is valid, return True
-        return existing_count > 0 and valid_count == existing_count
+        # Accept partial validity: one correct config is enough.
+        return existing_count > 0 and valid_count > 0
 
     def install(self, console: Console) -> bool:
         port = os.environ.get("RP_MCP_PORT", "8776")
@@ -65,24 +65,28 @@ class McpConfigStep:
                     config = json.loads(text) if text.strip() else {}
                 except json.JSONDecodeError:
                     msg = f"Cannot parse JSON in {config_path}. File might be corrupted."
-                    console.print(f"[red]{msg}[/]")
-                    return False
+                    console.print(f"[yellow]{msg}[/]")
+                    errors.append(msg)
+                    continue
                 except OSError as exc:
                     msg = f"Permission or OS error reading {config_path}: {exc}"
-                    console.print(f"[red]{msg}[/]")
-                    return False
+                    console.print(f"[yellow]{msg}[/]")
+                    errors.append(msg)
+                    continue
                 if not isinstance(config, dict):
                     msg = f"Unsupported config format in {config_path} (root is not a dict)."
-                    console.print(f"[red]{msg}[/]")
-                    return False
+                    console.print(f"[yellow]{msg}[/]")
+                    errors.append(msg)
+                    continue
             else:
                 config = {}
 
             servers = config.setdefault("mcpServers", {})
             if not isinstance(servers, dict):
                 msg = f"Invalid mcpServers entry in {config_path}. Expected a dict."
-                console.print(f"[red]{msg}[/]")
-                return False
+                console.print(f"[yellow]{msg}[/]")
+                errors.append(msg)
+                continue
 
             servers["pepers"] = {
                 "type": "sse",
@@ -104,6 +108,10 @@ class McpConfigStep:
         
         if updated_paths:
             console.print(f"[dim]URL: http://localhost:{port}/sse[/]")
+            if errors:
+                console.print(
+                    f"[yellow]Completed with warnings ({len(errors)} file(s) skipped).[/]"
+                )
             return True
             
         if errors:

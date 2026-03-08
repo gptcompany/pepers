@@ -768,13 +768,17 @@ class TestMcpConfigStep:
             assert data["mcpServers"]["pepers"]["url"] == "http://localhost:8776/sse"
             assert step.verify() is True
 
-    def test_install_fails_on_invalid_existing_json(self, tmp_path):
+    def test_install_skips_invalid_json_if_other_target_is_writable(self, tmp_path):
         step = McpConfigStep()
         console = MagicMock()
-        (tmp_path / ".claude.json").write_text("{not json")
+        bad = tmp_path / ".claude.json"
+        good = tmp_path / ".config" / "Claude" / "claude_desktop_config.json"
+        bad.write_text("{not json")
 
-        with patch("services.setup._mcp_config.Path.home", return_value=tmp_path):
-            assert step.install(console) is False
+        with patch("services.setup._mcp_config.Path.home", return_value=tmp_path), \
+             patch("services.setup._mcp_config.platform.system", return_value="Linux"):
+            assert step.install(console) is True
+            assert good.exists()
 
 
 # ── AggregatedHealthCheck ────────────────────────────────────
