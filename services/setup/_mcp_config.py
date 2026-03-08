@@ -130,7 +130,7 @@ class McpConfigStep:
 
     def _install_with_claude_cli(self, console: Console, url: str) -> bool:
         """Try built-in Claude MCP command first."""
-        if shutil.which("claude") is None:
+        if not self._ensure_claude_clients(console):
             return False
         cmd = [
             "claude",
@@ -170,6 +170,70 @@ class McpConfigStep:
             f"{(result.stderr or result.stdout or '').strip()[:200]}"
         )
         return False
+
+    def _ensure_claude_clients(self, console: Console) -> bool:
+        """If Claude tools are missing, offer native install choices."""
+        if shutil.which("claude") is not None:
+            return True
+
+        try:
+            import questionary
+        except Exception:
+            console.print("[yellow]Claude CLI not found and interactive installer unavailable.[/]")
+            return False
+
+        console.print("[yellow]Claude Code CLI not detected.[/]")
+        if not questionary.confirm(
+            "Install Claude Code CLI now?",
+            default=True,
+        ).ask():
+            return False
+
+        installed = False
+        if shutil.which("npm") is not None:
+            cmd = ["npm", "install", "-g", "@anthropic-ai/claude-code"]
+            if platform.system() == "Darwin" and shutil.which("port"):
+                cmd = ["sudo"] + cmd
+            try:
+                subprocess.run(cmd, check=True, text=True)
+                installed = shutil.which("claude") is not None
+            except subprocess.CalledProcessError:
+                installed = False
+
+        if not installed:
+            console.print(
+                "[yellow]Could not auto-install Claude Code CLI.[/]\n"
+                "Install manually: npm install -g @anthropic-ai/claude-code"
+            )
+            return False
+
+        if platform.system() == "Darwin":
+            desktop_path = Path.home() / "Applications" / "Claude.app"
+            system_desktop = Path("/Applications/Claude.app")
+            if not desktop_path.exists() and not system_desktop.exists():
+                if questionary.confirm(
+                    "Claude Desktop not detected. Install Claude Desktop now?",
+                    default=False,
+                ).ask():
+                    if shutil.which("brew"):
+                        try:
+                            subprocess.run(
+                                ["brew", "install", "--cask", "claude"],
+                                check=True,
+                                text=True,
+                            )
+                        except subprocess.CalledProcessError:
+                            console.print(
+                                "[yellow]Auto-install Claude Desktop failed.[/]\n"
+                                "Install manually from https://claude.ai/download"
+                            )
+                    else:
+                        console.print(
+                            "[yellow]Homebrew not found.[/]\n"
+                            "Install Claude Desktop manually from https://claude.ai/download"
+                        )
+
+        return True
 
     def verify(self) -> bool:
         return self.check()

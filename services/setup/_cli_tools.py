@@ -10,6 +10,7 @@ import subprocess
 import urllib.request
 from pathlib import Path
 
+import questionary
 from rich.console import Console
 
 
@@ -265,16 +266,104 @@ class NpmCliTool:
         return self.check()
 
 
+class ClaudeClientsStep:
+    """Interactive step to install Claude Code/Desktop with user choice."""
+
+    name = "Claude clients (Desktop/Code)"
+    description = "Choose Claude Code CLI, Claude Desktop, or both"
+
+    def __init__(self) -> None:
+        self._want_code = True
+        self._want_desktop = False
+
+    def _has_code(self) -> bool:
+        return shutil.which("claude") is not None
+
+    def _has_desktop(self) -> bool:
+        if _is_macos():
+            return Path("/Applications/Claude.app").exists() or (Path.home() / "Applications" / "Claude.app").exists()
+        # Best-effort Linux discovery
+        return (
+            shutil.which("claude-desktop") is not None
+            or (Path.home() / ".local" / "share" / "applications" / "Claude.desktop").exists()
+        )
+
+    def check(self) -> bool:
+        # Default health gate: Claude Code CLI.
+        # Desktop can be optionally selected during install.
+        return self._has_code()
+
+    def install(self, console: Console) -> bool:
+        code_ok = self._has_code()
+        desktop_ok = self._has_desktop()
+        console.print(f"[dim]Auto-discovery:[/] Claude Code={'yes' if code_ok else 'no'}, Claude Desktop={'yes' if desktop_ok else 'no'}")
+
+        choices: list[questionary.Choice] = [
+            questionary.Choice("Claude Code CLI", value="code", checked=not code_ok),
+            questionary.Choice("Claude Desktop app", value="desktop", checked=False),
+        ]
+
+        selected = questionary.checkbox(
+            "Select what to install/configure:",
+            choices=choices,
+        ).ask()
+        if selected is None:
+            return False
+        self._want_code = "code" in selected
+        self._want_desktop = "desktop" in selected
+
+        if self._want_code and not code_ok:
+            if not shutil.which("npm"):
+                console.print("[yellow]npm not found. Install Node.js first.[/]")
+                return False
+            cmd = ["npm", "install", "-g", "@anthropic-ai/claude-code"]
+            if _is_macos() and _has_port():
+                cmd = ["sudo"] + cmd
+            try:
+                subprocess.run(cmd, check=True, text=True)
+            except subprocess.CalledProcessError as exc:
+                console.print(f"[red]Claude Code install failed:[/] {exc}")
+                return False
+
+        if self._want_desktop and not desktop_ok:
+            if _is_macos():
+                installed = False
+                if _has_brew():
+                    try:
+                        subprocess.run(
+                            ["brew", "install", "--cask", "claude"],
+                            check=True,
+                            text=True,
+                        )
+                        installed = self._has_desktop()
+                    except subprocess.CalledProcessError:
+                        installed = False
+                if not installed:
+                    console.print(
+                        "[yellow]Could not auto-install Claude Desktop on macOS.[/]\n"
+                        "Install manually from https://claude.ai/download"
+                    )
+                    return False
+            else:
+                console.print(
+                    "[yellow]Claude Desktop auto-install is not standardized on this OS yet.[/]\n"
+                    "Install manually from https://claude.ai/download"
+                )
+                return False
+
+        return self.verify()
+
+    def verify(self) -> bool:
+        code_ok = self._has_code() if self._want_code else True
+        desktop_ok = self._has_desktop() if self._want_desktop else True
+        return code_ok and desktop_ok
+
+
 def get_all_steps() -> list:
     return [
         NodeCheck(),
         OllamaCheck(),
-        NpmCliTool(
-            "Claude CLI",
-            "Anthropic Claude for LLM fallback chain",
-            "claude",
-            "@anthropic-ai/claude-code",
-        ),
+        ClaudeClientsStep(),
         NpmCliTool(
             "Gemini CLI",
             "Google Gemini for LLM fallback chain",
