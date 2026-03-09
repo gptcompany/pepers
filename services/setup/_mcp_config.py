@@ -108,7 +108,7 @@ class McpConfigStep:
 
         for config_path in target_paths:
             is_desktop = config_path == desktop_path
-            if is_desktop and shutil.which("npx") is None:
+            if is_desktop and not self._ensure_npx_for_desktop(console):
                 msg = (
                     "Claude Desktop MCP bridge requires 'npx' "
                     "(Node.js/npm not detected)."
@@ -180,6 +180,24 @@ class McpConfigStep:
         if errors:
             console.print("[yellow]Could not update any Claude configuration files.[/]")
         return False
+
+    def _ensure_npx_for_desktop(self, console: Console) -> bool:
+        if shutil.which("npx") is not None:
+            return True
+        console.print(
+            "[yellow]npx not found. Installing Node.js automatically for Claude Desktop MCP...[/]"
+        )
+        try:
+            from services.setup._cli_tools import NodeCheck
+        except Exception as exc:
+            console.print(f"[yellow]Cannot load Node installer:[/] {exc}")
+            return False
+
+        node_step = NodeCheck()
+        if not node_step.check():
+            if not node_step.install(console):
+                return False
+        return shutil.which("npx") is not None
 
     def _build_pepers_entry(self, *, url: str, for_desktop: bool) -> dict:
         # Claude Desktop can reject direct SSE entries on some builds; prefer stdio bridge.
