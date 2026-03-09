@@ -24,7 +24,7 @@ import os
 import time
 from pathlib import Path
 
-from shared.config import load_config
+from shared.config import load_config, resolve_localhost_url
 from shared.db import get_connection, init_db, transaction
 from shared.models import Formula, Paper
 from shared.server import BaseHandler, BaseService, route
@@ -271,8 +271,8 @@ def main() -> None:
         os.environ.get("RP_EXTRACTOR_MAX_PAPERS", "10")
     )
     ExtractorHandler.pdf_dir = os.environ.get("RP_EXTRACTOR_PDF_DIR", "data/pdfs")
-    ExtractorHandler.rag_url = os.environ.get(
-        "RP_EXTRACTOR_RAG_URL", "http://localhost:8767"
+    ExtractorHandler.rag_url = resolve_localhost_url(
+        os.environ.get("RP_EXTRACTOR_RAG_URL", "http://localhost:8767")
     )
     ExtractorHandler.download_delay = float(
         os.environ.get("RP_EXTRACTOR_DOWNLOAD_DELAY", "3.0")

@@ -30,6 +30,7 @@ import logging
 import os
 from dataclasses import dataclass, field
 from pathlib import Path
+from urllib.parse import urlparse, urlunparse
 
 logger = logging.getLogger(__name__)
 
@@ -46,6 +47,26 @@ SERVICE_PORTS: dict[str, int] = {
     "orchestrator": 8775,
     "mcp": 8776,
 }
+
+
+def resolve_localhost_url(url: str) -> str:
+    """Rewrite localhost URLs to a host gateway when running inside containers.
+
+    This lets Docker bridge-networked containers reach host-local services like
+    CAS, RAG, or Ollama without changing the host-side .env values used by the
+    setup wizard and local health checks.
+    """
+    gateway = os.environ.get("RP_DOCKER_HOST_GATEWAY", "").strip()
+    if not gateway:
+        return url
+    parsed = urlparse(url)
+    host = parsed.hostname or ""
+    if host not in {"localhost", "127.0.0.1"}:
+        return url
+    netloc = gateway
+    if parsed.port is not None:
+        netloc = f"{gateway}:{parsed.port}"
+    return urlunparse(parsed._replace(netloc=netloc))
 
 
 def _parse_float_env(name: str, default: str) -> float:

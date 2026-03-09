@@ -22,6 +22,7 @@ from pathlib import Path
 
 import requests
 
+from shared.config import resolve_localhost_url
 from shared.db import transaction
 
 from services.orchestrator.metrics import (
@@ -43,6 +44,13 @@ def _stage_port(service: str, default: int) -> int:
         return default
 
 
+def _stage_url(service: str, port: int) -> str:
+    explicit = os.environ.get(f"RP_{service.upper()}_URL", "").strip()
+    if explicit:
+        return explicit.rstrip("/")
+    return f"http://localhost:{port}"
+
+
 # Stage order: (name, port)
 STAGE_ORDER: list[tuple[str, int]] = [
     ("discovery", _stage_port("discovery", 8770)),
@@ -54,9 +62,27 @@ STAGE_ORDER: list[tuple[str, int]] = [
 
 # External dependencies checked before pipeline runs: (name, base_url, health_path)
 EXTERNAL_DEPS: list[tuple[str, str, str]] = [
-    ("cas", os.environ.get("RP_VALIDATOR_CAS_URL", "http://localhost:8769"), "/health"),
-    ("rag", os.environ.get("RP_EXTRACTOR_RAG_URL", "http://localhost:8767"), "/health"),
-    ("ollama", os.environ.get("RP_CODEGEN_OLLAMA_URL", "http://localhost:11434"), "/"),
+    (
+        "cas",
+        resolve_localhost_url(
+            os.environ.get("RP_VALIDATOR_CAS_URL", "http://localhost:8769")
+        ),
+        "/health",
+    ),
+    (
+        "rag",
+        resolve_localhost_url(
+            os.environ.get("RP_EXTRACTOR_RAG_URL", "http://localhost:8767")
+        ),
+        "/health",
+    ),
+    (
+        "ollama",
+        resolve_localhost_url(
+            os.environ.get("RP_CODEGEN_OLLAMA_URL", "http://localhost:11434")
+        ),
+        "/",
+    ),
 ]
 
 # Which stages require which external deps (hard dependencies only).
@@ -180,6 +206,7 @@ class PipelineRunner:
 
                 logger.info("Dispatching stage: %s (port %d)", stage_name, port)
                 stage_start = time.time()
+                stage_base_url = _stage_url(stage_name, port)
 
                 stage_timeout = self.STAGE_TIMEOUTS.get(stage_name, self.timeout)
                 try:
@@ -188,7 +215,7 @@ class PipelineRunner:
                         batch_results: list[dict] = []
                         for iteration in range(1, MAX_BATCH_ITERATIONS + 1):
                             result = self._call_service_with_retry(
-                                f"http://localhost:{port}/process", stage_params,
+                                f"{stage_base_url}/process", stage_params,
                                 timeout=stage_timeout,
                             )
                             batch_results.append(result)
@@ -203,7 +230,7 @@ class PipelineRunner:
                         result = self._merge_batch_results(batch_results, stage_name)
                     else:
                         result = self._call_service_with_retry(
-                            f"http://localhost:{port}/process", stage_params,
+                            f"{stage_base_url}/process", stage_params,
                             timeout=stage_timeout,
                         )
 
@@ -496,10 +523,9 @@ class PipelineRunner:
         all_healthy = True
 
         for name, port in STAGE_ORDER:
+            health_url = f"{_stage_url(name, port)}/health"
             try:
-                resp = requests.get(
-                    f"http://localhost:{port}/health", timeout=5
-                )
+                resp = requests.get(health_url, timeout=5)
                 if resp.status_code == 200:
                     services[name] = resp.json()
                     services[name]["port"] = port

@@ -32,7 +32,7 @@ import time
 import urllib.request
 from urllib.parse import parse_qs
 
-from shared.config import load_config
+from shared.config import load_config, resolve_localhost_url
 from shared.db import init_db, transaction
 from shared.models import Formula, GitHubAnalysis, GitHubRepo, Paper
 from shared.server import BaseHandler, BaseService, route
@@ -44,7 +44,9 @@ from services.orchestrator.scheduler import create_scheduler
 
 logger = logging.getLogger(__name__)
 
-_RAG_URL = os.environ.get("RP_RAG_QUERY_URL", "http://localhost:8767")
+_RAG_URL = resolve_localhost_url(
+    os.environ.get("RP_RAG_QUERY_URL", "http://localhost:8767")
+)
 _RAG_QUERY_TIMEOUT = int(os.environ.get("RP_RAG_QUERY_TIMEOUT", "30"))
 
 

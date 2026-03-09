@@ -25,7 +25,7 @@ import time
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from dataclasses import dataclass
 
-from shared.config import load_config
+from shared.config import load_config, resolve_localhost_url
 from shared.db import get_connection, init_db, transaction
 from shared.server import BaseHandler, BaseService, route
 
@@ -392,8 +392,8 @@ def main() -> None:
     init_db(config.db_path)
     _check_consistency(str(config.db_path))
 
-    ValidatorHandler.cas_url = os.environ.get(
-        "RP_VALIDATOR_CAS_URL", "http://localhost:8769"
+    ValidatorHandler.cas_url = resolve_localhost_url(
+        os.environ.get("RP_VALIDATOR_CAS_URL", "http://localhost:8769")
     )
     ValidatorHandler.cas_timeout = int(
         os.environ.get("RP_VALIDATOR_CAS_TIMEOUT", "120")

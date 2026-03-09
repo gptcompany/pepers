@@ -24,7 +24,7 @@ import logging
 import os
 import time
 
-from shared.config import load_config
+from shared.config import load_config, resolve_localhost_url
 from shared.db import get_connection, init_db, transaction
 from shared.server import BaseHandler, BaseService, route
 
@@ -352,8 +352,8 @@ def main() -> None:
     init_db(config.db_path)
     _check_consistency(str(config.db_path))
 
-    CodegenHandler.ollama_url = os.environ.get(
-        "RP_CODEGEN_OLLAMA_URL", "http://localhost:11434"
+    CodegenHandler.ollama_url = resolve_localhost_url(
+        os.environ.get("RP_CODEGEN_OLLAMA_URL", "http://localhost:11434")
     )
     CodegenHandler.max_formulas_default = int(
         os.environ.get("RP_CODEGEN_MAX_FORMULAS", "50")

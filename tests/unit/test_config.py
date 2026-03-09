@@ -7,7 +7,13 @@ from pathlib import Path
 
 import pytest
 
-from shared.config import DEFAULT_DB_PATH, SERVICE_PORTS, Config, load_config
+from shared.config import (
+    DEFAULT_DB_PATH,
+    SERVICE_PORTS,
+    Config,
+    load_config,
+    resolve_localhost_url,
+)
 
 
 class TestConstants:
@@ -102,3 +108,22 @@ class TestLoadConfig:
         os.environ["RP_DISCOVERY_PORT"] = "not_a_number"
         with pytest.raises(ValueError):
             load_config("discovery")
+
+
+class TestResolveLocalhostUrl:
+    def test_returns_original_url_without_gateway(self, clean_env):
+        assert resolve_localhost_url("http://localhost:8767") == "http://localhost:8767"
+
+    def test_rewrites_localhost_when_gateway_is_set(self, clean_env):
+        os.environ["RP_DOCKER_HOST_GATEWAY"] = "host.docker.internal"
+        assert (
+            resolve_localhost_url("http://localhost:8767")
+            == "http://host.docker.internal:8767"
+        )
+
+    def test_keeps_non_local_urls_unchanged(self, clean_env):
+        os.environ["RP_DOCKER_HOST_GATEWAY"] = "host.docker.internal"
+        assert (
+            resolve_localhost_url("http://cas-service:8769")
+            == "http://cas-service:8769"
+        )
