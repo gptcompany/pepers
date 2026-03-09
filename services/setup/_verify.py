@@ -167,7 +167,33 @@ class AggregatedHealthCheck:
         return True
 
     def verify(self) -> bool:
-        return self._last_all_ok
+        # Live verification to avoid stale "OK" after services go down.
+        all_ok = True
+        env_file_values = _read_env_file()
+        for svc_name, port in SERVICE_PORTS.items():
+            env_key = f"RP_{svc_name.upper()}_PORT"
+            raw_port = (
+                os.environ.get(env_key)
+                or env_file_values.get(env_key)
+                or str(port)
+            )
+            try:
+                actual_port = int(raw_port)
+            except (TypeError, ValueError):
+                actual_port = port
+            health_path = _INTERNAL_HEALTH_PATHS.get(svc_name, "/health")
+            url = f"http://localhost:{actual_port}{health_path}"
+            if not _check_http(url):
+                all_ok = False
+
+        for _name, (env_keys, default_url, path) in _EXTERNAL.items():
+            base = _env_first(env_keys, default_url)
+            url = base.rstrip("/") + path
+            if not _check_http(url):
+                all_ok = False
+
+        self._last_all_ok = all_ok
+        return all_ok
 
 
 # ── Easy-mode verdict ────────────────────────────────────────
