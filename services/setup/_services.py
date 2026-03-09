@@ -486,7 +486,12 @@ class ExternalServiceCheck:
         return self._install_legacy(console)
 
     def _install_guided(self, console: Console) -> bool:
-        console.print(f"[yellow]{self.name} is not reachable at {self._url()}[/]")
+        current_url = self._url()
+        if self._probe_url(current_url, strict_identity=True):
+            console.print(f"[green]{self.name} is reachable at {current_url}[/]")
+            return True
+
+        console.print(f"[yellow]{self.name} is not reachable at {current_url}[/]")
         while True:
             action = _ask_select_safe(
                 f"How should setup proceed for {self.name}?",
