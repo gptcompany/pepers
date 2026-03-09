@@ -114,6 +114,10 @@ It also includes an explicit MCP target selection step for `Claude Code`, `Claud
 
 Subcommands: `pepers-setup easy | walkthrough | guided | check | config | services | docker | verify`
 
+When to use each mode:
+- `walkthrough` (default): linear setup from top to bottom.
+- `guided`: interactive menu for reconfiguration (edit existing settings, rerun specific steps, or partial updates).
+
 Optional (global command from any folder):
 
 ```bash
