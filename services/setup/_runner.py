@@ -49,6 +49,19 @@ def _run_single_step(step: SetupStep, console: Console, *, force_run: bool = Fal
         is_configured = step.check()
 
     auto_reconcile_flag = getattr(step, "auto_reconcile_when_configured", False) is True
+    if is_configured and force_run and not auto_reconcile_flag:
+        console.print(
+            f"  [green]\u2705 {step.name}[/] \u2014 already configured "
+            "(verifying by user request)"
+        )
+        if step.verify():
+            console.print(f"  [green]\u2705 {step.name}[/] \u2014 verified!")
+            return "ok"
+        console.print(
+            f"  [yellow]\u26a0\ufe0f  {step.name}[/] \u2014 verification failed"
+        )
+        return "warn"
+
     if is_configured and not auto_reconcile_flag and not force_run:
         console.print(f"  [green]\u2705 {step.name}[/] \u2014 already configured")
         return "ok"
@@ -171,7 +184,7 @@ def run_interactive_menu(steps: list[SetupStep], console: Console) -> bool:
         if selected is None or selected == "exit":
             break
         elif selected == "run_all":
-            pending = [s for s, st in statuses if st != "ok"]
+            pending = [s for s, st in statuses if st == "pending"]
             if pending:
                 run_steps(pending, console)
             else:

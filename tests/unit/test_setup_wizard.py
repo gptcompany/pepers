@@ -953,6 +953,24 @@ class TestRunner:
         result = run_interactive_menu([step], console)
         assert result is False
 
+    def test_force_run_configured_step_verifies_without_install(self):
+        from services.setup._runner import _run_single_step
+
+        step = MagicMock()
+        step.name = "Docker Compose"
+        step.check.return_value = True
+        step.verify.return_value = False
+        step.auto_reconcile_when_configured = False
+
+        console = MagicMock()
+        console.status.return_value.__enter__ = MagicMock()
+        console.status.return_value.__exit__ = MagicMock()
+
+        status = _run_single_step(step, console, force_run=True)
+        assert status == "warn"
+        step.install.assert_not_called()
+        step.verify.assert_called_once()
+
 
 # ── CLI main() ────────────────────────────────────────────────
 
