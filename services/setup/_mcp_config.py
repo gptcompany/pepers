@@ -56,7 +56,7 @@ class McpConfigStep:
                 servers = config.get("mcpServers", {})
                 if isinstance(servers, dict):
                     pepers = servers.get("pepers")
-                    if isinstance(pepers, dict) and pepers.get("url") == expected:
+                    if isinstance(pepers, dict) and self._entry_matches(pepers, expected):
                         valid_count += 1
             except (json.JSONDecodeError, OSError):
                 continue
@@ -82,7 +82,7 @@ class McpConfigStep:
         else:
             choices = [
                 questionary.Choice("Claude Code", value="code", checked=True),
-                questionary.Choice("Claude Desktop", value="desktop", checked=True),
+                questionary.Choice("Claude Desktop", value="desktop", checked=False),
             ]
             try:
                 selected = questionary.checkbox(
@@ -107,6 +107,7 @@ class McpConfigStep:
         errors: list[str] = []
 
         for config_path in target_paths:
+            is_desktop = config_path == desktop_path
             if config_path.exists():
                 try:
                     text = config_path.read_text()
@@ -136,10 +137,10 @@ class McpConfigStep:
                 errors.append(msg)
                 continue
 
-            servers["pepers"] = {
-                "type": "sse",
-                "url": url,
-            }
+            servers["pepers"] = self._build_pepers_entry(
+                url=url,
+                for_desktop=is_desktop,
+            )
 
             try:
                 config_path.parent.mkdir(parents=True, exist_ok=True)
@@ -171,6 +172,35 @@ class McpConfigStep:
         if errors:
             console.print("[yellow]Could not update any Claude configuration files.[/]")
         return False
+
+    def _build_pepers_entry(self, *, url: str, for_desktop: bool) -> dict:
+        # Claude Desktop can reject direct SSE entries on some builds; prefer stdio bridge.
+        if for_desktop:
+            return {
+                "type": "stdio",
+                "command": "npx",
+                "args": ["-y", "mcp-remote", "--sse", url],
+            }
+        return {
+            "type": "sse",
+            "url": url,
+        }
+
+    def _entry_matches(self, entry: dict, expected_url: str) -> bool:
+        # Direct SSE form
+        if entry.get("url") == expected_url:
+            return True
+        # Desktop stdio bridge form
+        command = str(entry.get("command", "")).strip().lower()
+        if command != "npx":
+            return False
+        args = entry.get("args")
+        if not isinstance(args, list):
+            return False
+        normalized = [str(a).strip().lower() for a in args]
+        if "mcp-remote" not in normalized:
+            return False
+        return any(str(a).strip() == expected_url for a in args)
 
     def _install_with_claude_cli(self, console: Console, url: str) -> bool:
         """Try built-in Claude MCP command first."""
