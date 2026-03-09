@@ -940,6 +940,38 @@ class TestMcpConfigStep:
             assert step.install(console) is True
             assert good.exists()
 
+    def test_entry_matches_accepts_absolute_npx_command(self):
+        step = McpConfigStep()
+        entry = {
+            "type": "stdio",
+            "command": "/usr/local/bin/npx",
+            "args": ["-y", "mcp-remote", "--sse", "http://localhost:8786/sse"],
+            "env": {"PATH": "/usr/local/bin"},
+        }
+        assert step._entry_matches(entry, "http://localhost:8786/sse") is True
+
+    @patch("services.setup._cli_tools.NodeCheck")
+    @patch.object(
+        McpConfigStep,
+        "_resolve_working_desktop_bridge",
+        side_effect=[None, ("/usr/local/bin/npx", {"PATH": "/usr/local/bin"})],
+    )
+    @patch("services.setup._mcp_config.shutil.which", return_value="/usr/local/bin/npx")
+    def test_ensure_npx_for_desktop_repairs_broken_runtime(
+        self,
+        _mock_which,
+        _mock_bridge,
+        mock_node_cls,
+    ):
+        node_step = MagicMock()
+        node_step.check.return_value = False
+        node_step.install.return_value = True
+        mock_node_cls.return_value = node_step
+
+        step = McpConfigStep()
+        assert step._ensure_npx_for_desktop(MagicMock()) is True
+        node_step.install.assert_called_once()
+
 
 # ── AggregatedHealthCheck ────────────────────────────────────
 

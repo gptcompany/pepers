@@ -38,6 +38,13 @@ class McpConfigStep:
             return home / "Library" / "Application Support" / "Claude" / "claude_desktop_config.json"
         return home / ".config" / "Claude" / "claude_desktop_config.json"
 
+    def _desktop_bridge(self) -> tuple[str, dict[str, str]] | None:
+        if hasattr(self, "_desktop_bridge_cache"):
+            return getattr(self, "_desktop_bridge_cache")
+        bridge = self._resolve_working_desktop_bridge()
+        setattr(self, "_desktop_bridge_cache", bridge)
+        return bridge
+
     def check(self) -> bool:
         port = self._resolved_mcp_port()
         expected = f"http://localhost:{port}/sse"
@@ -198,9 +205,13 @@ class McpConfigStep:
 
     def _ensure_npx_for_desktop(self, console: Console) -> bool:
         if shutil.which("npx") is not None:
-            return True
+            bridge = self._resolve_working_desktop_bridge()
+            if bridge is not None:
+                setattr(self, "_desktop_bridge_cache", bridge)
+                return True
         console.print(
-            "[yellow]npx not found. Installing Node.js automatically for Claude Desktop MCP...[/]"
+            "[yellow]A working node+npx runtime was not found. "
+            "Installing/fixing Node.js automatically for Claude Desktop MCP...[/]"
         )
         try:
             from services.setup._cli_tools import NodeCheck
@@ -212,7 +223,15 @@ class McpConfigStep:
         if not node_step.check():
             if not node_step.install(console):
                 return False
-        return shutil.which("npx") is not None
+        bridge = self._resolve_working_desktop_bridge()
+        if bridge is not None:
+            setattr(self, "_desktop_bridge_cache", bridge)
+            return True
+        console.print(
+            "[yellow]Node/npm were detected, but Claude Desktop still does not have a "
+            "working node+npx bridge runtime.[/]"
+        )
+        return False
 
     def _resolved_mcp_port(self) -> str:
         port = os.environ.get("RP_MCP_PORT", "").strip()
@@ -238,11 +257,17 @@ class McpConfigStep:
     def _build_pepers_entry(self, *, url: str, for_desktop: bool) -> dict:
         # Claude Desktop can reject direct SSE entries on some builds; prefer stdio bridge.
         if for_desktop:
-            return {
+            bridge = self._desktop_bridge()
+            command = bridge[0] if bridge is not None else "npx"
+            env = bridge[1] if bridge is not None else {}
+            entry = {
                 "type": "stdio",
-                "command": "npx",
+                "command": command,
                 "args": ["-y", "mcp-remote", "--sse", url],
             }
+            if env:
+                entry["env"] = env
+            return entry
         return {
             "type": "sse",
             "url": url,
@@ -254,7 +279,7 @@ class McpConfigStep:
             return True
         # Desktop stdio bridge form
         command = str(entry.get("command", "")).strip().lower()
-        if command != "npx":
+        if Path(command).name != "npx":
             return False
         args = entry.get("args")
         if not isinstance(args, list):
@@ -263,6 +288,80 @@ class McpConfigStep:
         if "mcp-remote" not in normalized:
             return False
         return any(str(a).strip() == expected_url for a in args)
+
+    def _resolve_working_desktop_bridge(self) -> tuple[str, dict[str, str]] | None:
+        seen: set[tuple[str, str]] = set()
+        for npx_path, node_path in self._desktop_bridge_candidates():
+            key = (str(npx_path), str(node_path or ""))
+            if key in seen:
+                continue
+            seen.add(key)
+            env = self._bridge_env(npx_path, node_path)
+            if not self._command_works(str(npx_path), ["--version"], env):
+                continue
+            if node_path is not None and not self._command_works(str(node_path), ["--version"], env):
+                continue
+            return str(npx_path), {"PATH": env["PATH"]}
+        return None
+
+    def _desktop_bridge_candidates(self) -> list[tuple[Path, Path | None]]:
+        home = Path.home()
+        candidates: list[tuple[Path, Path | None]] = []
+        fixed_dirs = [
+            Path("/usr/local/bin"),
+            Path("/opt/local/bin"),
+            Path("/opt/homebrew/bin"),
+            home / ".npm-global" / "bin",
+            home / ".local" / "bin",
+        ]
+        nvm_root = home / ".nvm" / "versions" / "node"
+        if nvm_root.exists():
+            fixed_dirs.extend(sorted(nvm_root.glob("*/bin"), reverse=True))
+
+        resolved_npx = shutil.which("npx")
+        resolved_node = shutil.which("node")
+        if resolved_npx:
+            npx_path = Path(resolved_npx)
+            node_path = Path(resolved_node) if resolved_node else (npx_path.parent / "node")
+            candidates.append((npx_path, node_path if node_path.exists() else None))
+
+        for bin_dir in fixed_dirs:
+            npx_path = bin_dir / "npx"
+            if not npx_path.exists():
+                continue
+            node_path = bin_dir / "node"
+            candidates.append((npx_path, node_path if node_path.exists() else None))
+        return candidates
+
+    def _bridge_env(self, npx_path: Path, node_path: Path | None) -> dict[str, str]:
+        env = os.environ.copy()
+        path_parts: list[str] = []
+        if node_path is not None:
+            path_parts.append(str(node_path.parent))
+        path_parts.append(str(npx_path.parent))
+        existing = env.get("PATH", "")
+        if existing:
+            path_parts.extend(existing.split(":"))
+        deduped: list[str] = []
+        for part in path_parts:
+            if part and part not in deduped:
+                deduped.append(part)
+        env["PATH"] = ":".join(deduped)
+        return env
+
+    def _command_works(self, command: str, args: list[str], env: dict[str, str]) -> bool:
+        try:
+            result = subprocess.run(
+                [command, *args],
+                capture_output=True,
+                text=True,
+                timeout=5,
+                env=env,
+                check=False,
+            )
+        except (OSError, subprocess.TimeoutExpired):
+            return False
+        return result.returncode == 0
 
     def _install_with_claude_cli(self, console: Console, url: str) -> bool:
         """Try built-in Claude MCP command first."""
