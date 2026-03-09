@@ -34,7 +34,10 @@ COPY --from=builder /install /usr/local
 COPY shared/ shared/
 COPY services/ services/
 
-RUN mkdir -p /data/pdfs
+RUN groupadd -g 1000 pepers \
+    && useradd -m -u 1000 -g 1000 -s /bin/bash pepers \
+    && mkdir -p /data/pdfs \
+    && chown -R 1000:1000 /data /app /home/pepers
 
 ARG SERVICE=orchestrator
 ENV SERVICE_NAME=${SERVICE}
