@@ -275,7 +275,7 @@ def main(argv: list[str] | None = None) -> int:
 
         console.print(WELCOME_GUIDE)
         steps = _all_steps(root)
-        ok = run_steps(steps, console)
+        ok = run_steps(steps, console, final_report=True, project_root=root)
         return 0 if ok else 1
 
     if command in {"all", "guided"}:
@@ -283,14 +283,14 @@ def main(argv: list[str] | None = None) -> int:
 
         console.print(WELCOME_GUIDE)
         steps = _all_steps(root)
-        ok = run_interactive_menu(steps, console)
+        ok = run_interactive_menu(steps, console, project_root=root)
         return 0 if ok else 1
 
     if command in SUBCOMMANDS:
         from services.setup._runner import run_steps
 
         steps = SUBCOMMANDS[command](root)
-        ok = run_steps(steps, console)
+        ok = run_steps(steps, console, final_report=True, project_root=root)
         return 0 if ok else 1
 
     console.print(f"[red]Unknown command: {command}[/]")

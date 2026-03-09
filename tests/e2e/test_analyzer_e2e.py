@@ -224,8 +224,8 @@ class TestAnalyzerTopicAgnostic:
         assert set(data["scores"].keys()) == EXPECTED_SCORE_KEYS
         assert float(data["scores"]["topic_relevance"]) < 0.5
 
-    def test_default_topic_is_kelly(self):
-        """Without RP_ANALYZER_TOPIC, default topic should be Kelly criterion."""
-        from services.analyzer.prompt import DEFAULT_TOPIC, SCORING_SYSTEM_PROMPT
-        assert "Kelly criterion" in DEFAULT_TOPIC
-        assert "topic_relevance" in SCORING_SYSTEM_PROMPT
+    def test_default_prompt_is_neutral_when_topic_missing(self):
+        """Without an explicit topic, analyzer prompt must remain domain-neutral."""
+        from services.analyzer.prompt import SCORING_SYSTEM_PROMPT
+        assert "No explicit run topic was provided" in SCORING_SYSTEM_PROMPT
+        assert "Do not assume any hidden default domain" in SCORING_SYSTEM_PROMPT

@@ -96,7 +96,11 @@ STAGE_EXTERNAL_DEPS: dict[str, list[str]] = {
 # Maps orchestrator params to per-service params
 STAGE_PARAMS: dict[str, dict[str, str]] = {
     "discovery": {"query": "query", "max_papers": "max_results"},
-    "analyzer": {"paper_id": "paper_id", "max_papers": "max_papers", "force": "force"},
+    "analyzer": {
+        "paper_id": "paper_id",
+        "max_papers": "max_papers",
+        "force": "force",
+    },
     "extractor": {"paper_id": "paper_id", "max_papers": "max_papers", "force": "force"},
     "validator": {
         "paper_id": "paper_id",
@@ -142,6 +146,7 @@ class PipelineRunner:
     def run(
         self,
         query: str | None = None,
+        topic: str | None = None,
         paper_id: int | None = None,
         stages: int = 5,
         max_papers: int = 10,
@@ -170,6 +175,7 @@ class PipelineRunner:
 
         params = {
             "query": query,
+            "topic": topic,
             "paper_id": paper_id,
             "max_papers": max_papers,
             "max_formulas": max_formulas,
@@ -391,6 +397,11 @@ class PipelineRunner:
             value = params.get(orch_key)
             if value is not None:
                 result[svc_key] = value
+
+        if stage_name == "analyzer":
+            topic = params.get("topic") or params.get("query")
+            if isinstance(topic, str) and topic.strip():
+                result["topic"] = topic
 
         return result
 

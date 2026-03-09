@@ -11,7 +11,7 @@ Environment:
     RP_ANALYZER_PORT=8771            # Service port (default: 8771)
     RP_ANALYZER_THRESHOLD=0.7        # Score threshold (default: 0.7)
     RP_ANALYZER_MAX_PAPERS=10        # Default batch size (default: 10)
-    RP_ANALYZER_GEMINI_MODEL=gemini-2.5-flash  # Gemini model
+    RP_ANALYZER_GEMINI_MODEL=gemini-1.5-flash  # Gemini model
     RP_ANALYZER_OLLAMA_URL=http://localhost:11434  # Ollama endpoint
     RP_ANALYZER_OLLAMA_MODEL=qwen3:8b  # Ollama model
     GEMINI_API_KEY=...               # Gemini API key (from SSOT via dotenvx)
@@ -36,6 +36,7 @@ from services.analyzer.prompt import (
     EXPECTED_SCORE_KEYS,
     PROMPT_VERSION,
     SCORING_SYSTEM_PROMPT,
+    build_scoring_system_prompt,
     format_scoring_prompt,
 )
 
@@ -73,6 +74,7 @@ class AnalyzerHandler(BaseHandler):
         Request body:
             {
                 "paper_id": 42,        # Optional: analyze specific paper
+                "topic": "limit order book microstructure",  # Optional topic override
                 "max_papers": 10,      # Optional: batch limit (default 10)
                 "force": false         # Optional: reprocess already scored papers
             }
@@ -84,6 +86,7 @@ class AnalyzerHandler(BaseHandler):
 
         # Parse request
         paper_id = data.get("paper_id")
+        topic = data.get("topic")
         max_papers: int = data.get("max_papers", self.max_papers_default)
         force = data.get("force", False)
 
@@ -94,6 +97,16 @@ class AnalyzerHandler(BaseHandler):
                 "'max_papers' must be integer 1-100", "VALIDATION_ERROR", 422
             )
             return None  # type: ignore[return-value]
+        if topic is not None and not isinstance(topic, str):
+            self.send_error_json(
+                "'topic' must be a string", "VALIDATION_ERROR", 422
+            )
+            return None  # type: ignore[return-value]
+        system_prompt = (
+            build_scoring_system_prompt(topic.strip())
+            if isinstance(topic, str) and topic.strip()
+            else SCORING_SYSTEM_PROMPT
+        )
 
         assert self.db_path is not None, "db_path must be set"
         db_path: str = self.db_path
@@ -137,14 +150,20 @@ class AnalyzerHandler(BaseHandler):
 
             # Call LLM
             try:
-                response_text, provider = fallback_chain(prompt, SCORING_SYSTEM_PROMPT)
+                response_text, provider = fallback_chain(prompt, system_prompt)
                 last_provider = provider
             except RuntimeError as e:
                 errors.append(f"paper {pid}: {e}")
                 continue
 
             # Parse response
-            scores_data = _parse_llm_response(response_text, prompt, pid, errors)
+            scores_data = _parse_llm_response(
+                response_text,
+                prompt,
+                system_prompt,
+                pid,
+                errors,
+            )
             if scores_data is None:
                 continue
 
@@ -253,6 +272,7 @@ def _clean_json_text(text: str) -> str:
 def _parse_llm_response(
     response_text: str,
     prompt: str,
+    system_prompt: str,
     paper_id: int,
     errors: list[str],
 ) -> dict | None:
@@ -268,7 +288,7 @@ def _parse_llm_response(
         + "\n\nRespond ONLY with valid JSON, no markdown fences, no extra text."
     )
     try:
-        response_text, _ = fallback_chain(retry_prompt, SCORING_SYSTEM_PROMPT)
+        response_text, _ = fallback_chain(retry_prompt, system_prompt)
         return json.loads(_clean_json_text(response_text))
     except (json.JSONDecodeError, RuntimeError) as e:
         errors.append(f"paper {paper_id}: invalid JSON after retry: {e}")

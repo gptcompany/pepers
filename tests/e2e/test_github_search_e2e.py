@@ -190,7 +190,7 @@ class TestGeminiAnalysisReal:
         prompt = build_dynamic_prompt(paper_context, repo_info)
         result = analyze_with_gemini_cli(
             cloned_repo, prompt,
-            model="gemini-2.5-flash",
+            model="gemini-1.5-flash",
             timeout=120,
         )
 

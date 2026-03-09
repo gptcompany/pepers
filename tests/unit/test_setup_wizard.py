@@ -6,6 +6,7 @@ import json
 import os
 import sqlite3
 import subprocess
+from pathlib import Path
 from unittest.mock import MagicMock, patch
 
 from services.setup._checks import (
@@ -1492,6 +1493,40 @@ class TestRunner:
 
         result = run_interactive_menu([step], console)
         assert result is False
+
+    def test_collect_final_report_notes_warns_about_cli_auth(self):
+        from services.setup._runner import _collect_final_report_notes
+
+        notes = _collect_final_report_notes([
+            ("Claude clients (Desktop/Code)", "ok"),
+            ("Gemini CLI", "ok"),
+            ("Codex CLI", "ok"),
+        ])
+
+        assert any("authenticate" in note.lower() for note in notes)
+        assert any("Gemini CLI" in note for note in notes)
+
+    @patch("services.setup._runner.subprocess.run")
+    @patch("services.setup._runner.shutil.which", return_value="/usr/bin/dotenvx")
+    def test_collect_final_report_notes_warns_when_rag_openai_key_missing(
+        self, mock_which, mock_run, tmp_path: Path,
+    ):
+        from services.setup._runner import _collect_final_report_notes
+
+        pepers_root = tmp_path / "pepers"
+        pepers_root.mkdir()
+        rag_root = tmp_path / "rag-service"
+        rag_root.mkdir()
+        (rag_root / ".env").write_text("RAG_PORT=8767\n")
+        mock_run.return_value = MagicMock(returncode=1, stdout="")
+
+        notes = _collect_final_report_notes(
+            [("RAG Service", "ok")],
+            project_root=pepers_root,
+        )
+
+        assert any("OPENAI_API_KEY" in note for note in notes)
+        assert any("vision features" in note for note in notes)
 
     @patch("services.setup._runner.run_steps")
     @patch("questionary.select")

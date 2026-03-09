@@ -6,18 +6,14 @@ for LLM-based academic paper relevance scoring.
 Prompt version is stored in the DB alongside each score for reproducibility.
 
 The scoring criteria are topic-agnostic: `topic_relevance` adapts to
-whatever research topic is configured via RP_ANALYZER_TOPIC env var.
+the topic passed by the current run. There is intentionally no global
+topic default in env, because multiple concurrent jobs may target
+different research areas.
 """
 
 from __future__ import annotations
 
-import os
-
 PROMPT_VERSION = "v2"
-
-# Research topic — configurable via env var, defaults to Kelly criterion
-DEFAULT_TOPIC = "Kelly criterion, optimal bet sizing, fractional Kelly, portfolio allocation, or bankroll management"
-ANALYZER_TOPIC = os.environ.get("RP_ANALYZER_TOPIC", DEFAULT_TOPIC)
 
 EXPECTED_SCORE_KEYS = frozenset({
     "topic_relevance",
@@ -32,23 +28,43 @@ def build_scoring_system_prompt(topic: str | None = None) -> str:
     """Build the system prompt with topic-specific relevance criterion.
 
     Args:
-        topic: Research topic description. Uses RP_ANALYZER_TOPIC env var
-            if None, falls back to DEFAULT_TOPIC.
+        topic: Research topic description for the current run.
 
     Returns:
         Complete system prompt string.
     """
-    if topic is None:
-        topic = ANALYZER_TOPIC
+    normalized_topic = topic.strip() if isinstance(topic, str) else ""
+    if normalized_topic:
+        topic_guidance = (
+            "1. topic_relevance: How relevant is this paper to the following "
+            f'research topic? "{normalized_topic}"'
+        )
+        novelty_guidance = (
+            "3. novelty: Does the paper make an original contribution beyond "
+            "the existing literature on this topic? Is there a new insight, "
+            "method, or extension?"
+        )
+    else:
+        topic_guidance = (
+            "1. topic_relevance: No explicit run topic was provided. Score "
+            "relevance conservatively from the paper's own stated subject "
+            "matter and contribution only. Do not assume any hidden default "
+            "domain or previous research agenda."
+        )
+        novelty_guidance = (
+            "3. novelty: Does the paper make an original contribution within "
+            "its own stated research area? Is there a new insight, method, "
+            "or extension?"
+        )
 
     return f"""\
 You are an academic paper relevance scorer for research.
 
 You evaluate papers on 5 criteria, each scored from 0.0 to 1.0:
 
-1. topic_relevance: How relevant is this paper to the following research topic? "{topic}"
+{topic_guidance}
 2. mathematical_rigor: Does the paper contain formal mathematical content — proofs, derivations, theorems, lemmas, or significant mathematical notation?
-3. novelty: Does the paper make an original contribution beyond the existing literature on this topic? Is there a new insight, method, or extension?
+{novelty_guidance}
 4. practical_applicability: Does the paper provide practical implementation guidance — real-world data, backtests, code, algorithms, or actionable strategies?
 5. data_quality: What is the quality of the methodology — dataset size, experimental design, reproducibility, statistical rigor?
 

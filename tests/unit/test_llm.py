@@ -121,6 +121,25 @@ class TestCallOllama:
 
         assert payload["options"]["seed"] == 42
 
+    @patch("shared.llm.urllib.request.urlopen")
+    def test_call_ollama_resolves_container_host_gateway_from_env(
+        self, mock_urlopen, monkeypatch
+    ):
+        monkeypatch.setenv("RP_CODEGEN_OLLAMA_URL", "http://localhost:11434")
+        monkeypatch.setenv("RP_DOCKER_HOST_GATEWAY", "host.docker.internal")
+
+        import shared.llm as llm_mod
+
+        importlib.reload(llm_mod)
+        mock_urlopen.return_value = _fake_urlopen({"response": "test"})
+
+        llm_mod.call_ollama("hello", "system prompt")
+
+        req = mock_urlopen.call_args[0][0]
+        assert req.full_url.startswith(
+            "http://host.docker.internal:11434/api/generate"
+        )
+
 
 # ---------------------------------------------------------------------------
 # call_openrouter tests

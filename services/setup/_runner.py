@@ -2,7 +2,10 @@
 
 from __future__ import annotations
 
+import shutil
+import subprocess
 from collections.abc import Sequence
+from pathlib import Path
 from typing import Protocol
 
 import questionary
@@ -137,7 +140,14 @@ def _run_single_step(step: SetupStep, console: Console, *, force_run: bool = Fal
     return "warn"
 
 
-def run_steps(steps: list[SetupStep], console: Console, *, force_run: bool = False) -> bool:
+def run_steps(
+    steps: list[SetupStep],
+    console: Console,
+    *,
+    force_run: bool = False,
+    final_report: bool = False,
+    project_root: Path | None = None,
+) -> bool:
     """Execute steps in linear cascade.
 
     Returns True if all steps succeeded or were skipped by user.
@@ -151,11 +161,16 @@ def run_steps(steps: list[SetupStep], console: Console, *, force_run: bool = Fal
             return False
 
     console.print()
-    _print_summary(results, console)
+    _print_summary(results, console, final_report=final_report, project_root=project_root)
     return all(s != "failed" for _, s in results)
 
 
-def run_interactive_menu(steps: list[SetupStep], console: Console) -> bool:
+def run_interactive_menu(
+    steps: list[SetupStep],
+    console: Console,
+    *,
+    project_root: Path | None = None,
+) -> bool:
     """Interactive menu with step status and free navigation.
 
     Returns True if all steps are ok at exit.
@@ -234,7 +249,7 @@ def run_interactive_menu(steps: list[SetupStep], console: Console) -> bool:
         except Exception:
             verified = False
         final.append((step.name, "ok" if verified else "warn"))
-    _print_summary(final, console)
+    _print_summary(final, console, final_report=True, project_root=project_root)
     return all(s in {"ok", "warn"} for _, s in final)
 
 
@@ -283,7 +298,68 @@ def run_noninteractive(
     return results
 
 
-def _print_summary(results: list[tuple[str, str]], console: Console) -> None:
+def _rag_missing_openai_key(project_root: Path | None) -> bool | None:
+    if project_root is None:
+        return None
+    rag_root = project_root.parent / "rag-service"
+    env_file = rag_root / ".env"
+    if not env_file.exists():
+        return None
+    dotenvx = shutil.which("dotenvx")
+    if not dotenvx:
+        return None
+    try:
+        result = subprocess.run(
+            [dotenvx, "get", "OPENAI_API_KEY", "-f", str(env_file)],
+            capture_output=True,
+            text=True,
+            timeout=10,
+            check=False,
+        )
+    except (OSError, subprocess.TimeoutExpired):
+        return None
+    return not (result.returncode == 0 and bool((result.stdout or "").strip()))
+
+
+def _collect_final_report_notes(
+    results: list[tuple[str, str]],
+    project_root: Path | None = None,
+) -> list[str]:
+    notes: list[str] = []
+    llm_cli_steps = {
+        "Claude clients (Desktop/Code)": "Claude Code/Desktop",
+        "Gemini CLI": "Gemini CLI",
+        "Codex CLI": "Codex CLI",
+    }
+    installed_llm_clients = [
+        label
+        for name, label in llm_cli_steps.items()
+        if any(step_name == name and status == "ok" for step_name, status in results)
+    ]
+    if installed_llm_clients:
+        joined = ", ".join(installed_llm_clients)
+        notes.append(
+            f"{joined} detected. The wizard does not verify account login/session state; "
+            "authenticate these CLI providers before using them as live LLM backends."
+        )
+
+    rag_missing_key = _rag_missing_openai_key(project_root)
+    if rag_missing_key:
+        notes.append(
+            "RAG Service is missing OPENAI_API_KEY in dotenvx. It can still run with "
+            "local embeddings/Ollama fallback, but OpenAI-backed queries and vision features "
+            "remain unavailable."
+        )
+    return notes
+
+
+def _print_summary(
+    results: list[tuple[str, str]],
+    console: Console,
+    *,
+    final_report: bool = False,
+    project_root: Path | None = None,
+) -> None:
     from rich.table import Table
 
     table = Table(title="Setup Summary", show_lines=False)
@@ -303,3 +379,14 @@ def _print_summary(results: list[tuple[str, str]], console: Console) -> None:
         table.add_row(name, status_map.get(status, status))
 
     console.print(table)
+    if not final_report:
+        return
+
+    notes = _collect_final_report_notes(results, project_root=project_root)
+    if not notes:
+        return
+
+    console.print()
+    console.print("[bold]Final Notes[/]")
+    for note in notes:
+        console.print(f"  [yellow]•[/] {note}")

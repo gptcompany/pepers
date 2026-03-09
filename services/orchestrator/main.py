@@ -84,6 +84,7 @@ class OrchestratorHandler(BaseHandler):
         Request body:
             {
                 "query": "abs:\"Kelly criterion\" AND cat:q-fin.*",
+                "topic": "limit order book microstructure",
                 "paper_id": 42,
                 "stages": 5,
                 "max_papers": 10,
@@ -96,6 +97,7 @@ class OrchestratorHandler(BaseHandler):
         assert self.runner is not None, "PipelineRunner not initialized"
 
         query = data.get("query")
+        topic = data.get("topic")
         paper_id = data.get("paper_id")
         stages = data.get("stages", 5)
         max_papers = data.get("max_papers", 10)
@@ -107,6 +109,11 @@ class OrchestratorHandler(BaseHandler):
         if paper_id is not None and not isinstance(paper_id, int):
             self.send_error_json(
                 "paper_id must be an integer", "VALIDATION_ERROR", 400
+            )
+            return None
+        if topic is not None and not isinstance(topic, str):
+            self.send_error_json(
+                "topic must be a string", "VALIDATION_ERROR", 400
             )
             return None
         if not 1 <= stages <= 5:
@@ -151,6 +158,7 @@ class OrchestratorHandler(BaseHandler):
             args=(self.runner, run_id),
             kwargs={
                 "query": query,
+                "topic": topic,
                 "paper_id": paper_id,
                 "stages": stages,
                 "max_papers": max_papers,

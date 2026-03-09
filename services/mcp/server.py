@@ -385,6 +385,7 @@ def get_formulas(paper_id: int, stage: str = "", limit: int = 50) -> str:
 @mcp.tool()
 def run_pipeline(
     query: str = "",
+    topic: str = "",
     paper_id: int = 0,
     stages: int = 5,
     max_papers: int = 10,
@@ -394,6 +395,7 @@ def run_pipeline(
 
     Args:
         query: arXiv search query. Empty to process existing papers.
+        topic: Optional analyzer topic override for this run.
         paper_id: Process a specific paper by ID (0 to skip).
         stages: Number of pipeline stages to run (1-5).
         max_papers: Maximum papers to process per run.
@@ -402,6 +404,8 @@ def run_pipeline(
     payload: dict = {"stages": stages, "max_papers": max_papers, "max_formulas": max_formulas}
     if query:
         payload["query"] = query
+    if topic:
+        payload["topic"] = topic
     if paper_id > 0:
         payload["paper_id"] = paper_id
 

@@ -24,7 +24,7 @@ import subprocess
 import urllib.request
 from pathlib import Path
 
-from shared.config import LLM_SEED, LLM_TEMPERATURE
+from shared.config import LLM_SEED, LLM_TEMPERATURE, resolve_localhost_url
 
 logger = logging.getLogger(__name__)
 
@@ -116,7 +116,7 @@ def call_cli(
     # Build env — pass GOOGLE_API_KEY for gemini_cli
     env = dict(os.environ)
     if provider_name == "gemini_cli":
-        env["GOOGLE_API_KEY"] = _get_gemini_api_key()
+        env["GEMINI_API_KEY"] = _get_gemini_api_key(); env.pop("GOOGLE_API_KEY", None)
 
     result = subprocess.run(
         cmd,
@@ -193,10 +193,24 @@ def _strip_markdown_fences(text: str) -> str:
     return stripped.strip()
 
 
+def _resolve_ollama_base_url(base_url: str | None = None) -> str:
+    """Resolve the effective Ollama URL for this runtime."""
+    for candidate in (
+        base_url,
+        os.environ.get("RP_OLLAMA_URL", "").strip(),
+        os.environ.get("RP_ANALYZER_OLLAMA_URL", "").strip(),
+        os.environ.get("RP_CODEGEN_OLLAMA_URL", "").strip(),
+        "http://localhost:11434",
+    ):
+        if candidate:
+            return resolve_localhost_url(candidate.rstrip("/"))
+    return resolve_localhost_url("http://localhost:11434")
+
+
 def call_gemini_cli(
     prompt: str,
     system: str,
-    model: str = "gemini-2.5-flash",
+    model: str = "gemini-1.5-flash",
     timeout: int = int(os.environ.get("RP_LLM_TIMEOUT_GEMINI_CLI", "120")),
 ) -> str:
     """Call Gemini via CLI subprocess (delegates to call_cli for backward compat)."""
@@ -206,7 +220,7 @@ def call_gemini_cli(
 def call_gemini_sdk(
     prompt: str,
     system: str,
-    model: str = "gemini-2.5-flash",
+    model: str = "gemini-1.5-flash",
     timeout: float = float(os.environ.get("RP_LLM_TIMEOUT_GEMINI_SDK", "60")),
     temperature: float = LLM_TEMPERATURE,
 ) -> str:
@@ -251,7 +265,7 @@ def call_gemini_sdk(
 def call_openrouter(
     prompt: str,
     system: str,
-    model: str = "google/gemini-2.5-flash",
+    model: str = "google/gemini-1.5-flash",
     timeout: int = int(os.environ.get("RP_LLM_TIMEOUT_OPENROUTER", "60")),
     temperature: float = LLM_TEMPERATURE,
 ) -> str:
@@ -307,7 +321,7 @@ def call_ollama(
     system: str,
     model: str = "qwen3:8b",
     timeout: int = int(os.environ.get("RP_LLM_TIMEOUT_OLLAMA", "600")),
-    base_url: str = "http://localhost:11434",
+    base_url: str | None = None,
     format: str | dict = "json",
     options: dict | None = None,
     temperature: float = LLM_TEMPERATURE,
@@ -333,6 +347,8 @@ def call_ollama(
     Raises:
         RuntimeError: On connection error, timeout, or non-200 response.
     """
+    base_url = _resolve_ollama_base_url(base_url)
+
     if options is None:
         options = {"temperature": temperature, "seed": LLM_SEED, "num_predict": 4096}
 

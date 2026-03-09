@@ -13,6 +13,7 @@ from services.analyzer.prompt import (
     EXPECTED_SCORE_KEYS,
     PROMPT_VERSION,
     SCORING_SYSTEM_PROMPT,
+    build_scoring_system_prompt,
     format_scoring_prompt,
 )
 from services.analyzer.llm import (
@@ -81,6 +82,18 @@ class TestFormatScoringPrompt:
     def test_empty_authors(self):
         result = format_scoring_prompt("Title", None, [], ["q-fin.PM"])
         assert "Authors:" in result
+
+
+class TestBuildScoringSystemPrompt:
+    def test_uses_explicit_run_topic(self):
+        prompt = build_scoring_system_prompt("Samuel Lopes algebra")
+        assert "Samuel Lopes algebra" in prompt
+        assert "No explicit run topic was provided" not in prompt
+
+    def test_falls_back_to_neutral_prompt(self):
+        prompt = build_scoring_system_prompt()
+        assert "No explicit run topic was provided" in prompt
+        assert "Do not assume any hidden default domain" in prompt
 
 
 # ---------------------------------------------------------------------------
@@ -220,7 +233,7 @@ class TestCallGeminiSdk:
                 from services.analyzer import llm
                 original = llm.call_gemini_sdk
 
-                def mock_sdk(prompt, system, model="gemini-2.5-flash", timeout=30.0):
+                def mock_sdk(prompt, system, model="gemini-1.5-flash", timeout=30.0):
                     return '{"scores": {}}'
 
                 llm.call_gemini_sdk = mock_sdk
@@ -444,6 +457,32 @@ class TestAnalyzerHandlerValidation:
         assert "missing_title" in result["errors"][0]
         mock_fc.assert_not_called()
 
+    @patch("services.analyzer.main._update_paper_score")
+    @patch("services.analyzer.main.fallback_chain")
+    @patch("services.analyzer.main._query_papers")
+    def test_custom_topic_is_forwarded_to_system_prompt(
+        self,
+        mock_query,
+        mock_fc,
+        mock_update,
+        sample_llm_response_json,
+    ):
+        mock_query.return_value = [
+            {"id": 1, "title": "Test", "abstract": "A " * 30,
+             "authors": '["A"]', "categories": '["math.RT"]'},
+        ]
+        mock_fc.return_value = (sample_llm_response_json, "ollama")
+
+        handler = self._make_handler()
+        AnalyzerHandler.handle_process(
+            handler,
+            {"topic": "Samuel Lopes algebra Weyl algebra Hochschild cohomology"},
+        )
+
+        system_prompt = mock_fc.call_args.args[1]
+        assert "Samuel Lopes algebra Weyl algebra Hochschild cohomology" in system_prompt
+        mock_update.assert_called_once()
+
 
 # ---------------------------------------------------------------------------
 # TestParseLlmResponse
@@ -456,7 +495,7 @@ class TestParseLlmResponse:
     def test_valid_json(self, sample_llm_scores):
         text = json.dumps(sample_llm_scores)
         errors = []
-        result = _parse_llm_response(text, "prompt", 1, errors)
+        result = _parse_llm_response(text, "prompt", "system", 1, errors)
         assert result is not None
         assert "scores" in result
         assert len(errors) == 0
@@ -465,7 +504,7 @@ class TestParseLlmResponse:
     def test_invalid_json_retries(self, mock_fc, sample_llm_scores):
         mock_fc.return_value = (json.dumps(sample_llm_scores), "ollama")
         errors = []
-        result = _parse_llm_response("not json", "prompt", 1, errors)
+        result = _parse_llm_response("not json", "prompt", "system", 1, errors)
         assert result is not None
         assert "scores" in result
         mock_fc.assert_called_once()
@@ -474,7 +513,7 @@ class TestParseLlmResponse:
     def test_invalid_json_both_fail(self, mock_fc):
         mock_fc.return_value = ("still not json", "ollama")
         errors = []
-        result = _parse_llm_response("not json", "prompt", 1, errors)
+        result = _parse_llm_response("not json", "prompt", "system", 1, errors)
         assert result is None
         assert len(errors) == 1
         assert "invalid JSON after retry" in errors[0]
@@ -483,7 +522,7 @@ class TestParseLlmResponse:
     def test_retry_runtime_error(self, mock_fc):
         mock_fc.side_effect = RuntimeError("All failed")
         errors = []
-        result = _parse_llm_response("not json", "prompt", 1, errors)
+        result = _parse_llm_response("not json", "prompt", "system", 1, errors)
         assert result is None
         assert len(errors) == 1
 

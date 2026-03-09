@@ -133,6 +133,7 @@ class TestBuildStageParams:
         self.runner = PipelineRunner.__new__(PipelineRunner)
         self.params = {
             "query": "kelly criterion",
+            "topic": "market microstructure",
             "paper_id": 42,
             "max_papers": 10,
             "max_formulas": 50,
@@ -145,7 +146,12 @@ class TestBuildStageParams:
 
     def test_analyzer_params(self):
         result = self.runner._build_stage_params("analyzer", self.params)
-        assert result == {"paper_id": 42, "max_papers": 10, "force": True}
+        assert result == {
+            "paper_id": 42,
+            "topic": "market microstructure",
+            "max_papers": 10,
+            "force": True,
+        }
 
     def test_extractor_params(self):
         result = self.runner._build_stage_params("extractor", self.params)

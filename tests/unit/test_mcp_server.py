@@ -624,11 +624,12 @@ class TestRunPipeline:
         from services.mcp.server import run_pipeline
 
         mock_call.return_value = {"run_id": "run-abc123", "status": "running"}
-        result = run_pipeline(query="Kelly criterion")
+        result = run_pipeline(query="Kelly criterion", topic="market microstructure")
         assert "run-abc123" in result
         mock_call.assert_called_once()
         payload = mock_call.call_args[0][2]
         assert payload["query"] == "Kelly criterion"
+        assert payload["topic"] == "market microstructure"
         assert payload["stages"] == 5
 
     @patch("services.mcp.server._call_orchestrator")
