@@ -72,6 +72,8 @@ services:
       - RP_LOG_LEVEL=INFO
       - HOME=/home/pepers
       - RP_GEMINI_CLI_USE_OAUTH=true
+      - GEMINI_API_KEY=
+      - GOOGLE_API_KEY=
     env_file: .env
     volumes:
       - ${PEPERS_DATA_DIR:-./data}:/data
