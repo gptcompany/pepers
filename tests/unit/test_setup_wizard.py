@@ -784,9 +784,11 @@ class TestMcpConfigStep:
 # ── AggregatedHealthCheck ────────────────────────────────────
 
 class TestAggregatedHealthCheck:
-    def test_check_always_true(self):
-        """Aggregated check stays selectable but avoids run-all pending loops."""
+    def test_check_false_until_first_run_then_true(self):
+        """Aggregated check is pending until install() runs once."""
         step = AggregatedHealthCheck()
+        assert step.check() is False
+        step.install(MagicMock())
         assert step.check() is True
 
     def test_install_returns_true(self):

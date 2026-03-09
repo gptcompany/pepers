@@ -97,10 +97,11 @@ class AggregatedHealthCheck:
 
     def __init__(self) -> None:
         self._last_all_ok = False
+        self._has_run = False
 
     def check(self) -> bool:
-        # Keep this step selectable, but avoid "Run all pending" loops.
-        return True
+        # Pending until executed at least once in current guided session.
+        return self._has_run
 
     def install(self, console: Console) -> bool:
         table = Table(title="Service Health", show_lines=False)
@@ -153,6 +154,7 @@ class AggregatedHealthCheck:
         console.print(table)
 
         self._last_all_ok = all_ok
+        self._has_run = True
         if not all_ok:
             console.print(
                 "\n[yellow]Some services are not reachable. "

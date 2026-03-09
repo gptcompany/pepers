@@ -39,7 +39,7 @@ class McpConfigStep:
         return home / ".config" / "Claude" / "claude_desktop_config.json"
 
     def check(self) -> bool:
-        port = os.environ.get("RP_MCP_PORT", "8776")
+        port = self._resolved_mcp_port()
         expected = f"http://localhost:{port}/sse"
         
         paths = self._config_paths()
@@ -70,7 +70,7 @@ class McpConfigStep:
         except Exception:
             questionary = None
 
-        port = os.environ.get("RP_MCP_PORT", "8776")
+        port = self._resolved_mcp_port()
         url = f"http://localhost:{port}/sse"
         target_paths: list[Path]
 
@@ -198,6 +198,27 @@ class McpConfigStep:
             if not node_step.install(console):
                 return False
         return shutil.which("npx") is not None
+
+    def _resolved_mcp_port(self) -> str:
+        port = os.environ.get("RP_MCP_PORT", "").strip()
+        if port:
+            return port
+        env_path = Path.cwd() / ".env"
+        if not env_path.exists():
+            return "8776"
+        try:
+            for raw_line in env_path.read_text().splitlines():
+                line = raw_line.strip()
+                if not line or line.startswith("#") or "=" not in line:
+                    continue
+                key, value = line.split("=", 1)
+                if key.strip() == "RP_MCP_PORT":
+                    candidate = value.strip()
+                    if candidate:
+                        return candidate
+        except OSError:
+            pass
+        return "8776"
 
     def _build_pepers_entry(self, *, url: str, for_desktop: bool) -> dict:
         # Claude Desktop can reject direct SSE entries on some builds; prefer stdio bridge.
