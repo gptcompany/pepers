@@ -726,14 +726,14 @@ class TestExternalServiceCheck:
         assert mock_get.call_args_list[0].args[0] == "http://new:2/health"
         assert mock_get.call_args_list[0].kwargs["timeout"] == 5
 
-    @patch("services.setup._services.resolve_localhost_url", return_value="http://host.docker.internal:8760")
     @patch.object(ExternalServiceCheck, "_runtime_dep_health")
+    @patch.object(ExternalServiceCheck, "_discover_running_url", return_value=None)
     @patch("requests.get")
     def test_check_fails_when_host_is_up_but_orchestrator_cannot_reach_service(
         self,
         mock_get,
+        _mock_discover,
         mock_runtime_dep,
-        _mock_resolve,
     ):
         mock_get.return_value.status_code = 200
         mock_get.return_value.json.return_value = {
@@ -759,6 +759,20 @@ class TestExternalServiceCheck:
             step = ExternalServiceCheck(svc)
             assert step.check() is False
         assert "host.docker.internal:8760" in step._host_only_warning("http://localhost:8760")
+
+    def test_runtime_url_matches_localhost_and_host_gateway(self):
+        svc = {
+            "name": "CAS Service",
+            "env_urls": ["RP_VALIDATOR_CAS_URL", "RP_CAS_URL"],
+            "default_url": "http://localhost:8769",
+            "health_path": "/health",
+            "setup_hint": "Install test service",
+        }
+        step = ExternalServiceCheck(svc)
+        assert step._runtime_url_matches_local_target(
+            "http://localhost:8760",
+            "http://host.docker.internal:8760",
+        ) is True
 
     @patch("services.setup._config._port_in_use", side_effect=lambda port: port == 8760)
     @patch.object(ExternalServiceCheck, "_probe_effective", return_value=False)

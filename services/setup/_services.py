@@ -15,8 +15,6 @@ import questionary
 import requests
 from rich.console import Console
 
-from shared.config import resolve_localhost_url
-
 _EXTERNAL_SERVICES = [
     {
         "name": "CAS Service",
@@ -264,6 +262,24 @@ class ExternalServiceCheck:
         dep = deps.get(dep_key)
         return dep if isinstance(dep, dict) else None
 
+    def _runtime_url_matches_local_target(self, base_url: str, runtime_url: str) -> bool:
+        base = urlparse(base_url.rstrip("/"))
+        runtime = urlparse(runtime_url.rstrip("/"))
+
+        if (base.scheme or "http") != (runtime.scheme or "http"):
+            return False
+        if base.port != runtime.port:
+            return False
+
+        base_host = (base.hostname or "").strip().lower()
+        runtime_host = (runtime.hostname or "").strip().lower()
+        if base_host == runtime_host:
+            return True
+
+        localhost_aliases = {"localhost", "127.0.0.1"}
+        gateway_aliases = {"host.docker.internal", "gateway.docker.internal"}
+        return base_host in localhost_aliases and runtime_host in gateway_aliases
+
     def _probe_effective(
         self,
         base_url: str,
@@ -281,10 +297,8 @@ class ExternalServiceCheck:
             return host_ok
 
         runtime_url = str(runtime_dep.get("url") or "").rstrip("/")
-        if runtime_url:
-            resolved = resolve_localhost_url(base_url.rstrip("/")).rstrip("/")
-            if resolved == runtime_url:
-                return bool(runtime_dep.get("healthy"))
+        if runtime_url and self._runtime_url_matches_local_target(base_url, runtime_url):
+            return bool(runtime_dep.get("healthy"))
         return host_ok
 
     def _host_only_warning(self, base_url: str) -> str | None:
@@ -294,8 +308,7 @@ class ExternalServiceCheck:
         runtime_url = str(runtime_dep.get("url") or "").rstrip("/")
         if not runtime_url:
             return None
-        resolved = resolve_localhost_url(base_url.rstrip("/")).rstrip("/")
-        if resolved != runtime_url:
+        if not self._runtime_url_matches_local_target(base_url, runtime_url):
             return None
         host_ok = self._probe_url(base_url, strict_identity=True)
         runtime_ok = bool(runtime_dep.get("healthy"))
