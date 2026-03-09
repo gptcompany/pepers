@@ -36,6 +36,17 @@ This arcade has five main levels:
 5. **Quantum Generalized Heisenberg Algebras**
    What survives after the physics settings get weirder?
 
+## Power-Ups: Four Words to Learn Once
+
+This game becomes much easier if you pick up four power-ups early:
+
+- **symmetry**: a move that changes the look but not the identity
+- **deformation**: a rule change that you track carefully instead of guessing
+- **module**: a playable character that can actually survive inside the rule system
+- **cohomology**: the hidden stats screen for what can be changed and what resists change
+
+Once a reader has these four ideas, the whole dossier stops feeling like alien language and starts feeling like a very strict strategy game.
+
 ## Level 1: Whittaker Modules for Generalized Weyl Algebras
 
 ### What is happening?
@@ -137,6 +148,13 @@ These papers are hard, yes. But the ideas underneath are deeply human:
 That is already the raw material of great outreach.
 
 So if the goal is to get young people interested in serious mathematics, Lopes's work is actually a strong candidate. It has mystery, structure, internal logic, and a genuine "secret rules of the universe" feeling.
+
+That is also why this material can be taught without dumbing it down. You do not need to fake simplicity. You just need the right order:
+
+1. explain the rules of the world;
+2. explain the legal moves;
+3. explain the small changes and big changes;
+4. only then show the hidden control systems.
 
 ## PePeRS Engine Room
 

@@ -30,6 +30,22 @@ Each paper is described through three lenses:
 3. **Mathematics for Everyone**
    A translation layer for readers who are curious, bright, and not yet experts.
 
+## 1.1 Four Words That Unlock the Whole Dossier
+
+If a reader understands the following four words, most of Lopes's research stops looking like a wall and starts looking like a landscape.
+
+- **symmetry**: a transformation that changes appearance without destroying identity
+- **deformation**: a controlled way of changing the rules while tracking what survives
+- **module**: a mathematical inhabitant that lives inside an algebraic rule system
+- **cohomology**: a hidden bookkeeping device that records which changes are possible and how they interact
+
+This is why the dossier has outreach value. The vocabulary is advanced, but the mental moves are natural:
+
+- keep track of what stays the same;
+- understand what can change;
+- test what kinds of objects can still exist;
+- study which hidden constraints govern the whole system.
+
 ## 2. Paper Map
 
 ### Paper 1: Whittaker Modules for Generalized Weyl Algebras
@@ -126,6 +142,17 @@ These papers are hard, but the underlying questions are human-sized:
 - What kinds of objects can exist inside a rule system?
 
 Those are deep mathematical questions, but they are also explainable questions. That is why this research has strong outreach potential.
+
+### 3.4 A Clean Teaching Route for Young or Non-Specialist Readers
+
+If I had to teach this material outside a specialist seminar, I would use the following progression:
+
+1. start with **rules**;
+2. move to **legal transformations**;
+3. then explain **tiny changes versus big changes**;
+4. only after that introduce **cohomology** as the scoreboard of possible deformations.
+
+That route matters because it respects the reader's intelligence without forcing them to absorb the full technical language too early.
 
 ## 4. PePeRS Diagnostic Position
 
