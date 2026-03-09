@@ -198,6 +198,18 @@ class DockerComposeUp:
             return False
         try:
             subprocess.run(
+                [docker, "compose", "up", "-d", "--build", "--force-recreate"],
+                cwd=self._root,
+                check=True,
+                text=True,
+            )
+            return True
+        except subprocess.CalledProcessError:
+            console.print(
+                "[yellow]Compose rebuild failed; retrying with plain up -d...[/]"
+            )
+        try:
+            subprocess.run(
                 [docker, "compose", "up", "-d"],
                 cwd=self._root,
                 check=True,

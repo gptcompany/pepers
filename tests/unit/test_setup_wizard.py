@@ -284,7 +284,7 @@ class TestDockerComposeCheck:
         console = MagicMock()
         assert step.install(console) is True
         args, kwargs = mock_run.call_args
-        assert args[0][-3:] == ["compose", "up", "-d"]
+        assert args[0][1:4] == ["compose", "up", "-d"]
         assert kwargs == {"cwd": tmp_path, "check": True, "text": True}
 
     @patch("subprocess.run", side_effect=subprocess.CalledProcessError(1, "docker"))

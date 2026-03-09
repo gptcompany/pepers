@@ -59,7 +59,7 @@ def _read_env_file() -> dict[str, str]:
 
 def _check_http(url: str, timeout: float = 3.0) -> bool:
     try:
-        resp = requests.get(url, timeout=timeout)
+        resp = requests.get(url, timeout=timeout, stream=True)
         return resp.status_code < 500
     except (requests.ConnectionError, requests.Timeout):
         return False
