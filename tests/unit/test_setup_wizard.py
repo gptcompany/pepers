@@ -898,23 +898,25 @@ class TestExternalServicePersistenceCheck:
 # ── MCP config ───────────────────────────────────────────────
 
 class TestMcpConfigStep:
-    @patch.object(AggregatedHealthCheck, "verify", return_value=False)
-    def test_install_requires_green_health_before_writing_config(self, _mock_verify, tmp_path):
+    @patch.object(AggregatedHealthCheck, "verify_internal", return_value=False)
+    def test_install_requires_healthy_internal_stack_before_writing_config(self, _mock_verify, tmp_path):
         step = McpConfigStep()
         console = MagicMock()
         config_path = tmp_path / ".claude.json"
 
-        with patch("services.setup._mcp_config.Path.home", return_value=tmp_path):
+        with patch("services.setup._mcp_config.Path.home", return_value=tmp_path), \
+             patch("services.setup._mcp_config.Path.cwd", return_value=tmp_path):
             assert step.install(console) is False
             assert not config_path.exists()
 
-    @patch.object(AggregatedHealthCheck, "verify", return_value=True)
+    @patch.object(AggregatedHealthCheck, "verify_internal", return_value=True)
     def test_install_writes_claude_config_and_verify_passes(self, _mock_verify, tmp_path):
         step = McpConfigStep()
         console = MagicMock()
         config_path = tmp_path / ".claude.json"
 
-        with patch("services.setup._mcp_config.Path.home", return_value=tmp_path):
+        with patch("services.setup._mcp_config.Path.home", return_value=tmp_path), \
+             patch("services.setup._mcp_config.Path.cwd", return_value=tmp_path):
             assert step.check() is False
             assert step.install(console) is True
             assert config_path.exists()
@@ -924,7 +926,7 @@ class TestMcpConfigStep:
             assert data["mcpServers"]["pepers"]["url"] == "http://localhost:8776/sse"
             assert step.verify() is True
 
-    @patch.object(AggregatedHealthCheck, "verify", return_value=True)
+    @patch.object(AggregatedHealthCheck, "verify_internal", return_value=True)
     def test_install_skips_invalid_json_if_other_target_is_writable(self, _mock_verify, tmp_path):
         step = McpConfigStep()
         console = MagicMock()
@@ -933,6 +935,7 @@ class TestMcpConfigStep:
         bad.write_text("{not json")
 
         with patch("services.setup._mcp_config.Path.home", return_value=tmp_path), \
+             patch("services.setup._mcp_config.Path.cwd", return_value=tmp_path), \
              patch("services.setup._mcp_config.platform.system", return_value="Linux"):
             assert step.install(console) is True
             assert good.exists()
@@ -960,6 +963,17 @@ class TestAggregatedHealthCheck:
         console = MagicMock()
         step.install(console)
         assert step.verify() is True
+
+    @patch("services.setup._verify._check_http")
+    def test_verify_internal_ignores_external_service_failures(self, mock_http):
+        def fake_http(url, timeout=3.0, *, expected_service=None):
+            if "11434" in url:
+                return False
+            return True
+
+        mock_http.side_effect = fake_http
+        step = AggregatedHealthCheck()
+        assert step.verify_internal() is True
 
     @patch("services.setup._verify._discover_rag_details", return_value="")
     @patch("services.setup._verify._discover_cas_details",
@@ -1094,6 +1108,58 @@ class TestAggregatedHealthCheck:
         assert step.install(console) is True
         mock_wait.assert_called_once()
         mock_reconcile.assert_not_called()
+
+    @patch.object(AggregatedHealthCheck, "_maybe_auto_remediate_ollama", return_value=True)
+    @patch.object(AggregatedHealthCheck, "_maybe_auto_reconcile_internal_services", return_value=False)
+    @patch.object(AggregatedHealthCheck, "_maybe_auto_remap_internal_ports", return_value=False)
+    @patch.object(AggregatedHealthCheck, "_collect_rows")
+    def test_install_rechecks_after_ollama_remediation(
+        self,
+        mock_collect,
+        _mock_remap,
+        _mock_reconcile,
+        mock_ollama,
+    ):
+        mock_collect.side_effect = [
+            (
+                [
+                    ("Discovery", "http://localhost:8770/health", True, ":8770"),
+                    ("Ollama", "http://localhost:11434/", False, ""),
+                ],
+                False,
+                True,
+            ),
+            (
+                [
+                    ("Discovery", "http://localhost:8770/health", True, ":8770"),
+                    ("Ollama", "http://localhost:11434/", True, ""),
+                ],
+                True,
+                True,
+            ),
+        ]
+        step = AggregatedHealthCheck()
+        console = MagicMock()
+        assert step.install(console) is True
+        mock_ollama.assert_called_once_with(console)
+
+    @patch("services.setup._cli_tools.shutil.which", return_value="/usr/bin/ollama")
+    @patch.object(AggregatedHealthCheck, "_wait_for_endpoint", return_value=True)
+    @patch.object(AggregatedHealthCheck, "_start_local_ollama", return_value=True)
+    @patch("services.setup._verify._check_http", return_value=False)
+    def test_maybe_auto_remediate_ollama_starts_local_server_for_localhost(
+        self,
+        _mock_http,
+        mock_start,
+        mock_wait,
+        _mock_which,
+    ):
+        step = AggregatedHealthCheck()
+        console = MagicMock()
+        with patch.dict(os.environ, {"RP_CODEGEN_OLLAMA_URL": "http://localhost:11434"}, clear=False):
+            assert step._maybe_auto_remediate_ollama(console) is True
+        mock_start.assert_called_once()
+        mock_wait.assert_called_once()
 
     def test_verify_constants_keep_legacy_fallbacks(self):
         cas_envs, _, _ = _EXTERNAL["CAS Service"]

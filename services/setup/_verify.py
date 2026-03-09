@@ -3,10 +3,13 @@
 from __future__ import annotations
 
 import os
+import shutil
+import subprocess
 import time
 from dataclasses import dataclass, field
 from enum import Enum
 from pathlib import Path
+from urllib.parse import urlparse
 
 import requests
 from rich.console import Console
@@ -210,6 +213,11 @@ class AggregatedHealthCheck:
             console.print(
                 "[cyan]Re-checking PePeRS service health after Docker reconcile...[/]"
             )
+        if self._ollama_down(rows) and self._maybe_auto_remediate_ollama(console):
+            console.print(
+                "[cyan]Re-checking Ollama after automatic remediation...[/]"
+            )
+            rows, all_ok, internal_ok = self._collect_rows()
 
         self._print_rows(console, rows)
 
@@ -230,6 +238,10 @@ class AggregatedHealthCheck:
         _rows, all_ok, _internal_ok = self._collect_rows()
         self._last_all_ok = all_ok
         return all_ok
+
+    def verify_internal(self) -> bool:
+        _rows, _all_ok, internal_ok = self._collect_rows()
+        return internal_ok
 
     def _maybe_auto_remap_internal_ports(self, console: Console) -> bool:
         try:
@@ -283,6 +295,78 @@ class AggregatedHealthCheck:
             "Attempting automatic Docker reconcile...[/]"
         )
         return step.install(console)
+
+    def _ollama_down(self, rows: list[tuple[str, str, bool, str]]) -> bool:
+        for name, _url, ok, _details in rows:
+            if name == "Ollama":
+                return not ok
+        return False
+
+    def _maybe_auto_remediate_ollama(self, console: Console) -> bool:
+        env_keys, default_url, path = _EXTERNAL["Ollama"]
+        base = _env_first(env_keys, default_url).rstrip("/")
+        parsed = urlparse(base)
+        host = (parsed.hostname or "").strip().lower()
+        if host not in {"localhost", "127.0.0.1"}:
+            console.print(
+                "[yellow]Configured Ollama endpoint is external. "
+                "Automatic local start skipped.[/]"
+            )
+            return False
+
+        try:
+            from services.setup._cli_tools import OllamaCheck
+        except Exception:
+            return False
+
+        step = OllamaCheck()
+        if not step.check():
+            console.print(
+                "[yellow]Ollama is not installed. Attempting automatic installation...[/]"
+            )
+            if not step.install(console):
+                return False
+
+        url = base + path
+        if _check_http(url):
+            return True
+
+        console.print(
+            "[yellow]Ollama is installed but not serving. "
+            "Attempting automatic start...[/]"
+        )
+        if not self._start_local_ollama():
+            return False
+        return self._wait_for_endpoint(url)
+
+    def _start_local_ollama(self) -> bool:
+        ollama_bin = shutil.which("ollama")
+        if not ollama_bin:
+            return False
+        try:
+            subprocess.Popen(
+                [ollama_bin, "serve"],
+                stdout=subprocess.DEVNULL,
+                stderr=subprocess.DEVNULL,
+                stdin=subprocess.DEVNULL,
+                start_new_session=True,
+            )
+            return True
+        except OSError:
+            return False
+
+    def _wait_for_endpoint(
+        self,
+        url: str,
+        timeout_s: float = 12.0,
+        interval_s: float = 1.0,
+    ) -> bool:
+        deadline = time.time() + timeout_s
+        while time.time() < deadline:
+            if _check_http(url):
+                return True
+            time.sleep(interval_s)
+        return False
 
 
 # ── Easy-mode verdict ────────────────────────────────────────

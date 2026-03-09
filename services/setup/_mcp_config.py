@@ -194,7 +194,7 @@ class McpConfigStep:
             from services.setup._verify import AggregatedHealthCheck
         except Exception:
             return False
-        return AggregatedHealthCheck().verify()
+        return AggregatedHealthCheck().verify_internal()
 
     def _ensure_npx_for_desktop(self, console: Console) -> bool:
         if shutil.which("npx") is not None:
