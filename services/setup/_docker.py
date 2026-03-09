@@ -10,12 +10,24 @@ from pathlib import Path
 
 from rich.console import Console
 
+
+def _docker_bin() -> str | None:
+    docker = shutil.which("docker")
+    if docker:
+        return docker
+    if system() == "Darwin":
+        fallback = Path("/usr/local/bin/docker")
+        if fallback.exists():
+            return str(fallback)
+    return None
+
+
 class DockerCheck:
     name = "Docker"
     description = "Container runtime for local service stack"
 
     def check(self) -> bool:
-        return shutil.which("docker") is not None
+        return _docker_bin() is not None
 
     def install(self, console: Console) -> bool:
         console.print(
@@ -37,9 +49,12 @@ class DockerComposeCheck:
     description = "Compose subcommand for multi-service orchestration"
 
     def check(self) -> bool:
+        docker = _docker_bin()
+        if docker is None:
+            return False
         try:
             subprocess.run(
-                ["docker", "compose", "version"],
+                [docker, "compose", "version"],
                 check=True,
                 capture_output=True,
                 text=True,
@@ -61,9 +76,12 @@ class DockerComposeCheck:
 
 
 def _docker_daemon_ready() -> bool:
+    docker = _docker_bin()
+    if docker is None:
+        return False
     try:
         subprocess.run(
-            ["docker", "info"],
+            [docker, "info"],
             check=True,
             capture_output=True,
             text=True,
@@ -120,13 +138,11 @@ def _maybe_start_docker_desktop(console: Console) -> None:
             "[yellow]Docker Desktop not running. Start it and retry.[/]"
         )
 
-    def verify(self) -> bool:
-        return self.check()
-
 
 class DockerComposeUp:
     name = "Docker Compose services"
     description = "Start local containers from compose file"
+    auto_reconcile_when_configured = True
 
     def __init__(self, project_root: Path) -> None:
         self._root = project_root
@@ -141,9 +157,12 @@ class DockerComposeUp:
     def check(self) -> bool:
         if self._compose_file() is None:
             return True  # no compose file = nothing to do
+        docker = _docker_bin()
+        if docker is None:
+            return False
         try:
             result = subprocess.run(
-                ["docker", "compose", "ps", "--format", "json"],
+                [docker, "compose", "ps", "--format", "json"],
                 cwd=self._root,
                 capture_output=True,
                 text=True,
@@ -173,9 +192,13 @@ class DockerComposeUp:
         console.print(
             "[dim]This may take a few minutes; Docker will print progress below.[/]"
         )
+        docker = _docker_bin()
+        if docker is None:
+            console.print("[red]docker binary not found in PATH.[/]")
+            return False
         try:
             subprocess.run(
-                ["docker", "compose", "up", "-d"],
+                [docker, "compose", "up", "-d"],
                 cwd=self._root,
                 check=True,
                 text=True,
@@ -228,9 +251,12 @@ class DockerComposeDown:
         self._root = project_root
 
     def check(self) -> bool:
+        docker = _docker_bin()
+        if docker is None:
+            return True  # nothing to tear down if docker unavailable
         try:
             result = subprocess.run(
-                ["docker", "compose", "ps", "--quiet"],
+                [docker, "compose", "ps", "--quiet"],
                 cwd=self._root,
                 capture_output=True,
                 text=True,
@@ -240,10 +266,14 @@ class DockerComposeDown:
             return True  # No compose / no docker → nothing to tear down
 
     def install(self, console: Console) -> bool:
+        docker = _docker_bin()
+        if docker is None:
+            console.print("[yellow]docker not found; nothing to tear down.[/]")
+            return True
         console.print("[cyan]Running docker compose down...[/]")
         try:
             subprocess.run(
-                ["docker", "compose", "down"],
+                [docker, "compose", "down"],
                 cwd=self._root,
                 check=True,
                 text=True,
