@@ -99,8 +99,8 @@ class AggregatedHealthCheck:
         self._last_all_ok = False
 
     def check(self) -> bool:
-        # Always run the full check in install()
-        return False
+        # Keep this step selectable, but avoid "Run all pending" loops.
+        return True
 
     def install(self, console: Console) -> bool:
         table = Table(title="Service Health", show_lines=False)
@@ -112,9 +112,18 @@ class AggregatedHealthCheck:
         all_ok = True
 
         # Internal PePeRS services
+        env_file_values = _read_env_file()
         for svc_name, port in SERVICE_PORTS.items():
             env_key = f"RP_{svc_name.upper()}_PORT"
-            actual_port = int(os.environ.get(env_key, str(port)))
+            raw_port = (
+                os.environ.get(env_key)
+                or env_file_values.get(env_key)
+                or str(port)
+            )
+            try:
+                actual_port = int(raw_port)
+            except (TypeError, ValueError):
+                actual_port = port
             health_path = _INTERNAL_HEALTH_PATHS.get(svc_name, "/health")
             url = f"http://localhost:{actual_port}{health_path}"
             ok = _check_http(url)
