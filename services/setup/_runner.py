@@ -137,7 +137,7 @@ def _run_single_step(step: SetupStep, console: Console, *, force_run: bool = Fal
     return "warn"
 
 
-def run_steps(steps: list[SetupStep], console: Console) -> bool:
+def run_steps(steps: list[SetupStep], console: Console, *, force_run: bool = False) -> bool:
     """Execute steps in linear cascade.
 
     Returns True if all steps succeeded or were skipped by user.
@@ -145,7 +145,7 @@ def run_steps(steps: list[SetupStep], console: Console) -> bool:
     results: list[tuple[str, str]] = []
 
     for step in steps:
-        status = _run_single_step(step, console)
+        status = _run_single_step(step, console, force_run=force_run)
         results.append((step.name, status))
         if status == "abort":
             return False
@@ -213,7 +213,7 @@ def run_interactive_menu(steps: list[SetupStep], console: Console) -> bool:
         elif selected == "run_all_unresolved":
             unresolved = [s for s, st in statuses if st != "ok"]
             if unresolved:
-                run_steps(unresolved, console)
+                run_steps(unresolved, console, force_run=True)
             else:
                 console.print("[green]All steps already configured![/]")
         else:

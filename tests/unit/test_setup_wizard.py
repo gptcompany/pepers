@@ -972,6 +972,24 @@ class TestRunner:
         run_interactive_menu([warn_step], console)
         assert mock_run_steps.call_count == 1
 
+    @patch("services.setup._runner.run_steps")
+    @patch("questionary.select")
+    def test_run_interactive_menu_run_all_unresolved_uses_force_run(self, mock_select, mock_run_steps):
+        from services.setup._runner import run_interactive_menu
+
+        warn_step = MagicMock()
+        warn_step.name = "Warn"
+        warn_step.description = "Warn step"
+        warn_step.check.return_value = True
+        warn_step.verify.return_value = False
+
+        mock_select.return_value.ask.side_effect = ["run_all_unresolved", "exit"]
+        console = MagicMock()
+
+        run_interactive_menu([warn_step], console)
+        _, kwargs = mock_run_steps.call_args
+        assert kwargs.get("force_run") is True
+
     def test_force_run_configured_step_verifies_without_install(self):
         from services.setup._runner import _run_single_step
 
