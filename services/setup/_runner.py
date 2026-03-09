@@ -138,19 +138,26 @@ def run_interactive_menu(steps: list[SetupStep], console: Console) -> bool:
                 ok = step.check()
             except Exception:
                 ok = False
-            statuses.append((step, "ok" if ok else "pending"))
+            if not ok:
+                statuses.append((step, "pending"))
+                continue
+            try:
+                verified = step.verify()
+            except Exception:
+                verified = False
+            statuses.append((step, "ok" if verified else "warn"))
 
         # Build menu choices
         choices: list[questionary.Choice] = []
         for i, (step, status) in enumerate(statuses, 1):
-            icon = "\u2705" if status == "ok" else "\u2b1c"
+            icon = "\u2705" if status == "ok" else ("\u26a0\ufe0f" if status == "warn" else "\u2b1c")
             desc = getattr(step, "description", "")
             label = f"{icon} {i:2d}. {step.name}"
             if desc:
                 label += f"  ({desc})"
             choices.append(questionary.Choice(label, value=step))
 
-        pending_count = sum(1 for _, s in statuses if s != "ok")
+        pending_count = sum(1 for _, s in statuses if s == "pending")
         choices.append(questionary.Choice(
             f">>> Run all pending ({pending_count} steps)", value="run_all",
         ))
@@ -179,9 +186,16 @@ def run_interactive_menu(steps: list[SetupStep], console: Console) -> bool:
             ok = step.check()
         except Exception:
             ok = False
-        final.append((step.name, "ok" if ok else "pending"))
+        if not ok:
+            final.append((step.name, "pending"))
+            continue
+        try:
+            verified = step.verify()
+        except Exception:
+            verified = False
+        final.append((step.name, "ok" if verified else "warn"))
     _print_summary(final, console)
-    return all(s == "ok" for _, s in final)
+    return all(s in {"ok", "warn"} for _, s in final)
 
 
 def run_noninteractive(
