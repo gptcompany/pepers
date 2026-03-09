@@ -44,6 +44,8 @@ htmlcov/
 *.zip
 *.md
 !README.md
+!samuel/Lopes_Research_Dossier_2026.md
+!samuel/CODEX_Lopes_Research_Dossier_2026.md
 *.j2
 
 # Gemini CLI
