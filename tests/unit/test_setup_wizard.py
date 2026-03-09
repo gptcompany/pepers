@@ -285,7 +285,27 @@ class TestDockerComposeCheck:
         assert step.install(console) is True
         args, kwargs = mock_run.call_args
         assert args[0][1:4] == ["compose", "up", "-d"]
-        assert kwargs == {"cwd": tmp_path, "check": True, "text": True}
+        assert kwargs["cwd"] == tmp_path
+        assert kwargs["check"] is True
+        assert kwargs["text"] is True
+        assert "env" in kwargs
+
+    @patch.object(DockerComposeUp, "_retry_after_port_conflict", return_value=True)
+    @patch("services.setup._docker._docker_daemon_ready", return_value=True)
+    @patch("services.setup._docker._docker_bin", return_value="/usr/bin/docker")
+    @patch("subprocess.run", side_effect=subprocess.CalledProcessError(1, "docker"))
+    def test_install_retries_after_port_conflict(
+        self,
+        mock_run,
+        _mock_docker_bin,
+        _mock_daemon_ready,
+        mock_retry,
+        tmp_path,
+    ):
+        (tmp_path / "compose.yml").touch()
+        step = DockerComposeUp(tmp_path)
+        assert step.install(MagicMock()) is True
+        mock_retry.assert_called_once()
 
     @patch("subprocess.run", side_effect=subprocess.CalledProcessError(1, "docker"))
     def test_install_fails_on_error(self, mock_run, tmp_path):

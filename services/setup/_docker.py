@@ -228,6 +228,8 @@ class DockerComposeUp:
             )
             return True
         except subprocess.CalledProcessError:
+            if self._retry_after_port_conflict(console, docker):
+                return True
             console.print(
                 "[yellow]Compose rebuild failed; retrying with plain up -d...[/]"
             )
@@ -250,6 +252,36 @@ class DockerComposeUp:
 
     def verify(self) -> bool:
         return self.check()
+
+    def _retry_after_port_conflict(self, console: Console, docker: str) -> bool:
+        env_path = self._root / ".env"
+        if not env_path.exists():
+            return False
+        try:
+            from services.setup._config import EnvConfig, _read_env_values
+        except Exception:
+            return False
+        values = _read_env_values(env_path)
+        step = EnvConfig(self._root)
+        changed = step._auto_resolve_internal_port_conflicts(values, console)
+        if not changed:
+            return False
+        env_path.write_text("\n".join(f"{k}={v}" for k, v in values.items()) + "\n")
+        console.print(
+            "[yellow]Docker reported a port bind conflict. "
+            "Retrying with a fresh automatic port remap...[/]"
+        )
+        try:
+            subprocess.run(
+                [docker, "compose", "up", "-d", "--build", "--force-recreate"],
+                cwd=self._root,
+                check=True,
+                text=True,
+                env=_docker_env(),
+            )
+            return True
+        except subprocess.CalledProcessError:
+            return False
 
 
 class DockerBootCheck:

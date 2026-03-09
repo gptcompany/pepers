@@ -281,10 +281,37 @@ class EnvConfig:
             )
             console.print("[green]Docker services reconciled with updated ports.[/]")
         except subprocess.CalledProcessError as exc:
+            if self._retry_reconcile_after_conflict(console, docker):
+                return
             console.print(
                 "[yellow]Could not auto-reconcile Docker after port remap.[/]\n"
                 f"[dim]{exc}[/]"
             )
+
+    def _retry_reconcile_after_conflict(self, console: Console, docker: str) -> bool:
+        values = _read_env_values(self._env_path)
+        changed = self._auto_resolve_internal_port_conflicts(values, console)
+        if not changed:
+            return False
+        self._env_path.write_text(
+            "\n".join(f"{k}={v}" for k, v in values.items()) + "\n"
+        )
+        console.print(
+            "[yellow]Docker reported a port bind conflict during reconcile. "
+            "Retrying with a fresh port remap...[/]"
+        )
+        try:
+            subprocess.run(
+                [docker, "compose", "up", "-d", "--build", "--force-recreate"],
+                cwd=self._root,
+                check=True,
+                text=True,
+                env=_docker_env(),
+            )
+            console.print("[green]Docker services reconciled after conflict retry.[/]")
+            return True
+        except subprocess.CalledProcessError:
+            return False
 
 
 def _port_in_use(port: int) -> bool:
