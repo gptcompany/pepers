@@ -945,10 +945,26 @@ class TestMcpConfigStep:
         entry = {
             "type": "stdio",
             "command": "/usr/local/bin/npx",
-            "args": ["-y", "mcp-remote", "--sse", "http://localhost:8786/sse"],
+            "args": ["-y", "mcp-remote", "http://localhost:8786/sse", "--transport", "sse-only"],
             "env": {"PATH": "/usr/local/bin"},
         }
         assert step._entry_matches(entry, "http://localhost:8786/sse") is True
+
+    def test_build_pepers_entry_uses_url_positional_for_desktop_bridge(self):
+        step = McpConfigStep()
+        step._desktop_bridge_cache = ("/usr/local/bin/npx", {"PATH": "/usr/local/bin"})
+        entry = step._build_pepers_entry(
+            url="http://localhost:8786/sse",
+            for_desktop=True,
+        )
+        assert entry["command"] == "/usr/local/bin/npx"
+        assert entry["args"] == [
+            "-y",
+            "mcp-remote",
+            "http://localhost:8786/sse",
+            "--transport",
+            "sse-only",
+        ]
 
     @patch("services.setup._cli_tools.NodeCheck")
     @patch.object(

@@ -263,7 +263,7 @@ class McpConfigStep:
             entry = {
                 "type": "stdio",
                 "command": command,
-                "args": ["-y", "mcp-remote", "--sse", url],
+                "args": ["-y", "mcp-remote", url, "--transport", "sse-only"],
             }
             if env:
                 entry["env"] = env
