@@ -1228,6 +1228,34 @@ class TestAggregatedHealthCheck:
         called_urls = [call.args[0] for call in mock_http.call_args_list]
         assert "http://localhost:8776/sse" in called_urls
 
+    @patch("services.setup._verify._orchestrator_runtime_health")
+    @patch("services.setup._verify._check_http", return_value=True)
+    def test_collect_rows_prefers_orchestrator_view_for_external_services(
+        self,
+        _mock_http,
+        mock_runtime_health,
+    ):
+        mock_runtime_health.return_value = {
+            "external": {
+                "deps": {
+                    "cas": {
+                        "url": "http://host.docker.internal:8760",
+                        "healthy": False,
+                    },
+                },
+            },
+        }
+
+        step = AggregatedHealthCheck()
+        rows, all_ok, internal_ok = step._collect_rows()
+
+        cas_row = next(row for row in rows if row[0] == "CAS Service")
+        assert cas_row[1] == "http://host.docker.internal:8760/health"
+        assert cas_row[2] is False
+        assert "orchestrator cannot reach it" in cas_row[3]
+        assert internal_ok is True
+        assert all_ok is False
+
 
 # ── Runner ───────────────────────────────────────────────────
 

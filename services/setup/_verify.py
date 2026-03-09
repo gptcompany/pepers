@@ -31,6 +31,12 @@ _EXTERNAL = {
     "Ollama": (("RP_CODEGEN_OLLAMA_URL", "RP_OLLAMA_URL"), "http://localhost:11434", "/"),
 }
 
+_EXTERNAL_RUNTIME_KEYS = {
+    "CAS Service": "cas",
+    "RAG Service": "rag",
+    "Ollama": "ollama",
+}
+
 
 def _env_first(keys: tuple[str, ...], default: str) -> str:
     env_file_values = _read_env_file()
@@ -88,6 +94,33 @@ def _check_http(
         return False
 
 
+def _orchestrator_runtime_health() -> dict | None:
+    """Return orchestrator /status/services when reachable.
+
+    This reflects the container-side view of internal/external dependencies and
+    is more authoritative than host-only localhost probes when PePeRS runs in
+    Docker and host ports may be forwarded or proxied.
+    """
+    env_file_values = _read_env_file()
+    raw_port = (
+        os.environ.get("RP_ORCHESTRATOR_PORT")
+        or env_file_values.get("RP_ORCHESTRATOR_PORT")
+        or str(SERVICE_PORTS["orchestrator"])
+    )
+    try:
+        port = int(raw_port)
+    except (TypeError, ValueError):
+        port = SERVICE_PORTS["orchestrator"]
+    url = f"http://localhost:{port}/status/services"
+    try:
+        resp = requests.get(url, timeout=4)
+        resp.raise_for_status()
+        data = resp.json()
+    except (requests.RequestException, ValueError):
+        return None
+    return data if isinstance(data, dict) else None
+
+
 def _discover_cas_details(base_url: str) -> str:
     """Query CAS /engines to get engine names and count."""
     try:
@@ -132,6 +165,7 @@ class AggregatedHealthCheck:
         all_ok = True
         internal_ok = True
         env_file_values = _read_env_file()
+        runtime_health = _orchestrator_runtime_health()
 
         for svc_name, port in SERVICE_PORTS.items():
             env_key = f"RP_{svc_name.upper()}_PORT"
@@ -162,20 +196,45 @@ class AggregatedHealthCheck:
 
         for name, (env_keys, default_url, path) in _EXTERNAL.items():
             base = _env_first(env_keys, default_url)
-            url = base.rstrip("/") + path
+            host_url = base.rstrip("/") + path
             expected = None
             if name == "CAS Service":
                 expected = "cas"
             elif name == "RAG Service":
                 expected = "rag"
-            ok = _check_http(url, expected_service=expected)
+
+            host_ok = _check_http(host_url, expected_service=expected)
+            ok = host_ok
+            display_url = host_url
+            detail_parts: list[str] = []
+
+            runtime_dep = None
+            if runtime_health:
+                runtime_dep = (
+                    (runtime_health.get("external") or {}).get("deps") or {}
+                ).get(_EXTERNAL_RUNTIME_KEYS[name])
+            if isinstance(runtime_dep, dict):
+                runtime_base = str(runtime_dep.get("url") or base).rstrip("/")
+                display_url = runtime_base + path
+                runtime_ok = bool(runtime_dep.get("healthy"))
+                ok = runtime_ok
+                if host_ok and not runtime_ok:
+                    detail_parts.append("host OK, orchestrator cannot reach it")
+                elif runtime_ok and not host_ok:
+                    detail_parts.append("orchestrator OK, host probe failed")
+
             details = ""
             if ok:
-                if name == "CAS Service":
-                    details = _discover_cas_details(base.rstrip("/"))
-                elif name == "RAG Service":
-                    details = _discover_rag_details(base.rstrip("/"))
-            rows.append((name, url, ok, details))
+                extra = ""
+                if host_ok:
+                    if name == "CAS Service":
+                        extra = _discover_cas_details(base.rstrip("/"))
+                    elif name == "RAG Service":
+                        extra = _discover_rag_details(base.rstrip("/"))
+                if extra:
+                    detail_parts.append(extra)
+            details = "; ".join(part for part in detail_parts if part)
+            rows.append((name, display_url, ok, details))
             if not ok:
                 all_ok = False
 
