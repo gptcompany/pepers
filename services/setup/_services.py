@@ -307,6 +307,65 @@ class ExternalServiceCheck:
             )
         return None
 
+    def _suggest_clean_local_url(self, base_url: str) -> str | None:
+        parsed = urlparse(base_url.rstrip("/"))
+        host = (parsed.hostname or "").strip().lower()
+        port = parsed.port
+        if host not in {"localhost", "127.0.0.1"} or port is None:
+            return None
+
+        try:
+            from services.setup._config import _find_next_free_port, _port_in_use
+        except Exception:
+            return None
+
+        default_port = urlparse(self._svc["default_url"]).port
+        reserved: set[int] = set()
+
+        def candidate_url(candidate_port: int) -> str:
+            scheme = parsed.scheme or "http"
+            return f"{scheme}://localhost:{candidate_port}"
+
+        for candidate in (default_port, port + 1):
+            if candidate is None or candidate <= 0:
+                continue
+            reserved.add(candidate)
+            url = candidate_url(candidate)
+            if self._probe_effective(url, strict_identity=True):
+                return url
+            if not _port_in_use(candidate):
+                return url
+
+        start = max(1024, (default_port or port) + 1, port + 1)
+        try:
+            clean_port = _find_next_free_port(start, reserved)
+        except RuntimeError:
+            return None
+        return candidate_url(clean_port)
+
+    def _auto_rehome_host_only_url(
+        self,
+        console: Console,
+        *,
+        preferred_url: str | None = None,
+    ) -> bool:
+        base_url = preferred_url or self._active_url or self._url()
+        warning = self._host_only_warning(base_url)
+        if not warning:
+            return False
+
+        clean_url = self._suggest_clean_local_url(base_url)
+        if not clean_url or clean_url.rstrip("/") == base_url.rstrip("/"):
+            return False
+
+        console.print(f"[yellow]{warning}[/]")
+        console.print(
+            f"[cyan]Switching {self.name} to a clean local target: {clean_url}[/]"
+        )
+        self._active_url = clean_url
+        self._persist_url(clean_url, console)
+        return True
+
     def _discovery_candidates(self) -> list[str]:
         candidates: list[str] = []
 
@@ -579,14 +638,13 @@ class ExternalServiceCheck:
 
     def _install_guided(self, console: Console) -> bool:
         current_url = self._url()
+        if self._auto_rehome_host_only_url(console, preferred_url=current_url):
+            current_url = self._url()
         if self._probe_effective(current_url, strict_identity=True):
             console.print(f"[green]{self.name} is reachable at {current_url}[/]")
             return True
 
         console.print(f"[yellow]{self.name} is not reachable at {current_url}[/]")
-        host_only_warning = self._host_only_warning(current_url)
-        if host_only_warning:
-            console.print(f"[yellow]{host_only_warning}[/]")
         while True:
             action = _ask_select_safe(
                 f"How should setup proceed for {self.name}?",
@@ -618,6 +676,8 @@ class ExternalServiceCheck:
                     self._persist_url(default_url, console)
                 else:
                     self._set_runtime_url(default_url)
+                if self._auto_rehome_host_only_url(console, preferred_url=default_url):
+                    continue
                 if self._probe_effective(default_url, strict_identity=True):
                     return True
                 console.print(
@@ -649,6 +709,8 @@ class ExternalServiceCheck:
                     continue
                 custom = self._normalize_user_url(raw)
                 self._active_url = custom
+                if self._auto_rehome_host_only_url(console, preferred_url=custom):
+                    continue
                 if self._probe_effective(custom, strict_identity=True):
                     if _ask_confirm_safe(
                         f"Save {custom} to .env?",
@@ -661,9 +723,6 @@ class ExternalServiceCheck:
                 console.print(
                     f"[yellow]{self.name} not reachable at {custom}{self._svc['health_path']}[/]"
                 )
-                custom_warning = self._host_only_warning(custom)
-                if custom_warning:
-                    console.print(f"[yellow]{custom_warning}[/]")
                 if _ask_confirm_safe(
                     f"Keep {custom} as target URL for next install/start attempt and save to .env?",
                     default=True,

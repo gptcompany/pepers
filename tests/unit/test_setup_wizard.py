@@ -760,6 +760,49 @@ class TestExternalServiceCheck:
             assert step.check() is False
         assert "host.docker.internal:8760" in step._host_only_warning("http://localhost:8760")
 
+    @patch("services.setup._config._port_in_use", side_effect=lambda port: port == 8760)
+    @patch.object(ExternalServiceCheck, "_probe_effective", return_value=False)
+    def test_suggest_clean_local_url_prefers_default_port_when_free(
+        self,
+        _mock_probe_effective,
+        _mock_port_in_use,
+    ):
+        svc = {
+            "name": "CAS Service",
+            "env_urls": ["RP_VALIDATOR_CAS_URL", "RP_CAS_URL"],
+            "default_url": "http://localhost:8769",
+            "health_path": "/health",
+            "setup_hint": "Install test service",
+        }
+        step = ExternalServiceCheck(svc)
+        assert step._suggest_clean_local_url("http://localhost:8760") == "http://localhost:8769"
+
+    @patch.object(ExternalServiceCheck, "_persist_url")
+    @patch.object(ExternalServiceCheck, "_suggest_clean_local_url", return_value="http://localhost:8769")
+    @patch.object(
+        ExternalServiceCheck,
+        "_host_only_warning",
+        return_value="CAS Service responds on the host but not from containers.",
+    )
+    def test_auto_rehome_host_only_url_persists_clean_target(
+        self,
+        _mock_warning,
+        _mock_suggest,
+        mock_persist,
+    ):
+        svc = {
+            "name": "CAS Service",
+            "env_urls": ["RP_VALIDATOR_CAS_URL", "RP_CAS_URL"],
+            "default_url": "http://localhost:8769",
+            "health_path": "/health",
+            "setup_hint": "Install test service",
+        }
+        step = ExternalServiceCheck(svc)
+        console = MagicMock()
+        assert step._auto_rehome_host_only_url(console, preferred_url="http://localhost:8760") is True
+        assert step._active_url == "http://localhost:8769"
+        mock_persist.assert_called_once_with("http://localhost:8769", console)
+
     def test_external_service_constants_are_aligned(self):
         by_name = {svc["name"]: svc for svc in _EXTERNAL_SERVICES}
         assert by_name["CAS Service"]["env_urls"][0] == "RP_VALIDATOR_CAS_URL"
