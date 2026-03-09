@@ -1,7 +1,7 @@
 """PePeRS Setup Wizard -- CLI entry point.
 
 Usage:
-    pepers-setup              # step-by-step (default)
+    pepers-setup              # choose mode (default)
     pepers-setup easy         # same as above
     pepers-setup walkthrough  # linear, step-by-step prompts
     pepers-setup guided       # interactive menu (all steps)
@@ -53,7 +53,7 @@ def _print_usage(console: Console) -> None:
         markup=False,
     )
     console.print(
-        "[dim]  (default)  walkthrough — step-by-step prompts\n"
+        "[dim]  (default)  choose — select quick / walkthrough / guided\n"
         "  --non-interactive quick start (no prompts)\n"
         "  guided     interactive menu with free navigation\n"
         "  walkthrough step-by-step prompts (linear)\n"
@@ -234,7 +234,7 @@ def main(argv: list[str] | None = None) -> int:
         command = "easy"
         args = [a for a in args if a != "--non-interactive"]
     else:
-        command = args[0] if args else "walkthrough"
+        command = args[0] if args else "choose"
     if not sys.stdin.isatty() and command in {"walkthrough", "choose"}:
         command = "easy"
     if command in {"-h", "--help", "help"}:

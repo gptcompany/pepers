@@ -104,7 +104,7 @@ Default local ports: `:8770-:8776` (override in `.env`).
 ```bash
 git clone https://github.com/gptcompany/pepers.git
 cd pepers
-./pepers-setup        # Step-by-step by default (auto-bootstrap)
+./pepers-setup        # Choose mode first (quick / walkthrough / guided)
 # use --non-interactive for quick start
 # or: ./pepers-setup --non-interactive
 ```
@@ -115,7 +115,8 @@ It also includes an explicit MCP target selection step for `Claude Code`, `Claud
 Subcommands: `pepers-setup easy | walkthrough | guided | check | config | services | docker | verify`
 
 When to use each mode:
-- `walkthrough` (default): linear setup from top to bottom.
+- `choose` (default): select mode at startup.
+- `walkthrough`: linear setup from top to bottom.
 - `guided`: interactive menu for reconfiguration (edit existing settings, rerun specific steps, or partial updates).
 
 Optional (global command from any folder):
