@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import os
 import shutil
 import subprocess
 import time
@@ -9,7 +10,15 @@ from platform import system
 from pathlib import Path
 from pathlib import Path
 
+import requests
 from rich.console import Console
+
+from shared.config import SERVICE_PORTS
+
+
+_INTERNAL_HEALTH_PATHS = {
+    "mcp": "/sse",
+}
 
 
 class DockerCheck:
@@ -150,9 +159,28 @@ class DockerComposeUp:
                 capture_output=True,
                 text=True,
             )
-            return result.returncode == 0 and len(result.stdout.strip()) > 0
+            has_running_stack = result.returncode == 0 and len(result.stdout.strip()) > 0
+            if not has_running_stack:
+                return False
+            # Treat step as not-ready if internal PePeRS endpoints are down,
+            # so guided "Run all pending" can restart compose services.
+            return self._internal_services_healthy()
         except (subprocess.CalledProcessError, FileNotFoundError):
             return False
+
+    def _internal_services_healthy(self) -> bool:
+        for svc_name, port in SERVICE_PORTS.items():
+            env_key = f"RP_{svc_name.upper()}_PORT"
+            actual_port = int(os.environ.get(env_key, str(port)))
+            path = _INTERNAL_HEALTH_PATHS.get(svc_name, "/health")
+            url = f"http://localhost:{actual_port}{path}"
+            try:
+                resp = requests.get(url, timeout=2)
+                if resp.status_code >= 500:
+                    return False
+            except (requests.ConnectionError, requests.Timeout):
+                return False
+        return True
 
     def install(self, console: Console) -> bool:
         compose = self._compose_file()

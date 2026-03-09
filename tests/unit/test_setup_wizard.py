@@ -261,8 +261,9 @@ class TestDockerComposeCheck:
         assert step.install(MagicMock()) is True
         assert step.verify() is True
 
+    @patch("services.setup._docker.DockerComposeUp._internal_services_healthy", return_value=True)
     @patch("subprocess.run")
-    def test_check_passes_running(self, mock_run, tmp_path):
+    def test_check_passes_running(self, mock_run, _mock_health, tmp_path):
         (tmp_path / "compose.yml").touch()
         mock_run.return_value = MagicMock(returncode=0, stdout='{"Status": "running"}')
         step = DockerComposeUp(tmp_path)
