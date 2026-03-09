@@ -971,6 +971,26 @@ class TestRunner:
         step.install.assert_not_called()
         step.verify.assert_called_once()
 
+    def test_force_run_configured_step_without_verify_uses_check(self):
+        from services.setup._runner import _run_single_step
+
+        class LegacyStep:
+            name = "Legacy"
+            description = "Legacy step"
+
+            def check(self):
+                return True
+
+            def install(self, _console):
+                raise RuntimeError("should not install")
+
+        console = MagicMock()
+        console.status.return_value.__enter__ = MagicMock()
+        console.status.return_value.__exit__ = MagicMock()
+
+        status = _run_single_step(LegacyStep(), console, force_run=True)
+        assert status == "ok"
+
 
 # ── CLI main() ────────────────────────────────────────────────
 

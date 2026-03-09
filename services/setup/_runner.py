@@ -28,6 +28,23 @@ class SetupStep(Protocol):
         ...
 
 
+def _safe_verify(step: SetupStep) -> bool:
+    verify_fn = getattr(step, "verify", None)
+    if callable(verify_fn):
+        try:
+            return bool(verify_fn())
+        except Exception:
+            return False
+    # Backward compatibility for steps that only implement check()
+    check_fn = getattr(step, "check", None)
+    if callable(check_fn):
+        try:
+            return bool(check_fn())
+        except Exception:
+            return False
+    return False
+
+
 def _print_step_help(step: SetupStep, console: Console) -> None:
     if hasattr(step, "help") and callable(getattr(step, "help")):
         try:
@@ -54,7 +71,7 @@ def _run_single_step(step: SetupStep, console: Console, *, force_run: bool = Fal
             f"  [green]\u2705 {step.name}[/] \u2014 already configured "
             "(verifying by user request)"
         )
-        if step.verify():
+        if _safe_verify(step):
             console.print(f"  [green]\u2705 {step.name}[/] \u2014 verified!")
             return "ok"
         console.print(
@@ -111,7 +128,7 @@ def _run_single_step(step: SetupStep, console: Console, *, force_run: bool = Fal
                 break
             return "skipped"
 
-    if step.verify():
+    if _safe_verify(step):
         console.print(f"  [green]\u2705 {step.name}[/] \u2014 verified!")
         return "ok"
     console.print(
@@ -155,7 +172,7 @@ def run_interactive_menu(steps: list[SetupStep], console: Console) -> bool:
                 statuses.append((step, "pending"))
                 continue
             try:
-                verified = step.verify()
+                verified = _safe_verify(step)
             except Exception:
                 verified = False
             statuses.append((step, "ok" if verified else "warn"))
@@ -203,7 +220,7 @@ def run_interactive_menu(steps: list[SetupStep], console: Console) -> bool:
             final.append((step.name, "pending"))
             continue
         try:
-            verified = step.verify()
+            verified = _safe_verify(step)
         except Exception:
             verified = False
         final.append((step.name, "ok" if verified else "warn"))
