@@ -70,6 +70,14 @@ class McpConfigStep:
         except Exception:
             questionary = None
 
+        if not self._health_gate_ok():
+            console.print(
+                "[yellow]PePeRS health is not green yet.[/]\n"
+                "Run Docker reconcile and the aggregated health check first, "
+                "then configure MCP clients."
+            )
+            return False
+
         port = self._resolved_mcp_port()
         url = f"http://localhost:{port}/sse"
         target_paths: list[Path]
@@ -180,6 +188,13 @@ class McpConfigStep:
         if errors:
             console.print("[yellow]Could not update any Claude configuration files.[/]")
         return False
+
+    def _health_gate_ok(self) -> bool:
+        try:
+            from services.setup._verify import AggregatedHealthCheck
+        except Exception:
+            return False
+        return AggregatedHealthCheck().verify()
 
     def _ensure_npx_for_desktop(self, console: Console) -> bool:
         if shutil.which("npx") is not None:

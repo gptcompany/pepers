@@ -244,7 +244,9 @@ class EnvConfig:
             exp = expected_service.get(key, "")
             in_use = _port_in_use(chosen)
             expected_ok = _is_expected_service_on_port(chosen, exp)
-            if chosen in used_in_config or (in_use and not expected_ok):
+            owned_by_compose = self._compose_service_owns_port(exp, chosen)
+            safe_existing_listener = expected_ok and owned_by_compose
+            if chosen in used_in_config or (in_use and not safe_existing_listener):
                 chosen = _find_next_free_port(max(1024, requested + 1), used_in_config)
             used_in_config.add(chosen)
             if chosen != requested:
@@ -256,6 +258,37 @@ class EnvConfig:
                 console.print(f"[dim]- {key}: {old} -> {new}[/]")
             return True
         return False
+
+    def _compose_service_owns_port(self, service_name: str, port: int) -> bool:
+        if not service_name:
+            return False
+        if not any(
+            (self._root / name).exists()
+            for name in ("docker-compose.yml", "docker-compose.yaml", "compose.yml", "compose.yaml")
+        ):
+            return False
+        docker = _docker_bin()
+        if docker is None:
+            return False
+        try:
+            result = subprocess.run(
+                [docker, "compose", "port", service_name, str(port)],
+                cwd=self._root,
+                check=True,
+                capture_output=True,
+                text=True,
+                env=_docker_env(),
+            )
+        except (subprocess.CalledProcessError, FileNotFoundError):
+            return False
+        output = result.stdout.strip()
+        if not output:
+            return False
+        return any(
+            line.rsplit(":", 1)[-1].strip() == str(port)
+            for line in output.splitlines()
+            if ":" in line
+        )
 
     def _reconcile_services_after_port_change(self, console: Console) -> None:
         compose_file = self._root / "docker-compose.yml"
@@ -289,29 +322,31 @@ class EnvConfig:
             )
 
     def _retry_reconcile_after_conflict(self, console: Console, docker: str) -> bool:
-        values = _read_env_values(self._env_path)
-        changed = self._auto_resolve_internal_port_conflicts(values, console)
-        if not changed:
-            return False
-        self._env_path.write_text(
-            "\n".join(f"{k}={v}" for k, v in values.items()) + "\n"
-        )
-        console.print(
-            "[yellow]Docker reported a port bind conflict during reconcile. "
-            "Retrying with a fresh port remap...[/]"
-        )
-        try:
-            subprocess.run(
-                [docker, "compose", "up", "-d", "--build", "--force-recreate"],
-                cwd=self._root,
-                check=True,
-                text=True,
-                env=_docker_env(),
+        for attempt in range(1, 6):
+            values = _read_env_values(self._env_path)
+            changed = self._auto_resolve_internal_port_conflicts(values, console)
+            if not changed:
+                return False
+            self._env_path.write_text(
+                "\n".join(f"{k}={v}" for k, v in values.items()) + "\n"
             )
-            console.print("[green]Docker services reconciled after conflict retry.[/]")
-            return True
-        except subprocess.CalledProcessError:
-            return False
+            console.print(
+                "[yellow]Docker reported a port bind conflict during reconcile. "
+                f"Retrying with a fresh port remap (attempt {attempt}/5)...[/]"
+            )
+            try:
+                subprocess.run(
+                    [docker, "compose", "up", "-d", "--build", "--force-recreate"],
+                    cwd=self._root,
+                    check=True,
+                    text=True,
+                    env=_docker_env(),
+                )
+                console.print("[green]Docker services reconciled after conflict retry.[/]")
+                return True
+            except subprocess.CalledProcessError:
+                continue
+        return False
 
 
 def _port_in_use(port: int) -> bool:

@@ -307,6 +307,25 @@ class TestDockerComposeCheck:
         assert step.install(MagicMock()) is True
         mock_retry.assert_called_once()
 
+    @patch("services.setup._docker.subprocess.run")
+    @patch.object(EnvConfig, "_auto_resolve_internal_port_conflicts", side_effect=[True, True])
+    def test_retry_after_port_conflict_can_retry_multiple_times(
+        self,
+        _mock_remap,
+        mock_run,
+        tmp_path,
+    ):
+        env_path = tmp_path / ".env"
+        env_path.write_text("RP_MCP_PORT=8776\n")
+        mock_run.side_effect = [
+            subprocess.CalledProcessError(1, "docker"),
+            MagicMock(returncode=0),
+        ]
+        step = DockerComposeUp(tmp_path)
+
+        assert step._retry_after_port_conflict(MagicMock(), "/usr/bin/docker") is True
+        assert mock_run.call_count == 2
+
     @patch("subprocess.run", side_effect=subprocess.CalledProcessError(1, "docker"))
     def test_install_fails_on_error(self, mock_run, tmp_path):
         (tmp_path / "compose.yml").touch()
@@ -601,6 +620,60 @@ class TestEnvConfig:
         assert step.install(console) is True
         mock_reconcile.assert_called_once()
 
+    @patch.object(EnvConfig, "_compose_service_owns_port", return_value=False)
+    @patch("services.setup._config._is_expected_service_on_port", return_value=True)
+    @patch("services.setup._config._port_in_use")
+    def test_auto_resolve_remaps_expected_service_port_when_not_owned_by_compose(
+        self,
+        mock_port_in_use,
+        _mock_expected,
+        _mock_owned,
+        tmp_path,
+    ):
+        mock_port_in_use.side_effect = lambda port: port == 8776
+        step = EnvConfig(tmp_path)
+        values = {
+            "RP_DISCOVERY_PORT": "8770",
+            "RP_ANALYZER_PORT": "8771",
+            "RP_EXTRACTOR_PORT": "8772",
+            "RP_VALIDATOR_PORT": "8773",
+            "RP_CODEGEN_PORT": "8774",
+            "RP_ORCHESTRATOR_PORT": "8775",
+            "RP_MCP_PORT": "8776",
+        }
+
+        changed = step._auto_resolve_internal_port_conflicts(values, MagicMock())
+
+        assert changed is True
+        assert values["RP_MCP_PORT"] == "8777"
+
+    @patch.object(EnvConfig, "_compose_service_owns_port", return_value=True)
+    @patch("services.setup._config._is_expected_service_on_port", return_value=True)
+    @patch("services.setup._config._port_in_use")
+    def test_auto_resolve_keeps_expected_service_port_when_owned_by_compose(
+        self,
+        mock_port_in_use,
+        _mock_expected,
+        _mock_owned,
+        tmp_path,
+    ):
+        mock_port_in_use.side_effect = lambda port: port == 8776
+        step = EnvConfig(tmp_path)
+        values = {
+            "RP_DISCOVERY_PORT": "8770",
+            "RP_ANALYZER_PORT": "8771",
+            "RP_EXTRACTOR_PORT": "8772",
+            "RP_VALIDATOR_PORT": "8773",
+            "RP_CODEGEN_PORT": "8774",
+            "RP_ORCHESTRATOR_PORT": "8775",
+            "RP_MCP_PORT": "8776",
+        }
+
+        changed = step._auto_resolve_internal_port_conflicts(values, MagicMock())
+
+        assert changed is False
+        assert values["RP_MCP_PORT"] == "8776"
+
 
 # ── ExternalServiceCheck ─────────────────────────────────────
 
@@ -825,7 +898,18 @@ class TestExternalServicePersistenceCheck:
 # ── MCP config ───────────────────────────────────────────────
 
 class TestMcpConfigStep:
-    def test_install_writes_claude_config_and_verify_passes(self, tmp_path):
+    @patch.object(AggregatedHealthCheck, "verify", return_value=False)
+    def test_install_requires_green_health_before_writing_config(self, _mock_verify, tmp_path):
+        step = McpConfigStep()
+        console = MagicMock()
+        config_path = tmp_path / ".claude.json"
+
+        with patch("services.setup._mcp_config.Path.home", return_value=tmp_path):
+            assert step.install(console) is False
+            assert not config_path.exists()
+
+    @patch.object(AggregatedHealthCheck, "verify", return_value=True)
+    def test_install_writes_claude_config_and_verify_passes(self, _mock_verify, tmp_path):
         step = McpConfigStep()
         console = MagicMock()
         config_path = tmp_path / ".claude.json"
@@ -840,7 +924,8 @@ class TestMcpConfigStep:
             assert data["mcpServers"]["pepers"]["url"] == "http://localhost:8776/sse"
             assert step.verify() is True
 
-    def test_install_skips_invalid_json_if_other_target_is_writable(self, tmp_path):
+    @patch.object(AggregatedHealthCheck, "verify", return_value=True)
+    def test_install_skips_invalid_json_if_other_target_is_writable(self, _mock_verify, tmp_path):
         step = McpConfigStep()
         console = MagicMock()
         bad = tmp_path / ".claude.json"
@@ -1188,3 +1273,5 @@ class TestSetupMainCli:
         steps = setup_main._all_steps(tmp_path)
         assert isinstance(steps, list)
         assert len(steps) > 0
+        assert steps[-2].name == "Aggregated health check"
+        assert steps[-1].name == "MCP Server -> Claude Code/Desktop"

@@ -55,7 +55,8 @@ class DockerCheck:
         )
         if system() == "Darwin":
             console.print(
-                "[dim]On macOS: install Docker Desktop and launch it once.[/]"
+                "[dim]On macOS: install a Docker-compatible runtime "
+                "(Docker Desktop, OrbStack, Colima, Rancher Desktop) and launch it once.[/]"
             )
         return False
 
@@ -86,11 +87,12 @@ class DockerComposeCheck:
     def install(self, console: Console) -> bool:
         console.print(
             "[yellow]docker compose not available.[/]\n"
-            "Ensure Docker Desktop or docker-compose-plugin is installed."
+            "Ensure a Docker-compatible runtime and the compose subcommand are installed."
         )
         if system() == "Darwin":
             console.print(
-                "[dim]On macOS: Docker Compose is bundled with Docker Desktop.[/]"
+                "[dim]On macOS: Docker Compose usually comes from Docker Desktop, "
+                "OrbStack, Rancher Desktop, or a Colima-based Docker CLI install.[/]"
             )
         return False
 
@@ -261,27 +263,29 @@ class DockerComposeUp:
             from services.setup._config import EnvConfig, _read_env_values
         except Exception:
             return False
-        values = _read_env_values(env_path)
         step = EnvConfig(self._root)
-        changed = step._auto_resolve_internal_port_conflicts(values, console)
-        if not changed:
-            return False
-        env_path.write_text("\n".join(f"{k}={v}" for k, v in values.items()) + "\n")
-        console.print(
-            "[yellow]Docker reported a port bind conflict. "
-            "Retrying with a fresh automatic port remap...[/]"
-        )
-        try:
-            subprocess.run(
-                [docker, "compose", "up", "-d", "--build", "--force-recreate"],
-                cwd=self._root,
-                check=True,
-                text=True,
-                env=_docker_env(),
+        for attempt in range(1, 6):
+            values = _read_env_values(env_path)
+            changed = step._auto_resolve_internal_port_conflicts(values, console)
+            if not changed:
+                return False
+            env_path.write_text("\n".join(f"{k}={v}" for k, v in values.items()) + "\n")
+            console.print(
+                "[yellow]Docker reported a port bind conflict. "
+                f"Retrying with a fresh automatic port remap (attempt {attempt}/5)...[/]"
             )
-            return True
-        except subprocess.CalledProcessError:
-            return False
+            try:
+                subprocess.run(
+                    [docker, "compose", "up", "-d", "--build", "--force-recreate"],
+                    cwd=self._root,
+                    check=True,
+                    text=True,
+                    env=_docker_env(),
+                )
+                return True
+            except subprocess.CalledProcessError:
+                continue
+        return False
 
 
 class DockerBootCheck:
