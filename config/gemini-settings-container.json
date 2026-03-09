@@ -1,0 +1,15 @@
+{
+  "security": {
+    "auth": {
+      "selectedType": "oauth-personal"
+    }
+  },
+  "model": {
+    "name": "auto-gemini-3"
+  },
+  "mcp": {
+    "allowed": [],
+    "enableAllProjectMcpServers": false
+  },
+  "mcpServers": {}
+}
