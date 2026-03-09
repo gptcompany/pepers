@@ -1050,22 +1050,50 @@ class TestAggregatedHealthCheck:
         assert passed_values["RP_MCP_PORT"] == "8776"
         mock_reconcile.assert_called_once()
 
+    @patch.object(
+        AggregatedHealthCheck,
+        "_wait_for_internal_services",
+        return_value=([("Discovery", "http://localhost:8780/health", True, ":8780")], True, True),
+    )
+    @patch.object(AggregatedHealthCheck, "_maybe_auto_remap_internal_ports", return_value=False)
     @patch.object(AggregatedHealthCheck, "_maybe_auto_reconcile_internal_services", return_value=True)
     @patch.object(AggregatedHealthCheck, "_collect_rows")
     def test_install_auto_reconciles_when_internal_services_are_down(
         self,
         mock_collect,
         mock_reconcile,
+        _mock_remap,
+        mock_wait,
     ):
-        mock_collect.side_effect = [
-            ([("Discovery", "http://localhost:8770/health", False, ":8770")], False, False),
-            ([("Discovery", "http://localhost:8780/health", True, ":8780")], True, True),
-        ]
+        mock_collect.return_value = (
+            [("Discovery", "http://localhost:8770/health", False, ":8770")],
+            False,
+            False,
+        )
         step = AggregatedHealthCheck()
         console = MagicMock()
         assert step.install(console) is True
         mock_reconcile.assert_called_once_with(console)
-        assert mock_collect.call_count == 2
+        mock_wait.assert_called_once()
+
+    @patch.object(AggregatedHealthCheck, "_maybe_auto_reconcile_internal_services")
+    @patch.object(
+        AggregatedHealthCheck,
+        "_wait_for_internal_services",
+        return_value=([("Discovery", "http://localhost:8770/health", True, ":8770")], True, True),
+    )
+    @patch.object(AggregatedHealthCheck, "_maybe_auto_remap_internal_ports", return_value=True)
+    def test_install_waits_after_port_remap_before_triggering_second_reconcile(
+        self,
+        _mock_remap,
+        mock_wait,
+        mock_reconcile,
+    ):
+        step = AggregatedHealthCheck()
+        console = MagicMock()
+        assert step.install(console) is True
+        mock_wait.assert_called_once()
+        mock_reconcile.assert_not_called()
 
     def test_verify_constants_keep_legacy_fallbacks(self):
         cas_envs, _, _ = _EXTERNAL["CAS Service"]

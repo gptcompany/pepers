@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import os
+import time
 from dataclasses import dataclass, field
 from enum import Enum
 from pathlib import Path
@@ -193,13 +194,22 @@ class AggregatedHealthCheck:
         console.print(table)
 
     def install(self, console: Console) -> bool:
-        self._maybe_auto_remap_internal_ports(console)
-        rows, all_ok, internal_ok = self._collect_rows()
+        ports_changed = self._maybe_auto_remap_internal_ports(console)
+        if ports_changed:
+            console.print(
+                "[cyan]Waiting for remapped PePeRS services to settle before re-checking...[/]"
+            )
+            rows, all_ok, internal_ok = self._wait_for_internal_services()
+        else:
+            rows, all_ok, internal_ok = self._collect_rows()
         if not internal_ok and self._maybe_auto_reconcile_internal_services(console):
+            console.print(
+                "[cyan]Waiting for Docker-reconciled PePeRS services to settle...[/]"
+            )
+            rows, all_ok, internal_ok = self._wait_for_internal_services()
             console.print(
                 "[cyan]Re-checking PePeRS service health after Docker reconcile...[/]"
             )
-            rows, all_ok, internal_ok = self._collect_rows()
 
         self._print_rows(console, rows)
 
@@ -221,15 +231,15 @@ class AggregatedHealthCheck:
         self._last_all_ok = all_ok
         return all_ok
 
-    def _maybe_auto_remap_internal_ports(self, console: Console) -> None:
+    def _maybe_auto_remap_internal_ports(self, console: Console) -> bool:
         try:
             from services.setup._config import EnvConfig, _read_env_values
         except Exception:
-            return
+            return False
         root = Path.cwd()
         env_path = root / ".env"
         if not env_path.exists():
-            return
+            return False
         values = _read_env_values(env_path)
         for svc_name, port in SERVICE_PORTS.items():
             env_key = f"RP_{svc_name.upper()}_PORT"
@@ -237,12 +247,28 @@ class AggregatedHealthCheck:
         step = EnvConfig(root)
         changed = step._auto_resolve_internal_port_conflicts(values, console)
         if not changed:
-            return
+            return False
         env_path.write_text("\n".join(f"{k}={v}" for k, v in values.items()) + "\n")
         console.print(
             "[cyan]Updated .env with remapped internal ports before health verification.[/]"
         )
         step._reconcile_services_after_port_change(console)
+        return True
+
+    def _wait_for_internal_services(
+        self,
+        timeout_s: float = 12.0,
+        interval_s: float = 1.0,
+    ) -> tuple[list[tuple[str, str, bool, str]], bool, bool]:
+        deadline = time.time() + timeout_s
+        latest = self._collect_rows()
+        while time.time() < deadline:
+            latest = self._collect_rows()
+            _rows, _all_ok, internal_ok = latest
+            if internal_ok:
+                break
+            time.sleep(interval_s)
+        return latest
 
     def _maybe_auto_reconcile_internal_services(self, console: Console) -> bool:
         try:
