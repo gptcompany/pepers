@@ -108,6 +108,14 @@ class McpConfigStep:
 
         for config_path in target_paths:
             is_desktop = config_path == desktop_path
+            if is_desktop and shutil.which("npx") is None:
+                msg = (
+                    "Claude Desktop MCP bridge requires 'npx' "
+                    "(Node.js/npm not detected)."
+                )
+                console.print(f"[yellow]{msg} Skipping Desktop config.[/]")
+                errors.append(msg)
+                continue
             if config_path.exists():
                 try:
                     text = config_path.read_text()
