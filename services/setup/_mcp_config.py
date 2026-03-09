@@ -13,8 +13,9 @@ from rich.console import Console
 
 
 class McpConfigStep:
-    name = "MCP Server -> Claude Desktop"
-    description = "Register PePeRS MCP server in Claude config"
+    name = "MCP Server -> Claude Code/Desktop"
+    description = "Register PePeRS MCP server in selected Claude clients"
+    auto_reconcile_when_configured = True
 
     def _config_paths(self) -> list[Path]:
         """Return candidate Claude config paths (Code + Desktop)."""
@@ -27,6 +28,15 @@ class McpConfigStep:
         elif platform.system() == "Linux":
             paths.append(home / ".config" / "Claude" / "claude_desktop_config.json")
         return paths
+
+    def _code_config_path(self) -> Path:
+        return Path.home() / ".claude.json"
+
+    def _desktop_config_path(self) -> Path:
+        home = Path.home()
+        if platform.system() == "Darwin":
+            return home / "Library" / "Application Support" / "Claude" / "claude_desktop_config.json"
+        return home / ".config" / "Claude" / "claude_desktop_config.json"
 
     def check(self) -> bool:
         port = os.environ.get("RP_MCP_PORT", "8776")
@@ -55,10 +65,44 @@ class McpConfigStep:
         return existing_count > 0 and valid_count > 0
 
     def install(self, console: Console) -> bool:
+        try:
+            import questionary
+        except Exception:
+            questionary = None
+
         port = os.environ.get("RP_MCP_PORT", "8776")
         url = f"http://localhost:{port}/sse"
-        cli_ok = self._install_with_claude_cli(console, url)
-        target_paths = self._config_paths()
+        target_paths: list[Path]
+
+        code_path = self._code_config_path()
+        desktop_path = self._desktop_config_path()
+        if questionary is None:
+            target_paths = self._config_paths()
+            want_code = True
+        else:
+            choices = [
+                questionary.Choice("Claude Code", value="code", checked=True),
+                questionary.Choice("Claude Desktop", value="desktop", checked=True),
+            ]
+            try:
+                selected = questionary.checkbox(
+                    "Select Claude clients to configure MCP:",
+                    choices=choices,
+                ).ask()
+            except EOFError:
+                selected = ["code", "desktop"]
+            if not selected:
+                console.print("[yellow]No client selected, skipping MCP configuration.[/]")
+                return False
+            want_code = "code" in selected
+            want_desktop = "desktop" in selected
+            target_paths = []
+            if want_code:
+                target_paths.append(code_path)
+            if want_desktop:
+                target_paths.append(desktop_path)
+
+        cli_ok = self._install_with_claude_cli(console, url) if want_code else False
         updated_paths: list[Path] = []
         errors: list[str] = []
 
