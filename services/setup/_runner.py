@@ -40,7 +40,7 @@ def _print_step_help(step: SetupStep, console: Console) -> None:
         console.print(f"[dim]{desc}[/]")
 
 
-def _run_single_step(step: SetupStep, console: Console) -> str:
+def _run_single_step(step: SetupStep, console: Console, *, force_run: bool = False) -> str:
     """Execute check -> install -> verify for a single step.
 
     Returns status: "ok" | "skipped" | "failed" | "warn" | "abort".
@@ -49,13 +49,18 @@ def _run_single_step(step: SetupStep, console: Console) -> str:
         is_configured = step.check()
 
     auto_reconcile_flag = getattr(step, "auto_reconcile_when_configured", False) is True
-    if is_configured and not auto_reconcile_flag:
+    if is_configured and not auto_reconcile_flag and not force_run:
         console.print(f"  [green]\u2705 {step.name}[/] \u2014 already configured")
         return "ok"
-    if is_configured:
+    if is_configured and not force_run:
         console.print(
             f"  [green]\u2705 {step.name}[/] \u2014 already configured "
             "(running automatic reconcile)"
+        )
+    if is_configured and force_run:
+        console.print(
+            f"  [green]\u2705 {step.name}[/] \u2014 already configured "
+            "(re-running by user request)"
         )
 
     if not is_configured:
@@ -165,7 +170,7 @@ def run_interactive_menu(steps: list[SetupStep], console: Console) -> bool:
             else:
                 console.print("[green]All steps already configured![/]")
         else:
-            _run_single_step(selected, console)
+            _run_single_step(selected, console, force_run=True)
 
     # Final summary
     final: list[tuple[str, str]] = []
