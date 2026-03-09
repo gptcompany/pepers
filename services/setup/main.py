@@ -40,7 +40,7 @@ WELCOME_GUIDE = """\
   3. Configure environment       (service ports, URLs, defaults)
   4. Setup CAS Service           (launches cas-setup if needed)
   5. Setup RAG Service           (launches rag-setup if needed)
-  6. Configure MCP integration   (auto-add to Claude Desktop)
+  6. Configure MCP integration   (Claude Code/Desktop target selection)
   7. Docker + Health check       (start services, verify everything)
 
   Press Enter to accept defaults. Optional steps can be skipped.

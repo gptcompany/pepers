@@ -110,6 +110,7 @@ cd pepers
 ```
 
 The wizard checks prerequisites, configures `.env`, verifies external services, and optionally starts Docker Compose.
+It also includes an explicit MCP target selection step for `Claude Code`, `Claude Desktop`, or both.
 
 Subcommands: `pepers-setup easy | walkthrough | guided | check | config | services | docker | verify`
 
