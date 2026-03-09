@@ -1,0 +1,23 @@
+name: Trigger PePeRS Build
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'services/**'
+      - 'shared/**'
+      - 'pyproject.toml'
+      - 'uv.lock'
+      - 'Dockerfile'
+
+jobs:
+  trigger:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Trigger build
+        uses: peter-evans/repository-dispatch@v3
+        with:
+          token: ${{ secrets.PAT }}
+          repository: gptcompany/progressive-deploy
+          event-type: pepers-build
+          client-payload: '{"ref": "${{ github.ref }}"}'

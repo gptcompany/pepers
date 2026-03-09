@@ -25,7 +25,7 @@ concurrency:
 
 jobs:
   test:
-    name: "ubuntu-latest / py${{ matrix.python-version }}"
+    name: "test / python-${{ matrix.python-version }}"
     runs-on: ${{ matrix.runner }}
     strategy:
       fail-fast: false
@@ -36,6 +36,15 @@ jobs:
     steps:
       - name: Checkout
         uses: actions/checkout@v4
+
+      - name: Trigger progressive-deploy build
+        if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+        uses: peter-evans/repository-dispatch@v3
+        with:
+          token: ${{ secrets.PAT }}
+          repository: gptcompany/progressive-deploy
+          event-type: pepers-build
+          client-payload: '{"ref": "${{ github.ref }}"}'
 
       - name: Set up Python
         uses: actions/setup-python@v5
