@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import os
+import socket
 import sys
 from pathlib import Path
 
@@ -120,7 +121,7 @@ class EnvConfig:
         console.print()
 
         existing_values = _read_env_values(self._env_path)
-        lines: list[str] = []
+        config_values: dict[str, str] = {}
         for env_name, description, default, validator in _CONFIG_VARS:
             default_resolved = default.replace("{root}", str(self._root))
             current = existing_values.get(env_name) or os.environ.get(env_name, "")
@@ -152,7 +153,7 @@ class EnvConfig:
 
             if value is None:  # user Ctrl-C
                 return False
-            lines.append(f"{env_name}={value}")
+            config_values[env_name] = value
 
         if questionary.confirm(
             "Add custom environment variables?",
@@ -168,9 +169,11 @@ class EnvConfig:
                 value = questionary.text(f"Value for {key}:").ask()
                 if value is None:
                     return False
-                lines.append(f"{key}={value}")
+                config_values[key] = value
 
-        env_content = "\n".join(lines) + "\n"
+        self._auto_resolve_internal_port_conflicts(config_values, console)
+
+        env_content = "\n".join(f"{k}={v}" for k, v in config_values.items()) + "\n"
         self._env_path.write_text(env_content)
         console.print(f"\n[green]Wrote {self._env_path}[/]")
         _print_env_hint(console, self._env_path)
@@ -182,15 +185,67 @@ class EnvConfig:
         Merges over any existing values — existing keys are preserved.
         """
         existing = _read_env_values(self._env_path)
-        lines: list[str] = []
+        config_values: dict[str, str] = {}
         for env_name, _desc, default, _validator in _CONFIG_VARS:
             resolved = default.replace("{root}", str(self._root))
             value = existing.get(env_name) or os.environ.get(env_name, "") or resolved
-            lines.append(f"{env_name}={value}")
-        self._env_path.write_text("\n".join(lines) + "\n")
+            config_values[env_name] = value
+        self._auto_resolve_internal_port_conflicts(config_values, console)
+        self._env_path.write_text(
+            "\n".join(f"{k}={v}" for k, v in config_values.items()) + "\n"
+        )
         console.print(f"  [green]\u2705 {self.name}[/] \u2014 generated .env with defaults")
         _print_env_hint(console, self._env_path)
         return True
 
     def verify(self) -> bool:
         return self._env_path.exists() and self._env_path.stat().st_size > 0
+
+    def _auto_resolve_internal_port_conflicts(
+        self,
+        config_values: dict[str, str],
+        console: Console,
+    ) -> None:
+        internal_port_keys = [
+            "RP_DISCOVERY_PORT",
+            "RP_ANALYZER_PORT",
+            "RP_EXTRACTOR_PORT",
+            "RP_VALIDATOR_PORT",
+            "RP_CODEGEN_PORT",
+            "RP_ORCHESTRATOR_PORT",
+            "RP_MCP_PORT",
+        ]
+        used_in_config: set[int] = set()
+        changed: list[tuple[str, int, int]] = []
+        for key in internal_port_keys:
+            raw = config_values.get(key, "").strip()
+            try:
+                requested = int(raw)
+            except (TypeError, ValueError):
+                continue
+            chosen = requested
+            if chosen in used_in_config or _port_in_use(chosen):
+                chosen = _find_next_free_port(max(1024, requested + 1), used_in_config)
+            used_in_config.add(chosen)
+            if chosen != requested:
+                config_values[key] = str(chosen)
+                changed.append((key, requested, chosen))
+        if changed:
+            console.print("[yellow]Detected occupied/conflicting internal ports. Auto-remapped:[/]")
+            for key, old, new in changed:
+                console.print(f"[dim]- {key}: {old} -> {new}[/]")
+
+
+def _port_in_use(port: int) -> bool:
+    with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as sock:
+        sock.settimeout(0.2)
+        return sock.connect_ex(("127.0.0.1", port)) == 0
+
+
+def _find_next_free_port(start: int, reserved: set[int]) -> int:
+    candidate = max(1024, start)
+    while candidate <= 65535:
+        if candidate not in reserved and not _port_in_use(candidate):
+            return candidate
+        candidate += 1
+    raise RuntimeError("No free TCP port available in 1024-65535")
