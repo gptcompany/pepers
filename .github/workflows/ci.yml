@@ -37,15 +37,6 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
 
-      - name: Trigger progressive-deploy build
-        if: github.event_name == 'push' && github.ref == 'refs/heads/main'
-        uses: peter-evans/repository-dispatch@v3
-        with:
-          token: ${{ secrets.PAT }}
-          repository: gptcompany/progressive-deploy
-          event-type: pepers-build
-          client-payload: '{"ref": "${{ github.ref }}"}'
-
       - name: Set up Python
         uses: actions/setup-python@v5
         with:
@@ -92,3 +83,12 @@ jobs:
           valColorRange: ${{ steps.cov.outputs.pct }}
           minColorRange: 40
           maxColorRange: 90
+
+      - name: Trigger progressive-deploy build
+        if: success() && github.event_name == 'push' && github.ref == 'refs/heads/main'
+        uses: peter-evans/repository-dispatch@v3
+        with:
+          token: ${{ secrets.PAT }}
+          repository: gptcompany/progressive-deploy
+          event-type: pepers-build
+          client-payload: '{"ref": "${{ github.ref }}"}'

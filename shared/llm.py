@@ -113,10 +113,13 @@ def call_cli(
             cfg["timeout_env"], str(cfg["default_timeout"])
         ))
 
-    # Build env — pass GOOGLE_API_KEY for gemini_cli
+    # Build env — gemini_cli can use OAuth login; only pass GEMINI_API_KEY if set.
     env = dict(os.environ)
     if provider_name == "gemini_cli":
-        env["GEMINI_API_KEY"] = _get_gemini_api_key(); env.pop("GOOGLE_API_KEY", None)
+        key = os.environ.get("GEMINI_API_KEY", "").strip()
+        if key:
+            env["GEMINI_API_KEY"] = key
+            env.pop("GOOGLE_API_KEY", None)
 
     result = subprocess.run(
         cmd,
@@ -210,7 +213,7 @@ def _resolve_ollama_base_url(base_url: str | None = None) -> str:
 def call_gemini_cli(
     prompt: str,
     system: str,
-    model: str = "gemini-1.5-flash",
+    model: str | None = None,
     timeout: int = int(os.environ.get("RP_LLM_TIMEOUT_GEMINI_CLI", "120")),
 ) -> str:
     """Call Gemini via CLI subprocess (delegates to call_cli for backward compat)."""
@@ -220,7 +223,7 @@ def call_gemini_cli(
 def call_gemini_sdk(
     prompt: str,
     system: str,
-    model: str = "gemini-1.5-flash",
+    model: str | None = None,
     timeout: float = float(os.environ.get("RP_LLM_TIMEOUT_GEMINI_SDK", "60")),
     temperature: float = LLM_TEMPERATURE,
 ) -> str:
