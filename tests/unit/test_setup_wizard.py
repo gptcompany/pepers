@@ -546,6 +546,41 @@ class TestEnvConfig:
         assert "RP_RAG_URL" not in keys
         assert "RP_OLLAMA_URL" not in keys
 
+    @patch.object(EnvConfig, "_reconcile_services_after_port_change")
+    @patch.object(EnvConfig, "_auto_resolve_internal_port_conflicts", return_value=True)
+    def test_install_defaults_reconciles_when_ports_remapped(
+        self,
+        _mock_remap,
+        mock_reconcile,
+        tmp_path,
+    ):
+        step = EnvConfig(tmp_path)
+        console = MagicMock()
+        assert step.install_defaults(console) is True
+        mock_reconcile.assert_called_once()
+
+    @patch.object(EnvConfig, "_reconcile_services_after_port_change")
+    @patch.object(EnvConfig, "_auto_resolve_internal_port_conflicts", return_value=True)
+    @patch("questionary.text")
+    @patch("questionary.select")
+    @patch("questionary.confirm")
+    def test_install_reconciles_when_ports_remapped(
+        self,
+        mock_confirm,
+        mock_select,
+        mock_text,
+        _mock_remap,
+        mock_reconcile,
+        tmp_path,
+    ):
+        mock_text.return_value.ask.return_value = "custom-val"
+        mock_select.return_value.ask.return_value = "choice-val"
+        mock_confirm.return_value.ask.return_value = False
+        step = EnvConfig(tmp_path)
+        console = MagicMock()
+        assert step.install(console) is True
+        mock_reconcile.assert_called_once()
+
 
 # ── ExternalServiceCheck ─────────────────────────────────────
 
@@ -861,6 +896,17 @@ class TestAggregatedHealthCheck:
         assert "http://cas.local:9991/health" in called_urls
         assert "http://rag.local:9992/health" in called_urls
         assert "http://ollama.local:9993/" in called_urls
+
+    @patch("services.setup._verify._check_http", return_value=True)
+    def test_install_uses_internal_ports_from_env_file(self, mock_http, tmp_path):
+        env_file = tmp_path / ".env"
+        env_file.write_text("RP_DISCOVERY_PORT=9900\n")
+        step = AggregatedHealthCheck()
+        console = MagicMock()
+        with patch("services.setup._verify.Path.cwd", return_value=tmp_path):
+            step.install(console)
+        called_urls = [call.args[0] for call in mock_http.call_args_list]
+        assert "http://localhost:9900/health" in called_urls
 
     def test_verify_constants_keep_legacy_fallbacks(self):
         cas_envs, _, _ = _EXTERNAL["CAS Service"]
