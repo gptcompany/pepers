@@ -277,6 +277,7 @@ class EnvConfig:
                 cwd=self._root,
                 check=True,
                 text=True,
+                env=_docker_env(),
             )
             console.print("[green]Docker services reconciled with updated ports.[/]")
         except subprocess.CalledProcessError as exc:
@@ -328,6 +329,24 @@ def _docker_bin() -> str | None:
     docker = shutil.which("docker")
     if docker:
         return docker
-    if sys.platform == "darwin" and Path("/usr/local/bin/docker").exists():
-        return "/usr/local/bin/docker"
+    if sys.platform == "darwin":
+        if Path("/usr/local/bin/docker").exists():
+            return "/usr/local/bin/docker"
+        if Path("/Applications/Docker.app/Contents/Resources/bin/docker").exists():
+            return "/Applications/Docker.app/Contents/Resources/bin/docker"
     return None
+
+
+def _docker_env() -> dict[str, str]:
+    env = os.environ.copy()
+    if sys.platform != "darwin":
+        return env
+    path_parts = env.get("PATH", "").split(":") if env.get("PATH") else []
+    for candidate in (
+        "/usr/local/bin",
+        "/Applications/Docker.app/Contents/Resources/bin",
+    ):
+        if candidate not in path_parts:
+            path_parts.append(candidate)
+    env["PATH"] = ":".join(part for part in path_parts if part)
+    return env

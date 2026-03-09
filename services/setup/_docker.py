@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import os
 import shutil
 import subprocess
 import time
@@ -19,7 +20,25 @@ def _docker_bin() -> str | None:
         fallback = Path("/usr/local/bin/docker")
         if fallback.exists():
             return str(fallback)
+        app_fallback = Path("/Applications/Docker.app/Contents/Resources/bin/docker")
+        if app_fallback.exists():
+            return str(app_fallback)
     return None
+
+
+def _docker_env() -> dict[str, str]:
+    env = os.environ.copy()
+    if system() != "Darwin":
+        return env
+    path_parts = env.get("PATH", "").split(":") if env.get("PATH") else []
+    for candidate in (
+        "/usr/local/bin",
+        "/Applications/Docker.app/Contents/Resources/bin",
+    ):
+        if candidate not in path_parts:
+            path_parts.append(candidate)
+    env["PATH"] = ":".join(part for part in path_parts if part)
+    return env
 
 
 class DockerCheck:
@@ -58,6 +77,7 @@ class DockerComposeCheck:
                 check=True,
                 capture_output=True,
                 text=True,
+                env=_docker_env(),
             )
             return True
         except (subprocess.CalledProcessError, FileNotFoundError):
@@ -85,6 +105,7 @@ def _docker_daemon_ready() -> bool:
             check=True,
             capture_output=True,
             text=True,
+            env=_docker_env(),
         )
         return True
     except (subprocess.CalledProcessError, FileNotFoundError):
@@ -166,6 +187,7 @@ class DockerComposeUp:
                 cwd=self._root,
                 capture_output=True,
                 text=True,
+                env=_docker_env(),
             )
             return result.returncode == 0 and len(result.stdout.strip()) > 0
         except (subprocess.CalledProcessError, FileNotFoundError):
@@ -202,6 +224,7 @@ class DockerComposeUp:
                 cwd=self._root,
                 check=True,
                 text=True,
+                env=_docker_env(),
             )
             return True
         except subprocess.CalledProcessError:
@@ -214,6 +237,7 @@ class DockerComposeUp:
                 cwd=self._root,
                 check=True,
                 text=True,
+                env=_docker_env(),
             )
             return True
         except subprocess.CalledProcessError as exc:
@@ -272,6 +296,7 @@ class DockerComposeDown:
                 cwd=self._root,
                 capture_output=True,
                 text=True,
+                env=_docker_env(),
             )
             return result.returncode == 0 and len(result.stdout.strip()) == 0
         except (subprocess.CalledProcessError, FileNotFoundError):
@@ -289,6 +314,7 @@ class DockerComposeDown:
                 cwd=self._root,
                 check=True,
                 text=True,
+                env=_docker_env(),
             )
             return True
         except subprocess.CalledProcessError as exc:
