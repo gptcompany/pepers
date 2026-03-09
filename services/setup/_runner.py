@@ -188,8 +188,12 @@ def run_interactive_menu(steps: list[SetupStep], console: Console) -> bool:
             choices.append(questionary.Choice(label, value=step))
 
         pending_count = sum(1 for _, s in statuses if s == "pending")
+        unresolved_count = sum(1 for _, s in statuses if s != "ok")
         choices.append(questionary.Choice(
             f">>> Run all pending ({pending_count} steps)", value="run_all",
+        ))
+        choices.append(questionary.Choice(
+            f">>> Run all unresolved ({unresolved_count} steps)", value="run_all_unresolved",
         ))
         choices.append(questionary.Choice(">>> Exit", value="exit"))
 
@@ -204,6 +208,12 @@ def run_interactive_menu(steps: list[SetupStep], console: Console) -> bool:
             pending = [s for s, st in statuses if st == "pending"]
             if pending:
                 run_steps(pending, console)
+            else:
+                console.print("[green]All steps already configured![/]")
+        elif selected == "run_all_unresolved":
+            unresolved = [s for s, st in statuses if st != "ok"]
+            if unresolved:
+                run_steps(unresolved, console)
             else:
                 console.print("[green]All steps already configured![/]")
         else:
