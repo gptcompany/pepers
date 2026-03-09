@@ -704,8 +704,9 @@ class TestExternalServiceCheck:
         assert result is False
         console.print.assert_called()  # showed hint
 
+    @patch.object(ExternalServiceCheck, "_runtime_dep_health", return_value=None)
     @patch("requests.get")
-    def test_check_prefers_new_env_key_over_legacy(self, mock_get):
+    def test_check_prefers_new_env_key_over_legacy(self, mock_get, _mock_runtime):
         mock_get.return_value.status_code = 200
         mock_get.return_value.json.return_value = {"service": "cas_service", "status": "ok"}
         svc = {
@@ -722,7 +723,42 @@ class TestExternalServiceCheck:
         ):
             step = ExternalServiceCheck(svc)
             assert step.check() is True
-        mock_get.assert_called_once_with("http://new:2/health", timeout=5)
+        assert mock_get.call_args_list[0].args[0] == "http://new:2/health"
+        assert mock_get.call_args_list[0].kwargs["timeout"] == 5
+
+    @patch("services.setup._services.resolve_localhost_url", return_value="http://host.docker.internal:8760")
+    @patch.object(ExternalServiceCheck, "_runtime_dep_health")
+    @patch("requests.get")
+    def test_check_fails_when_host_is_up_but_orchestrator_cannot_reach_service(
+        self,
+        mock_get,
+        mock_runtime_dep,
+        _mock_resolve,
+    ):
+        mock_get.return_value.status_code = 200
+        mock_get.return_value.json.return_value = {
+            "service": "cas-service",
+            "status": "ok",
+        }
+        mock_runtime_dep.return_value = {
+            "url": "http://host.docker.internal:8760",
+            "healthy": False,
+        }
+        svc = {
+            "name": "CAS Service",
+            "env_urls": ["RP_VALIDATOR_CAS_URL", "RP_CAS_URL"],
+            "default_url": "http://localhost:8760",
+            "health_path": "/health",
+            "setup_hint": "Install test service",
+        }
+        with patch.dict(
+            os.environ,
+            {"RP_VALIDATOR_CAS_URL": "http://localhost:8760"},
+            clear=False,
+        ):
+            step = ExternalServiceCheck(svc)
+            assert step.check() is False
+        assert "host.docker.internal:8760" in step._host_only_warning("http://localhost:8760")
 
     def test_external_service_constants_are_aligned(self):
         by_name = {svc["name"]: svc for svc in _EXTERNAL_SERVICES}

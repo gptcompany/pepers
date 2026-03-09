@@ -15,6 +15,8 @@ import questionary
 import requests
 from rich.console import Console
 
+from shared.config import resolve_localhost_url
+
 _EXTERNAL_SERVICES = [
     {
         "name": "CAS Service",
@@ -235,6 +237,76 @@ class ExternalServiceCheck:
         except (requests.ConnectionError, requests.Timeout):
             return False
 
+    def _runtime_dep_health(self) -> dict | None:
+        """Return orchestrator-side health for this external dependency.
+
+        When PePeRS runs in Docker on macOS, host localhost probes can hit a
+        forwarded or proxied listener that containers cannot reach. Prefer the
+        orchestrator view when available.
+        """
+        dep_key = None
+        if self.name == "CAS Service":
+            dep_key = "cas"
+        elif self.name == "RAG Service":
+            dep_key = "rag"
+        if dep_key is None:
+            return None
+
+        try:
+            from services.setup._verify import _orchestrator_runtime_health
+        except Exception:
+            return None
+
+        runtime = _orchestrator_runtime_health()
+        if not runtime:
+            return None
+        deps = (runtime.get("external") or {}).get("deps") or {}
+        dep = deps.get(dep_key)
+        return dep if isinstance(dep, dict) else None
+
+    def _probe_effective(
+        self,
+        base_url: str,
+        timeout: int = 3,
+        *,
+        strict_identity: bool = True,
+    ) -> bool:
+        host_ok = self._probe_url(
+            base_url,
+            timeout=timeout,
+            strict_identity=strict_identity,
+        )
+        runtime_dep = self._runtime_dep_health()
+        if not runtime_dep:
+            return host_ok
+
+        runtime_url = str(runtime_dep.get("url") or "").rstrip("/")
+        if runtime_url:
+            resolved = resolve_localhost_url(base_url.rstrip("/")).rstrip("/")
+            if resolved == runtime_url:
+                return bool(runtime_dep.get("healthy"))
+        return host_ok
+
+    def _host_only_warning(self, base_url: str) -> str | None:
+        runtime_dep = self._runtime_dep_health()
+        if not runtime_dep:
+            return None
+        runtime_url = str(runtime_dep.get("url") or "").rstrip("/")
+        if not runtime_url:
+            return None
+        resolved = resolve_localhost_url(base_url.rstrip("/")).rstrip("/")
+        if resolved != runtime_url:
+            return None
+        host_ok = self._probe_url(base_url, strict_identity=True)
+        runtime_ok = bool(runtime_dep.get("healthy"))
+        if host_ok and not runtime_ok:
+            return (
+                f"{self.name} responds on the host at {base_url}, "
+                f"but the PePeRS containers cannot reach {runtime_url}. "
+                "A local proxy/tunnel may be occupying this port."
+            )
+        return None
+
     def _discovery_candidates(self) -> list[str]:
         candidates: list[str] = []
 
@@ -286,7 +358,7 @@ class ExternalServiceCheck:
     def _discover_running_url(self, console: Console | None = None) -> str | None:
         candidates = self._discovery_candidates()
         for url in candidates:
-            if self._probe_url(url, strict_identity=True):
+            if self._probe_effective(url, strict_identity=True):
                 if console is not None and url != self._svc["default_url"]:
                     console.print(f"[green]{self.name} discovered at {url}[/]")
                 return url
@@ -489,7 +561,7 @@ class ExternalServiceCheck:
 
     def check(self) -> bool:
         configured = self._url()
-        if self._probe_url(configured, timeout=5, strict_identity=True):
+        if self._probe_effective(configured, timeout=5, strict_identity=True):
             self._active_url = configured
             return True
         discovered = self._discover_running_url()
@@ -507,11 +579,14 @@ class ExternalServiceCheck:
 
     def _install_guided(self, console: Console) -> bool:
         current_url = self._url()
-        if self._probe_url(current_url, strict_identity=True):
+        if self._probe_effective(current_url, strict_identity=True):
             console.print(f"[green]{self.name} is reachable at {current_url}[/]")
             return True
 
         console.print(f"[yellow]{self.name} is not reachable at {current_url}[/]")
+        host_only_warning = self._host_only_warning(current_url)
+        if host_only_warning:
+            console.print(f"[yellow]{host_only_warning}[/]")
         while True:
             action = _ask_select_safe(
                 f"How should setup proceed for {self.name}?",
@@ -543,7 +618,7 @@ class ExternalServiceCheck:
                     self._persist_url(default_url, console)
                 else:
                     self._set_runtime_url(default_url)
-                if self._probe_url(default_url, strict_identity=True):
+                if self._probe_effective(default_url, strict_identity=True):
                     return True
                 console.print(
                     f"[yellow]{self.name} not reachable at {default_url}{self._svc['health_path']}[/]"
@@ -574,7 +649,7 @@ class ExternalServiceCheck:
                     continue
                 custom = self._normalize_user_url(raw)
                 self._active_url = custom
-                if self._probe_url(custom, strict_identity=True):
+                if self._probe_effective(custom, strict_identity=True):
                     if _ask_confirm_safe(
                         f"Save {custom} to .env?",
                         default=True,
@@ -586,6 +661,9 @@ class ExternalServiceCheck:
                 console.print(
                     f"[yellow]{self.name} not reachable at {custom}{self._svc['health_path']}[/]"
                 )
+                custom_warning = self._host_only_warning(custom)
+                if custom_warning:
+                    console.print(f"[yellow]{custom_warning}[/]")
                 if _ask_confirm_safe(
                     f"Keep {custom} as target URL for next install/start attempt and save to .env?",
                     default=True,
