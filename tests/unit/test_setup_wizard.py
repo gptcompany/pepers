@@ -817,6 +817,76 @@ class TestExternalServiceCheck:
         assert step._active_url == "http://localhost:8769"
         mock_persist.assert_called_once_with("http://localhost:8769", console)
 
+    @patch.object(ExternalServiceCheck, "_reconcile_parent_pepers_stack")
+    @patch.object(
+        ExternalServiceCheck,
+        "_runtime_dep_health",
+        return_value={"url": "http://host.docker.internal:8760", "healthy": False},
+    )
+    @patch.object(ExternalServiceCheck, "_probe_effective", return_value=True)
+    def test_install_reconciles_parent_when_runtime_url_is_stale(
+        self,
+        _mock_probe,
+        _mock_runtime,
+        mock_reconcile,
+        tmp_path,
+    ):
+        env_file = tmp_path / ".env"
+        env_file.write_text(
+            "RP_VALIDATOR_CAS_URL=http://localhost:8769\n"
+            "RP_CAS_URL=http://localhost:8769\n"
+        )
+        svc = {
+            "name": "CAS Service",
+            "env_urls": ["RP_VALIDATOR_CAS_URL", "RP_CAS_URL"],
+            "default_url": "http://localhost:8769",
+            "health_path": "/health",
+            "setup_hint": "Install test service",
+            "guided_install": True,
+        }
+        step = ExternalServiceCheck(svc, project_root=tmp_path)
+        console = MagicMock()
+        assert step.install(console) is True
+        mock_reconcile.assert_called_once_with(console)
+
+    @patch.object(ExternalServiceCheck, "_reconcile_parent_pepers_stack")
+    @patch.object(ExternalServiceCheck, "_wait_until_healthy", return_value=True)
+    @patch.object(ExternalServiceCheck, "_run_setup_install", return_value=True)
+    @patch.object(
+        ExternalServiceCheck,
+        "_runtime_dep_health",
+        return_value={"url": "http://host.docker.internal:8760", "healthy": False},
+    )
+    @patch.object(ExternalServiceCheck, "_probe_effective", return_value=False)
+    @patch("services.setup._services._ask_select_safe", return_value="Install/start service now (recommended)")
+    def test_install_reconciles_parent_after_child_setup_success(
+        self,
+        _mock_select,
+        _mock_probe,
+        _mock_runtime,
+        _mock_setup,
+        _mock_wait,
+        mock_reconcile,
+        tmp_path,
+    ):
+        env_file = tmp_path / ".env"
+        env_file.write_text(
+            "RP_VALIDATOR_CAS_URL=http://localhost:8769\n"
+            "RP_CAS_URL=http://localhost:8769\n"
+        )
+        svc = {
+            "name": "CAS Service",
+            "env_urls": ["RP_VALIDATOR_CAS_URL", "RP_CAS_URL"],
+            "default_url": "http://localhost:8769",
+            "health_path": "/health",
+            "setup_hint": "Install test service",
+            "guided_install": True,
+        }
+        step = ExternalServiceCheck(svc, project_root=tmp_path)
+        console = MagicMock()
+        assert step.install(console) is True
+        mock_reconcile.assert_called_once_with(console)
+
     def test_external_service_constants_are_aligned(self):
         by_name = {svc["name"]: svc for svc in _EXTERNAL_SERVICES}
         assert by_name["CAS Service"]["env_urls"][0] == "RP_VALIDATOR_CAS_URL"

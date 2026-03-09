@@ -280,6 +280,15 @@ class ExternalServiceCheck:
         gateway_aliases = {"host.docker.internal", "gateway.docker.internal"}
         return base_host in localhost_aliases and runtime_host in gateway_aliases
 
+    def _runtime_dep_needs_sync(self, base_url: str) -> bool:
+        runtime_dep = self._runtime_dep_health()
+        if not runtime_dep:
+            return False
+        runtime_url = str(runtime_dep.get("url") or "").rstrip("/")
+        if not runtime_url:
+            return False
+        return not self._runtime_url_matches_local_target(base_url, runtime_url)
+
     def _probe_effective(
         self,
         base_url: str,
@@ -443,6 +452,46 @@ class ExternalServiceCheck:
                 return True
             time.sleep(2)
         return False
+
+    def _reconcile_parent_pepers_stack(self, console: Console) -> None:
+        if self._project_root is None:
+            return
+        compose = self._compose_file(self._project_root)
+        if compose is None:
+            return
+        try:
+            from services.setup._config import EnvConfig
+            from services.setup._docker import _docker_bin, _docker_env
+        except Exception:
+            return
+
+        docker = _docker_bin()
+        if docker is None:
+            return
+
+        console.print(
+            "[cyan]Updated external service target: reconciling PePeRS docker stack...[/]"
+        )
+        try:
+            subprocess.run(
+                [docker, "compose", "up", "-d", "--build", "--force-recreate"],
+                cwd=self._project_root,
+                check=True,
+                text=True,
+                env=_docker_env(),
+            )
+        except subprocess.CalledProcessError:
+            env_step = EnvConfig(self._project_root)
+            if env_step._retry_reconcile_after_conflict(console, docker):
+                return
+            console.print(
+                "[yellow]Could not auto-reconcile the PePeRS stack after updating "
+                f"{self.name}. The new target will apply on the next start.[/]"
+            )
+
+    def _maybe_reconcile_parent_pepers_stack(self, console: Console, target_url: str) -> None:
+        if self._runtime_dep_needs_sync(target_url):
+            self._reconcile_parent_pepers_stack(console)
 
     def _local_setup_fallback(self) -> tuple[list[str], Path, dict[str, str], str] | None:
         """Return local repo fallback command when CLI is not installed in PATH."""
@@ -655,6 +704,7 @@ class ExternalServiceCheck:
             current_url = self._url()
         if self._probe_effective(current_url, strict_identity=True):
             console.print(f"[green]{self.name} is reachable at {current_url}[/]")
+            self._maybe_reconcile_parent_pepers_stack(console, current_url)
             return True
 
         console.print(f"[yellow]{self.name} is not reachable at {current_url}[/]")
@@ -692,6 +742,7 @@ class ExternalServiceCheck:
                 if self._auto_rehome_host_only_url(console, preferred_url=default_url):
                     continue
                 if self._probe_effective(default_url, strict_identity=True):
+                    self._maybe_reconcile_parent_pepers_stack(console, default_url)
                     return True
                 console.print(
                     f"[yellow]{self.name} not reachable at {default_url}{self._svc['health_path']}[/]"
@@ -711,6 +762,7 @@ class ExternalServiceCheck:
                     self._persist_url(discovered, console)
                 else:
                     self._set_runtime_url(discovered)
+                self._maybe_reconcile_parent_pepers_stack(console, discovered)
                 return True
 
             if action == "Enter custom URL/port":
@@ -732,6 +784,7 @@ class ExternalServiceCheck:
                         self._persist_url(custom, console)
                     else:
                         self._set_runtime_url(custom)
+                    self._maybe_reconcile_parent_pepers_stack(console, custom)
                     return True
                 console.print(
                     f"[yellow]{self.name} not reachable at {custom}{self._svc['health_path']}[/]"
@@ -748,6 +801,7 @@ class ExternalServiceCheck:
             # Install/start selected.
             if self._run_setup_install(console):
                 if self._wait_until_healthy():
+                    self._maybe_reconcile_parent_pepers_stack(console, self._url())
                     return True
                 console.print(
                     f"[yellow]{self.name} setup completed but health endpoint is still unreachable.[/]"
