@@ -1,85 +1,71 @@
-# Samuel A. Lopes: Advanced Research Dossier (2026)
+# Samuel A. Lopes: Research Briefing Dossier (2026)
 **Target Institution:** CMUP - Centre for Mathematics, University of Porto
-**Standard:** PePeRS Clinical Rigor Protocol (100% English)
+**Use Case:** Meeting-safe briefing note
+**Editorial Standard:** mathematics first, tooling notes second
 
 ## 0. Executive Summary: The Symmetry Trajectory
-Prof. Samuel A. Lopes’s recent research (2024-2026) focuses on the **rigidity and deformation of non-commutative structures**. By mapping the automorphism groups and Hochschild cohomology of Weyl subalgebras and generalized Heisenberg algebras, he is defining the "Source Code" of algebraic symmetry. This dossier analyzes the 5 most recent nodes of this trajectory.
+Samuel A. Lopes's research is best understood as a study of how noncommutative algebraic structures preserve identity while still allowing deformation, representation, and controlled change. Across the five papers in this briefing set, the recurring themes are:
 
----
+- automorphisms and derivations as symmetry tools;
+- Hochschild cohomology as a deformation language;
+- module theory as a way to describe which mathematical objects can live inside a given algebra;
+- generalized Weyl and generalized Heisenberg families as the main structural laboratory.
 
-## Paper 1: Whittaker Modules for Generalized Weyl Algebras
-### 1. Academic Synthesis (PhD Standard)
-This paper provides a classification of irreducible Whittaker modules over GWAs. It addresses the non-Noetherian transition in weight module theory.
-- **Technical Insight:** The research proves that the existence of Whittaker vectors is linked to the choice of the GWA's defining polynomial, bridging the gap between classical Weyl results and arbitrary rank-1GWAs.
-- **SOTA Synergy:** Complements 2026 work on torsion-free modules.
+This briefing follows the evidence-based local corpus used in the stronger CODEX dossier. PePeRS runtime outcomes are treated only as pipeline diagnostics, never as academic verdicts.
 
-### 2. Technical Audit & PePeRS Statistics
-- **ID:** #3673 | **Status:** REJECTED (Logical Density)
-- **Execution Metrics:** Discovery: 4.2s | Analysis: 11.5s | Validation: PENDING
-- **Diagnostic Note:** Extraction failed because the GWA notation includes multi-layered subscripts that exceeded the current neural parser's confidence threshold (0.85).
+## Paper 1: Lifting free modules to generalized Weyl algebras
+### 1. Academic Synthesis
+This 2025 paper moves Lopes's generalized Weyl algebra line toward explicit module construction. Its center of gravity is not only structural description, but classification of finite-rank modules that remain free over the base ring, together with simplicity criteria and an application to `sl_2`.
 
-### 3. Pedagogical Outreach (Educational Transition)
-**The Rhythm of the Machine:** Imagine a clock where you can change the gears but the time still flows correctly. This research finds the "Simplest Gear" (Whittaker Module) that keeps the algebraic clock ticking in a predictable way.
+### 2. Meeting-Safe Technical Note
+The strongest safe claim here is that the paper indicates a constructive turn in Lopes's program: from symmetry and structural control toward explicit module families and Lie-theoretic examples.
 
----
+### 3. Pedagogical Outreach
+Think of an algebraic world with strict hidden physics. This paper asks which "character classes" can live inside that world while staying simple enough to understand and rich enough to matter.
 
-## Paper 2: A Parametric Family of Subalgebras of the Weyl Algebra I
-### 1. Academic Synthesis (PhD Standard)
-Focuses on $k\langle x, y\rangle/(yx-xy-x^N)$. It determines the full automorphism group $\text{Aut}(A)$ and its Lie structure.
-- **Technical Insight:** Identifies a unique rigidity where polynomial extensions constrain the "wild" automorphisms typical of the first Weyl algebra.
+## Paper 2: Lie structure on the Hochschild cohomology of a family of subalgebras of the Weyl algebra
+### 1. Academic Synthesis
+This paper studies Hochschild cohomology not as a static invariant, but as a structure carrying Lie-type behavior. That makes it one of the clearest points where Lopes's research becomes deformation-sensitive and conceptually deeper than classification alone.
 
-### 2. Technical Audit & PePeRS Statistics
-- **ID:** #3666 | **Status:** REJECTED (Notation Complexity)
-- **Execution Metrics:** Discovery: 3.5s | Analysis: 10.2s | Extraction: TIMEOUT
-- **Diagnostic Note:** Pipeline timeout during CAS validation of the Jacobi Identity for non-standard commutators.
+### 2. Meeting-Safe Technical Note
+The safe takeaway is that the paper strengthens the bridge between explicit algebra families and the internal logic of deformation theory.
 
-### 3. Pedagogical Outreach (Educational Transition)
-**The Reality Hacker's Rules:** This paper is like finding a bug in a video game that actually makes the game more stable. It maps the secret transformations that keep the mathematical universe from collapsing when you change the rules of movement.
+### 3. Pedagogical Outreach
+If the algebra is the machine, cohomology is the hidden control panel telling you which rules can be changed, which changes interact, and which ones break the system.
 
----
+## Paper 3: Quantum generalized Heisenberg algebras and their representations
+### 1. Academic Synthesis
+This paper enlarges the Heisenberg landscape while keeping representation theory tractable. Its value lies in showing that a broader quantum family can still support explicit classification of finite-dimensional irreducible representations.
 
-## Paper 3: Lie structure on the Hochschild cohomology
-### 1. Academic Synthesis (PhD Standard)
-Explicit calculation of the Gerstenhaber bracket on $HH^*(A)$. 
-- **Technical Insight:** Demonstrates how the Lie structure on $HH^1$ (outer derivations) governs the entire cohomology ring, solving a computational bottleneck in non-commutative deformation theory.
+### 2. Meeting-Safe Technical Note
+This is a strong example of Lopes's ability to widen an algebraic family without losing structural control.
 
-### 2. Technical Audit & PePeRS Statistics
-- **ID:** #3464 | **Status:** REJECTED (High Abstraction)
-- **Execution Metrics:** Discovery: 5.0s | Analysis: 13.8s
-- **Diagnostic Note:** The analyzer flagged the paper as "Out of Scope" for applied engineering, proving the need for a "Pure Math" pipeline filter.
+### 3. Pedagogical Outreach
+The paper is like taking a familiar machine and upgrading its physics engine. The rules become stranger, but stable patterns of behavior still survive and can still be classified.
 
-### 3. Pedagogical Outreach (Educational Transition)
-**Hacking the Hidden Code:** If mathematics is the code of the universe, Cohomology is the "Admin Panel." This research finds the hidden switches that allow us to bend the laws of math without breaking them.
+## Paper 4: Non-Noetherian generalized Heisenberg algebras
+### 1. Academic Synthesis
+This paper studies the less well-behaved, non-noetherian side of generalized Heisenberg algebras. Its importance is that derivations, automorphisms, and classification remain meaningful even when standard finiteness assumptions weaken.
 
----
+### 2. Meeting-Safe Technical Note
+The safe claim is not that the setting is chaotic, but that Lopes shows real structural control survives in a technically harder regime.
 
-## Paper 4: Derivations and automorphisms of the algebra $k\langle x, y\rangle/(yx-xy-x^N)$
-### 1. Academic Synthesis (PhD Standard)
-An infinitesimal counterpart to automorphisms. Mapps derivations into filtered Lie components.
-- **Technical Insight:** Establishes an algorithmic path for tracking symmetries in non-Noetherian settings.
+### 3. Pedagogical Outreach
+Imagine a city with bad roads and messy traffic rules. This paper shows that even there, you can still identify the legal moves and the transformations that preserve the city's deep structure.
 
-### 2. Technical Audit & PePeRS Statistics
-- **ID:** #3463 | **Status:** REJECTED
-- **Execution Metrics:** Discovery: 4.1s | Analysis: 12.0s
+## Paper 5: A parametric family of subalgebras of the Weyl algebra I. Structure and automorphisms
+### 1. Academic Synthesis
+This paper is foundational inside the dossier. It describes a family of Weyl-type algebras and determines their automorphisms, giving a stable structural base for later cohomological and deformation-oriented work.
 
-### 3. Pedagogical Outreach (Educational Transition)
-**The Math of Infinite Change:** Studying how a system moves pixel-by-pixel (Derivations) to predict how it can be flipped or mirrored (Automorphisms) as a whole.
+### 2. Meeting-Safe Technical Note
+The main value here is architectural: before one studies deeper invariants, one needs to understand the algebra family itself and its structure-preserving transformations.
 
----
+### 3. Pedagogical Outreach
+This paper is about learning the grammar of a mathematical universe before trying to rewrite its laws. It studies which deep edits preserve identity and which ones create a different world.
 
-## Paper 5: Quantum generalized Heisenberg algebras
-### 1. Academic Synthesis (PhD Standard)
-Representation theory for quantum Heisenberg algebras. 
-- **Technical Insight:** Maps the bridge between physics-inspired commutation relations and pure algebraic representation.
+## 4. Cautious Research Direction
+The safe forward-looking line for conversation is this:
 
-### 2. Technical Audit & PePeRS Statistics
-- **ID:** #3361 | **Status:** REJECTED
-
-### 3. Pedagogical Outreach (Educational Transition)
-**Quantum Symmetry:** In the microscopic world, energy follows symmetric rules. This research is the blueprint for those rules, ensuring the energy always "adds up" in the quantum world.
-
----
-
-## 4. Final Verdict: SOTA Synergy 2026
-PePeRS identifies a critical opportunity: Linking Prof. Lopes's work on **Weyl Subalgebras** with the 2026 findings on **Batalin-Vilkovisky algebras**. 
-**Recommendation:** Investigating the topological $\Delta$ operator for the algebras in Papers 2, 3, and 4 would elevate this research into the realm of Topological Field Theories.
+- Lopes's work is especially promising where symmetry, deformation, and module theory meet;
+- generalized Weyl algebras and generalized Heisenberg families remain the most natural bridge to future work;
+- any discussion of BV structure, topological field theory, or geometric packaging should be presented as a research question, not as a current result.

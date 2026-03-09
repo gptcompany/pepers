@@ -3,6 +3,7 @@
 **Target vibe:** smart, funny, and welcoming
 **Target audience:** curious readers aged 11-19, plus adults who like their mathematics with personality
 **Serious note:** the jokes are optional; the mathematics is not
+**Meeting Use:** Optional outreach supplement only. Do not use as the primary academic briefing note.
 
 ## Start Screen
 
@@ -25,16 +26,16 @@ That is why this dossier works so well for outreach: the objects are advanced, b
 
 This arcade has five main levels:
 
-1. **Whittaker Modules**
-   Who can live inside a generalized Weyl algebra?
-2. **Weyl Subalgebras**
-   Which transformations still count as legal?
-3. **Hochschild Cohomology**
+1. **Free Modules over Generalized Weyl Algebras**
+   Which characters can live inside the world and still stay structurally clean?
+2. **Hochschild Cohomology**
    Where is the hidden control panel for deformation?
-4. **Derivations + Automorphisms**
-   What are the tiny moves and the big moves?
-5. **Quantum Generalized Heisenberg Algebras**
+3. **Quantum Generalized Heisenberg Algebras**
    What survives after the physics settings get weirder?
+4. **Non-Noetherian Generalized Heisenberg Algebras**
+   Can a messy world still have stable rules?
+5. **Weyl Subalgebras**
+   Which deep transformations still count as legal?
 
 ## Power-Ups: Four Words to Learn Once
 
@@ -47,37 +48,21 @@ This game becomes much easier if you pick up four power-ups early:
 
 Once a reader has these four ideas, the whole dossier stops feeling like alien language and starts feeling like a very strict strategy game.
 
-## Level 1: Whittaker Modules for Generalized Weyl Algebras
+## Level 1: Lifting Free Modules to Generalized Weyl Algebras
 
 ### What is happening?
 
-This paper studies certain modules over generalized Weyl algebras and classifies the irreducible ones.
+This paper studies modules over generalized Weyl algebras that remain free over the base ring and classifies important finite-rank examples.
 
 ### Arcade translation
 
-Imagine a game world with custom gravity, custom timing, and custom collision rules. A module is a character trying to survive inside that world. This paper figures out which character types can exist at all, and which ones are truly stable.
+Imagine a game world with custom gravity, custom timing, and custom collision rules. A module is a character trying to survive inside that world. This paper figures out which character types can stay "free" over the map while still doing something interesting.
 
 ### Why this is cool
 
-It turns abstract algebra into a question about **possible inhabitants**. That is instantly more intuitive than staring at relations all day and pretending you are having fun.
+It turns abstract algebra into a question about **possible inhabitants**. That makes the math feel constructive, not just decorative.
 
-## Level 2: A Parametric Family of Subalgebras of the Weyl Algebra I
-
-### What is happening?
-
-This paper studies the family `k<x,y> / (yx - xy - x^N)` and works out its automorphisms.
-
-### Arcade translation
-
-There is a hidden slider marked `N`. Each time you move it, the world's rules shift. The challenge is to discover which transformations still preserve the map.
-
-### Why this is cool
-
-It is a symmetry game. Not every flashy move is legal. Lopes is identifying the moves that change appearance without destroying identity.
-
-In other words: this level is not about chaos. It is about **disciplined hacking**.
-
-## Level 3: Lie Structure on the Hochschild Cohomology
+## Level 2: Lie Structure on the Hochschild Cohomology
 
 ### What is happening?
 
@@ -85,7 +70,7 @@ This paper studies the Lie-type structure on Hochschild cohomology for a Weyl-ty
 
 ### Arcade translation
 
-If the algebra is the machine, then Hochschild cohomology is the dev console. It tells you which mods are possible, which ones are dangerous, and which ones interact in strange ways.
+If the algebra is the machine, then Hochschild cohomology is the dev console. It tells you which mods are possible, which ones interfere, and which ones break the system.
 
 ### Why this is cool
 
@@ -98,25 +83,7 @@ This is where the game becomes advanced. We are no longer asking what the world 
 
 Basically, this is **admin-mode mathematics**.
 
-## Level 4: Derivations and Automorphisms
-
-### What is happening?
-
-This paper studies derivations and automorphisms together for the same algebra family.
-
-### Arcade translation
-
-Automorphisms are the big map-preserving moves.
-Derivations are the tiny movement rules that tell you how change begins.
-
-One is like rotating the whole level.
-The other is like understanding the physics engine one frame at a time.
-
-### Why this is cool
-
-You need both if you want the complete strategy guide. Only looking at automorphisms is like learning all the secret warp zones without understanding how jumping works.
-
-## Level 5: Quantum Generalized Heisenberg Algebras
+## Level 3: Quantum Generalized Heisenberg Algebras
 
 ### What is happening?
 
@@ -124,13 +91,39 @@ This paper studies quantum generalized Heisenberg algebras and their representat
 
 ### Arcade translation
 
-The game now switches to weird mode.
-
-The rules are still structured, but they are no longer classical. The point is not randomness. The point is that the old familiar symmetries are now running through a stranger engine.
+The game now switches to weird mode. The rules are still structured, but they are no longer classical. The point is not randomness. The point is that the old familiar symmetries are now running through a stranger engine.
 
 ### Why this is cool
 
 Because it proves Lopes is not just replaying one map. He keeps moving the same structural instincts into tougher environments.
+
+## Level 4: Non-Noetherian Generalized Heisenberg Algebras
+
+### What is happening?
+
+This paper studies the non-noetherian side of generalized Heisenberg algebras, where the world is harder to control and standard good behavior starts to weaken.
+
+### Arcade translation
+
+Imagine a city with bad roads and inconsistent traffic. The impressive part is not that the city is messy. It is that Lopes can still map the legal moves and the deep symmetries anyway.
+
+### Why this is cool
+
+Because it shows structural control under bad conditions. That is one of the hardest things to do well in abstract algebra.
+
+## Level 5: A Parametric Family of Subalgebras of the Weyl Algebra I
+
+### What is happening?
+
+This paper studies a Weyl-type family and works out its automorphisms.
+
+### Arcade translation
+
+There is a hidden slider marked `N`. Each time you move it, the world's rules shift. The challenge is to discover which deep transformations still preserve the map.
+
+### Why this is cool
+
+It is a symmetry game. Not every flashy move is legal. Lopes is identifying the moves that change appearance without destroying identity.
 
 ## Bonus Stage: Why This Research Is Great for "Mathematics for Everyone"
 

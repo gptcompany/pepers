@@ -3,6 +3,8 @@
 **Target Institution:** CMUP - Centre for Mathematics, University of Porto
 **Editorial Goal:** Keep the mathematics intellectually serious while making the core ideas legible to advanced teenagers, non-specialists, and interdisciplinary readers.
 **Method:** This version is intentionally more pedagogical than operational. PePeRS pipeline notes are treated as diagnostic signals, not as final judgements on mathematical value.
+**Corpus Note:** This dossier follows the corrected evidence-based five-paper set used in the local verification pass: `3580`, `3397`, `3361`, `3398`, `3360`.
+**Meeting Use:** Use Sections 0-3 as the live briefing core. Treat later sections as reserve notes, not as text to read verbatim.
 
 ## 0. Executive Summary
 
@@ -48,63 +50,35 @@ This is why the dossier has outreach value. The vocabulary is advanced, but the 
 
 ## 2. Paper Map
 
-### Paper 1: Whittaker Modules for Generalized Weyl Algebras
+### Paper 1: Lifting Free Modules to Generalized Weyl Algebras
 
 **Research Lens**
 
-This paper classifies irreducible Whittaker modules over generalized Weyl algebras and links their existence to the defining polynomial of the algebra itself. That is important because it connects representation theory directly to the algebra's internal construction rules.
+This paper studies modules over generalized Weyl algebras that remain free over the base ring and gives a constructive classification of finite-rank examples. Its importance lies in shifting Lopes's line toward explicit module construction, simplicity criteria, and an application to `sl_2`.
 
 **Structural Lens**
 
-The paper shows that representation theory here is not decorative. The algebra's defining data controls which modules can exist and how rigid they are. This is one of the clearest places where Lopes's work moves from "describe the algebra" to "describe the mathematical life inside the algebra."
+This is one of the clearest places where Lopes's work moves from "describe the algebra" to "describe the mathematical life inside the algebra." It gives a constructive bridge between generalized Weyl structure and concrete representation-theoretic objects.
 
 **Mathematics for Everyone**
 
-Imagine a world with custom physics. A module is like a character that has to live inside that world without breaking the rules. This paper asks: which characters are possible, and which ones are the simplest but still fully alive? The answer matters because it tells us what kinds of behavior the algebraic world actually permits.
+Imagine a world with custom physics. A module is like a character that has to live inside that world without breaking the rules. This paper studies which character types can stay "free" over the underlying map and still carry interesting behavior.
 
-### Paper 2: A Parametric Family of Subalgebras of the Weyl Algebra I
+### Paper 2: Lie Structure on the Hochschild Cohomology of a Family of Subalgebras of the Weyl Algebra
 
 **Research Lens**
 
-This paper studies a family of algebras of the form `k<x,y> / (yx - xy - x^N)` and determines their automorphism group. In practice, it identifies which structure-preserving transformations survive once the defining relation is altered by the parameter `N`.
+This paper studies the Gerstenhaber or Lie-type structure on Hochschild cohomology for a family of Weyl-type subalgebras. The key significance is that cohomology is treated not as a static invariant, but as an algebraic object with internal dynamics.
 
 **Structural Lens**
 
-This is a rigidity paper. It asks how much of the wild symmetry of the Weyl algebra remains once the relation is specialized. The answer gives a controlled laboratory for testing how noncommutative structure reacts when one parameter changes the entire geometry of the system.
+This is where Lopes's program becomes deeper than classification. Once one knows an algebra family and its symmetries, the next question is how deformations interact. Hochschild cohomology becomes the language for controlled mutation.
 
 **Mathematics for Everyone**
 
-Think of a puzzle machine where one hidden slider changes the machine's rules. This paper asks: after you move that slider, which transformations still count as legal symmetries? In plain terms, it is about learning which edits change the machine and which edits preserve its identity.
+If algebra is a machine, cohomology is the engineer's hidden dashboard. It tells you which parts can be bent, tuned, or replaced, and which changes interfere with each other.
 
-### Paper 3: Lie Structure on the Hochschild Cohomology
-
-**Research Lens**
-
-This paper studies the Gerstenhaber or Lie-type structure on Hochschild cohomology for a family of Weyl-type subalgebras. The key significance is that cohomology is not treated as a static list of invariants, but as an algebraic object with internal dynamics.
-
-**Structural Lens**
-
-This is where Lopes's program becomes deeper than classification. Once you know an algebra exists and has certain symmetries, the next question is how deformations interact. Hochschild cohomology becomes the language for controlled mutation: what can be changed, what resists change, and how two possible changes collide.
-
-**Mathematics for Everyone**
-
-If algebra is a machine, cohomology is not the machine itself. It is the engineer's hidden dashboard telling you which parts can be bent, tuned, or replaced. This paper is exciting because it studies the dashboard, not just the machine. That is why it feels abstract: it is not one level above calculation, but two.
-
-### Paper 4: Derivations and Automorphisms of `k<x,y> / (yx - xy - x^N)`
-
-**Research Lens**
-
-This paper studies derivations and automorphisms together. Automorphisms describe full structure-preserving transformations; derivations describe infinitesimal change. Putting both into one framework gives a more complete picture of the algebra's symmetry behavior.
-
-**Structural Lens**
-
-The important idea here is scale. Automorphisms show the large moves; derivations show the differential or local moves. Together they help build an algorithmic map of rigidity versus flexibility in non-Noetherian settings.
-
-**Mathematics for Everyone**
-
-Suppose you want to understand a city. You study both the full road map and the tiny local traffic rules at each intersection. Automorphisms are like city-wide reroutes that still preserve the city's structure. Derivations are the local rules telling you how motion starts. This paper studies both at once.
-
-### Paper 5: Quantum Generalized Heisenberg Algebras
+### Paper 3: Quantum Generalized Heisenberg Algebras
 
 **Research Lens**
 
@@ -116,7 +90,35 @@ This paper matters because it shows Lopes's work is not trapped in one algebraic
 
 **Mathematics for Everyone**
 
-At school level, the word "quantum" is often used vaguely. Here it means the rules of the system have been modified in a disciplined way, so familiar symmetries now behave differently. The paper asks: after that change, what stable patterns of behavior still exist?
+At school level, the word "quantum" is often used vaguely. Here it means the rules of the system have been modified in a disciplined way, so familiar symmetries now behave differently.
+
+### Paper 4: Non-Noetherian Generalized Heisenberg Algebras
+
+**Research Lens**
+
+This paper studies the non-noetherian side of generalized Heisenberg algebras and shows that derivations, automorphisms, and classification remain tractable enough to support serious structural work even under weaker finiteness assumptions.
+
+**Structural Lens**
+
+The key idea is not simply that the algebra is harder. It is that Lopes shows meaningful structural control survives in a regime where standard methods are often less stable.
+
+**Mathematics for Everyone**
+
+Imagine a city with bad roads and messy traffic rules. Even there, you can still learn which moves preserve the city's identity. That is the intuition for the paper.
+
+### Paper 5: A Parametric Family of Subalgebras of the Weyl Algebra I
+
+**Research Lens**
+
+This paper studies a family of Weyl-type algebras and determines their automorphism group. In dossier terms, it is foundational: it gives a stable structural base for later cohomological and deformation-oriented work.
+
+**Structural Lens**
+
+It asks how much of the symmetry of the Weyl algebra survives after the defining relation is specialized. That makes it a natural structural predecessor to the Hochschild paper.
+
+**Mathematics for Everyone**
+
+Think of a puzzle machine where one hidden slider changes the rules. This paper asks which deep edits still preserve the machine's identity.
 
 ## 3. Why This Research Matters
 
@@ -224,7 +226,7 @@ BV language is fashionable but dangerous. It should be treated as a target for a
 ### Direction B: Generalized Weyl Algebras as a Module-Theoretic Expansion Engine
 
 **Question**
-Can the new free-module and Whittaker-module results be used as the starting point for a larger classification program on which generalized Weyl algebra families admit tractable, explicit, and geometrically meaningful module categories?
+Can the new free-module and explicit module-classification results be used as the starting point for a larger program on which generalized Weyl algebra families admit tractable, explicit, and geometrically meaningful module categories?
 
 **Why this matters**
 This is where Lopes's work can become more visibly constructive. Module theory is often the bridge that lets a structural algebra paper travel into Lie theory, deformation theory, and even mathematical physics.
