@@ -94,6 +94,7 @@ def _discover_rag_details(base_url: str) -> str:
 class AggregatedHealthCheck:
     name = "Aggregated health check"
     description = "Verify PePeRS, CAS, RAG, and Ollama endpoints"
+    auto_reconcile_when_configured = True
 
     def __init__(self) -> None:
         self._last_all_ok = False

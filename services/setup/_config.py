@@ -5,6 +5,10 @@ from __future__ import annotations
 import os
 import socket
 import sys
+import json
+import shutil
+import subprocess
+import urllib.request
 from pathlib import Path
 
 import questionary
@@ -171,12 +175,14 @@ class EnvConfig:
                     return False
                 config_values[key] = value
 
-        self._auto_resolve_internal_port_conflicts(config_values, console)
+        changed = self._auto_resolve_internal_port_conflicts(config_values, console)
 
         env_content = "\n".join(f"{k}={v}" for k, v in config_values.items()) + "\n"
         self._env_path.write_text(env_content)
         console.print(f"\n[green]Wrote {self._env_path}[/]")
         _print_env_hint(console, self._env_path)
+        if changed:
+            self._reconcile_services_after_port_change(console)
         return True
 
     def install_defaults(self, console: Console) -> bool:
@@ -190,12 +196,14 @@ class EnvConfig:
             resolved = default.replace("{root}", str(self._root))
             value = existing.get(env_name) or os.environ.get(env_name, "") or resolved
             config_values[env_name] = value
-        self._auto_resolve_internal_port_conflicts(config_values, console)
+        changed = self._auto_resolve_internal_port_conflicts(config_values, console)
         self._env_path.write_text(
             "\n".join(f"{k}={v}" for k, v in config_values.items()) + "\n"
         )
         console.print(f"  [green]\u2705 {self.name}[/] \u2014 generated .env with defaults")
         _print_env_hint(console, self._env_path)
+        if changed:
+            self._reconcile_services_after_port_change(console)
         return True
 
     def verify(self) -> bool:
@@ -205,7 +213,7 @@ class EnvConfig:
         self,
         config_values: dict[str, str],
         console: Console,
-    ) -> None:
+    ) -> bool:
         internal_port_keys = [
             "RP_DISCOVERY_PORT",
             "RP_ANALYZER_PORT",
@@ -215,6 +223,15 @@ class EnvConfig:
             "RP_ORCHESTRATOR_PORT",
             "RP_MCP_PORT",
         ]
+        expected_service = {
+            "RP_DISCOVERY_PORT": "discovery",
+            "RP_ANALYZER_PORT": "analyzer",
+            "RP_EXTRACTOR_PORT": "extractor",
+            "RP_VALIDATOR_PORT": "validator",
+            "RP_CODEGEN_PORT": "codegen",
+            "RP_ORCHESTRATOR_PORT": "orchestrator",
+            "RP_MCP_PORT": "mcp",
+        }
         used_in_config: set[int] = set()
         changed: list[tuple[str, int, int]] = []
         for key in internal_port_keys:
@@ -224,7 +241,10 @@ class EnvConfig:
             except (TypeError, ValueError):
                 continue
             chosen = requested
-            if chosen in used_in_config or _port_in_use(chosen):
+            exp = expected_service.get(key, "")
+            in_use = _port_in_use(chosen)
+            expected_ok = _is_expected_service_on_port(chosen, exp)
+            if chosen in used_in_config or (in_use and not expected_ok):
                 chosen = _find_next_free_port(max(1024, requested + 1), used_in_config)
             used_in_config.add(chosen)
             if chosen != requested:
@@ -234,6 +254,36 @@ class EnvConfig:
             console.print("[yellow]Detected occupied/conflicting internal ports. Auto-remapped:[/]")
             for key, old, new in changed:
                 console.print(f"[dim]- {key}: {old} -> {new}[/]")
+            return True
+        return False
+
+    def _reconcile_services_after_port_change(self, console: Console) -> None:
+        compose_file = self._root / "docker-compose.yml"
+        if not compose_file.exists():
+            return
+        docker = _docker_bin()
+        if docker is None:
+            console.print(
+                "[yellow]Ports remapped in .env, but Docker not found. "
+                "Services will use new ports on next start.[/]"
+            )
+            return
+        console.print(
+            "[cyan]Ports changed: reconciling Docker services with new port configuration...[/]"
+        )
+        try:
+            subprocess.run(
+                [docker, "compose", "up", "-d", "--build", "--force-recreate"],
+                cwd=self._root,
+                check=True,
+                text=True,
+            )
+            console.print("[green]Docker services reconciled with updated ports.[/]")
+        except subprocess.CalledProcessError as exc:
+            console.print(
+                "[yellow]Could not auto-reconcile Docker after port remap.[/]\n"
+                f"[dim]{exc}[/]"
+            )
 
 
 def _port_in_use(port: int) -> bool:
@@ -249,3 +299,35 @@ def _find_next_free_port(start: int, reserved: set[int]) -> int:
             return candidate
         candidate += 1
     raise RuntimeError("No free TCP port available in 1024-65535")
+
+
+def _is_expected_service_on_port(port: int, service_name: str) -> bool:
+    if not service_name:
+        return False
+    if service_name == "mcp":
+        try:
+            with urllib.request.urlopen(
+                f"http://127.0.0.1:{port}/sse", timeout=1.0
+            ) as resp:
+                return resp.status < 500
+        except Exception:
+            return False
+    try:
+        with urllib.request.urlopen(
+            f"http://127.0.0.1:{port}/health", timeout=1.0
+        ) as resp:
+            if resp.status >= 500:
+                return False
+            payload = json.loads(resp.read().decode("utf-8", errors="ignore"))
+            return payload.get("service") == service_name
+    except Exception:
+        return False
+
+
+def _docker_bin() -> str | None:
+    docker = shutil.which("docker")
+    if docker:
+        return docker
+    if sys.platform == "darwin" and Path("/usr/local/bin/docker").exists():
+        return "/usr/local/bin/docker"
+    return None
