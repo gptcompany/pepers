@@ -21,6 +21,7 @@ from services.orchestrator.pipeline import (
     STAGE_PARAMS,
     PipelineRunner,
     ServiceError,
+    _stage_port,
 )
 from services.orchestrator.scheduler import create_scheduler
 
@@ -374,7 +375,18 @@ class TestConstants:
 
     def test_stage_order_ports(self):
         ports = [s[1] for s in STAGE_ORDER]
-        assert ports == [8770, 8771, 8772, 8773, 8774]
+        expected = [
+            int(os.environ.get("RP_DISCOVERY_PORT", "8770")),
+            int(os.environ.get("RP_ANALYZER_PORT", "8771")),
+            int(os.environ.get("RP_EXTRACTOR_PORT", "8772")),
+            int(os.environ.get("RP_VALIDATOR_PORT", "8773")),
+            int(os.environ.get("RP_CODEGEN_PORT", "8774")),
+        ]
+        assert ports == expected
+
+    def test_stage_port_reads_env_override(self):
+        with patch.dict(os.environ, {"RP_DISCOVERY_PORT": "9900"}, clear=False):
+            assert _stage_port("discovery", 8770) == 9900
 
     def test_stage_params_all_services_covered(self):
         for name, _ in STAGE_ORDER:

@@ -123,17 +123,12 @@ class AggregatedHealthCheck:
         # Pending until executed at least once in current guided session.
         return self._has_run
 
-    def install(self, console: Console) -> bool:
-        table = Table(title="Service Health", show_lines=False)
-        table.add_column("Service", style="bold")
-        table.add_column("URL")
-        table.add_column("Status")
-        table.add_column("Details", style="dim")
-
+    def _collect_rows(self) -> tuple[list[tuple[str, str, bool, str]], bool, bool]:
+        rows: list[tuple[str, str, bool, str]] = []
         all_ok = True
-
-        # Internal PePeRS services
+        internal_ok = True
         env_file_values = _read_env_file()
+
         for svc_name, port in SERVICE_PORTS.items():
             env_key = f"RP_{svc_name.upper()}_PORT"
             raw_port = (
@@ -149,12 +144,18 @@ class AggregatedHealthCheck:
             url = f"http://localhost:{actual_port}{health_path}"
             expected = None if svc_name == "mcp" else svc_name
             ok = _check_http(url, expected_service=expected)
-            status = "[green]✅ OK[/]" if ok else "[red]❌ Down[/]"
-            table.add_row(svc_name.capitalize(), url, status, f":{actual_port}")
+            rows.append(
+                (
+                    svc_name.capitalize(),
+                    url,
+                    ok,
+                    f":{actual_port}",
+                )
+            )
             if not ok:
                 all_ok = False
+                internal_ok = False
 
-        # External services with capability discovery
         for name, (env_keys, default_url, path) in _EXTERNAL.items():
             base = _env_first(env_keys, default_url)
             url = base.rstrip("/") + path
@@ -164,20 +165,43 @@ class AggregatedHealthCheck:
             elif name == "RAG Service":
                 expected = "rag"
             ok = _check_http(url, expected_service=expected)
-            status = "[green]✅ OK[/]" if ok else "[red]❌ Down[/]"
-
             details = ""
             if ok:
                 if name == "CAS Service":
                     details = _discover_cas_details(base.rstrip("/"))
                 elif name == "RAG Service":
                     details = _discover_rag_details(base.rstrip("/"))
-
-            table.add_row(name, url, status, details)
+            rows.append((name, url, ok, details))
             if not ok:
                 all_ok = False
 
+        return rows, all_ok, internal_ok
+
+    def _print_rows(
+        self,
+        console: Console,
+        rows: list[tuple[str, str, bool, str]],
+    ) -> None:
+        table = Table(title="Service Health", show_lines=False)
+        table.add_column("Service", style="bold")
+        table.add_column("URL")
+        table.add_column("Status")
+        table.add_column("Details", style="dim")
+        for name, url, ok, details in rows:
+            status = "[green]✅ OK[/]" if ok else "[red]❌ Down[/]"
+            table.add_row(name, url, status, details)
         console.print(table)
+
+    def install(self, console: Console) -> bool:
+        self._maybe_auto_remap_internal_ports(console)
+        rows, all_ok, internal_ok = self._collect_rows()
+        if not internal_ok and self._maybe_auto_reconcile_internal_services(console):
+            console.print(
+                "[cyan]Re-checking PePeRS service health after Docker reconcile...[/]"
+            )
+            rows, all_ok, internal_ok = self._collect_rows()
+
+        self._print_rows(console, rows)
 
         self._last_all_ok = all_ok
         self._has_run = True
@@ -193,38 +217,46 @@ class AggregatedHealthCheck:
 
     def verify(self) -> bool:
         # Live verification to avoid stale "OK" after services go down.
-        all_ok = True
-        env_file_values = _read_env_file()
-        for svc_name, port in SERVICE_PORTS.items():
-            env_key = f"RP_{svc_name.upper()}_PORT"
-            raw_port = (
-                os.environ.get(env_key)
-                or env_file_values.get(env_key)
-                or str(port)
-            )
-            try:
-                actual_port = int(raw_port)
-            except (TypeError, ValueError):
-                actual_port = port
-            health_path = _INTERNAL_HEALTH_PATHS.get(svc_name, "/health")
-            url = f"http://localhost:{actual_port}{health_path}"
-            expected = None if svc_name == "mcp" else svc_name
-            if not _check_http(url, expected_service=expected):
-                all_ok = False
-
-        for name, (env_keys, default_url, path) in _EXTERNAL.items():
-            base = _env_first(env_keys, default_url)
-            url = base.rstrip("/") + path
-            expected = None
-            if name == "CAS Service":
-                expected = "cas"
-            elif name == "RAG Service":
-                expected = "rag"
-            if not _check_http(url, expected_service=expected):
-                all_ok = False
-
+        _rows, all_ok, _internal_ok = self._collect_rows()
         self._last_all_ok = all_ok
         return all_ok
+
+    def _maybe_auto_remap_internal_ports(self, console: Console) -> None:
+        try:
+            from services.setup._config import EnvConfig, _read_env_values
+        except Exception:
+            return
+        root = Path.cwd()
+        env_path = root / ".env"
+        if not env_path.exists():
+            return
+        values = _read_env_values(env_path)
+        for svc_name, port in SERVICE_PORTS.items():
+            env_key = f"RP_{svc_name.upper()}_PORT"
+            values.setdefault(env_key, str(port))
+        step = EnvConfig(root)
+        changed = step._auto_resolve_internal_port_conflicts(values, console)
+        if not changed:
+            return
+        env_path.write_text("\n".join(f"{k}={v}" for k, v in values.items()) + "\n")
+        console.print(
+            "[cyan]Updated .env with remapped internal ports before health verification.[/]"
+        )
+        step._reconcile_services_after_port_change(console)
+
+    def _maybe_auto_reconcile_internal_services(self, console: Console) -> bool:
+        try:
+            from services.setup._docker import DockerComposeUp
+        except Exception:
+            return False
+        step = DockerComposeUp(Path.cwd())
+        if step._compose_file() is None:
+            return False
+        console.print(
+            "[yellow]Some internal PePeRS services are down. "
+            "Attempting automatic Docker reconcile...[/]"
+        )
+        return step.install(console)
 
 
 # ── Easy-mode verdict ────────────────────────────────────────

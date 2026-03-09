@@ -641,6 +641,21 @@ class TestExternalServiceCheck:
         assert "raganything.service" in by_name["RAG Service"]["systemd_units"]
         assert "Ollama" not in by_name
 
+    def test_persist_url_silent_updates_all_alias_keys(self, tmp_path):
+        env_file = tmp_path / ".env"
+        env_file.write_text(
+            "RP_EXTRACTOR_RAG_URL=http://localhost:8767\n"
+            "RP_RAG_QUERY_URL=http://localhost:8767\n"
+            "RP_RAG_URL=http://localhost:8767\n"
+        )
+        svc = next(s for s in _EXTERNAL_SERVICES if s["name"] == "RAG Service")
+        step = ExternalServiceCheck(svc, project_root=tmp_path)
+        step._persist_url_silent("http://localhost:9900")
+        values = _read_env_values(env_file)
+        assert values["RP_EXTRACTOR_RAG_URL"] == "http://localhost:9900"
+        assert values["RP_RAG_QUERY_URL"] == "http://localhost:9900"
+        assert values["RP_RAG_URL"] == "http://localhost:9900"
+
     @patch("services.setup._services.subprocess.run")
     @patch("services.setup._services.questionary.confirm")
     @patch("services.setup._services.shutil.which", return_value="/usr/bin/cas-setup")
@@ -907,6 +922,45 @@ class TestAggregatedHealthCheck:
             step.install(console)
         called_urls = [call.args[0] for call in mock_http.call_args_list]
         assert "http://localhost:9900/health" in called_urls
+
+    @patch.object(EnvConfig, "_reconcile_services_after_port_change")
+    @patch.object(EnvConfig, "_auto_resolve_internal_port_conflicts", return_value=True)
+    @patch("services.setup._verify._check_http", return_value=True)
+    def test_install_seeds_missing_internal_ports_before_remap(
+        self,
+        _mock_http,
+        mock_remap,
+        mock_reconcile,
+        tmp_path,
+    ):
+        env_file = tmp_path / ".env"
+        env_file.write_text("RP_DB_PATH=/tmp/test.db\n")
+        step = AggregatedHealthCheck()
+        console = MagicMock()
+        with patch("services.setup._verify.Path.cwd", return_value=tmp_path):
+            step.install(console)
+        passed_values = mock_remap.call_args.args[0]
+        assert passed_values["RP_DISCOVERY_PORT"] == "8770"
+        assert passed_values["RP_ORCHESTRATOR_PORT"] == "8775"
+        assert passed_values["RP_MCP_PORT"] == "8776"
+        mock_reconcile.assert_called_once()
+
+    @patch.object(AggregatedHealthCheck, "_maybe_auto_reconcile_internal_services", return_value=True)
+    @patch.object(AggregatedHealthCheck, "_collect_rows")
+    def test_install_auto_reconciles_when_internal_services_are_down(
+        self,
+        mock_collect,
+        mock_reconcile,
+    ):
+        mock_collect.side_effect = [
+            ([("Discovery", "http://localhost:8770/health", False, ":8770")], False, False),
+            ([("Discovery", "http://localhost:8780/health", True, ":8780")], True, True),
+        ]
+        step = AggregatedHealthCheck()
+        console = MagicMock()
+        assert step.install(console) is True
+        mock_reconcile.assert_called_once_with(console)
+        assert mock_collect.call_count == 2
 
     def test_verify_constants_keep_legacy_fallbacks(self):
         cas_envs, _, _ = _EXTERNAL["CAS Service"]

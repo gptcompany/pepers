@@ -35,13 +35,21 @@ from services.orchestrator.metrics import (
 
 logger = logging.getLogger(__name__)
 
+def _stage_port(service: str, default: int) -> int:
+    raw = os.environ.get(f"RP_{service.upper()}_PORT", str(default))
+    try:
+        return int(raw)
+    except (TypeError, ValueError):
+        return default
+
+
 # Stage order: (name, port)
 STAGE_ORDER: list[tuple[str, int]] = [
-    ("discovery", 8770),
-    ("analyzer", 8771),
-    ("extractor", 8772),
-    ("validator", 8773),
-    ("codegen", 8774),
+    ("discovery", _stage_port("discovery", 8770)),
+    ("analyzer", _stage_port("analyzer", 8771)),
+    ("extractor", _stage_port("extractor", 8772)),
+    ("validator", _stage_port("validator", 8773)),
+    ("codegen", _stage_port("codegen", 8774)),
 ]
 
 # External dependencies checked before pipeline runs: (name, base_url, health_path)

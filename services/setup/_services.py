@@ -121,42 +121,45 @@ class ExternalServiceCheck:
         env_urls = self._svc.get("env_urls")
         if not isinstance(env_urls, list) or not env_urls:
             return
-        key = next((k for k in env_urls if isinstance(k, str)), None)
-        if key is None:
+        keys = [k for k in env_urls if isinstance(k, str)]
+        if not keys:
             return
         env_path = self._env_path()
         if env_path is None:
             return
         values = self._read_env_file()
-        values[key] = url
+        for key in keys:
+            values[key] = url
         lines = [f"{k}={v}" for k, v in values.items()]
         env_path.write_text("\n".join(lines) + "\n")
-        os.environ[key] = url
-        console.print(f"[green]Saved {key}={url} in {env_path}[/]")
+        for key in keys:
+            os.environ[key] = url
+        console.print(f"[green]Saved {', '.join(keys)}={url} in {env_path}[/]")
 
     def _persist_url_silent(self, url: str) -> None:
         env_urls = self._svc.get("env_urls")
         if not isinstance(env_urls, list) or not env_urls:
             return
-        key = next((k for k in env_urls if isinstance(k, str)), None)
-        if key is None:
+        keys = [k for k in env_urls if isinstance(k, str)]
+        if not keys:
             return
         env_path = self._env_path()
         if env_path is None:
             return
         values = self._read_env_file()
-        values[key] = url
+        for key in keys:
+            values[key] = url
         env_path.write_text("\n".join(f"{k}={v}" for k, v in values.items()) + "\n")
-        os.environ[key] = url
+        for key in keys:
+            os.environ[key] = url
 
     def _set_runtime_url(self, url: str) -> None:
         env_urls = self._svc.get("env_urls")
         if not isinstance(env_urls, list) or not env_urls:
             return
-        key = next((k for k in env_urls if isinstance(k, str)), None)
-        if key is None:
-            return
-        os.environ[key] = url
+        for key in env_urls:
+            if isinstance(key, str):
+                os.environ[key] = url
 
     def _url(self) -> str:
         if self._active_url:
