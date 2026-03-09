@@ -75,7 +75,7 @@ services:
     env_file: .env
     volumes:
       - ${PEPERS_DATA_DIR:-./data}:/data
-      - ${PEPERS_DATA_DIR:-./data}/gemini-cache:/home/pepers/.gemini
+      - ${PEPERS_HOST_HOME:-/home/sam}/.gemini:/home/pepers/.gemini
       - ${PEPERS_HOST_HOME:-/home/sam}/.config/gemini:/home/pepers/.config/gemini:ro
       - ${PEPERS_HOST_HOME:-/home/sam}/.config/gcloud:/home/pepers/.config/gcloud:ro
     user: "${PEPERS_UID:-1000}:${PEPERS_GID:-1000}"
