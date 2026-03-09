@@ -5,6 +5,7 @@ from __future__ import annotations
 import os
 from dataclasses import dataclass, field
 from enum import Enum
+from pathlib import Path
 
 import requests
 from rich.console import Console
@@ -28,11 +29,32 @@ _EXTERNAL = {
 
 
 def _env_first(keys: tuple[str, ...], default: str) -> str:
+    env_file_values = _read_env_file()
     for key in keys:
         value = os.environ.get(key, "").strip()
         if value:
             return value
+        file_value = env_file_values.get(key, "").strip()
+        if file_value:
+            return file_value
     return default
+
+
+def _read_env_file() -> dict[str, str]:
+    env_path = Path.cwd() / ".env"
+    if not env_path.exists():
+        return {}
+    values: dict[str, str] = {}
+    try:
+        for raw_line in env_path.read_text().splitlines():
+            line = raw_line.strip()
+            if not line or line.startswith("#") or "=" not in line:
+                continue
+            key, value = line.split("=", 1)
+            values[key.strip()] = value.strip()
+    except OSError:
+        return {}
+    return values
 
 
 def _check_http(url: str, timeout: float = 3.0) -> bool:
