@@ -795,8 +795,11 @@ class TestAggregatedHealthCheck:
         console = MagicMock()
         assert step.install(console) is True
 
-    def test_verify_always_true(self):
+    @patch("services.setup._verify._check_http", return_value=True)
+    def test_verify_true_after_successful_install(self, _mock_http):
         step = AggregatedHealthCheck()
+        console = MagicMock()
+        step.install(console)
         assert step.verify() is True
 
     @patch("services.setup._verify._discover_rag_details", return_value="")

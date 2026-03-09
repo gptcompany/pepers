@@ -73,6 +73,9 @@ class AggregatedHealthCheck:
     name = "Aggregated health check"
     description = "Verify PePeRS, CAS, RAG, and Ollama endpoints"
 
+    def __init__(self) -> None:
+        self._last_all_ok = False
+
     def check(self) -> bool:
         # Always run the full check in install()
         return False
@@ -118,6 +121,7 @@ class AggregatedHealthCheck:
 
         console.print(table)
 
+        self._last_all_ok = all_ok
         if not all_ok:
             console.print(
                 "\n[yellow]Some services are not reachable. "
@@ -126,10 +130,10 @@ class AggregatedHealthCheck:
         else:
             console.print("\n[green]All services are healthy![/]")
 
-        return True  # always "succeeds" — it's informational
+        return True
 
     def verify(self) -> bool:
-        return True
+        return self._last_all_ok
 
 
 # ── Easy-mode verdict ────────────────────────────────────────

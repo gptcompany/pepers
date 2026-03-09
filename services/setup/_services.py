@@ -134,6 +134,15 @@ class ExternalServiceCheck:
         os.environ[key] = url
         console.print(f"[green]Saved {key}={url} in {env_path}[/]")
 
+    def _set_runtime_url(self, url: str) -> None:
+        env_urls = self._svc.get("env_urls")
+        if not isinstance(env_urls, list) or not env_urls:
+            return
+        key = next((k for k in env_urls if isinstance(k, str)), None)
+        if key is None:
+            return
+        os.environ[key] = url
+
     def _url(self) -> str:
         if self._active_url:
             return self._active_url
@@ -507,6 +516,8 @@ class ExternalServiceCheck:
                     default=True,
                 ):
                     self._persist_url(default_url, console)
+                else:
+                    self._set_runtime_url(default_url)
                 if self._probe_url(default_url, strict_identity=True):
                     return True
                 console.print(
@@ -525,6 +536,8 @@ class ExternalServiceCheck:
                     default=True,
                 ):
                     self._persist_url(discovered, console)
+                else:
+                    self._set_runtime_url(discovered)
                 return True
 
             if action == "Enter custom URL/port":
@@ -542,6 +555,8 @@ class ExternalServiceCheck:
                         default=True,
                     ):
                         self._persist_url(custom, console)
+                    else:
+                        self._set_runtime_url(custom)
                     return True
                 console.print(
                     f"[yellow]{self.name} not reachable at {custom}{self._svc['health_path']}[/]"
@@ -551,6 +566,8 @@ class ExternalServiceCheck:
                     default=True,
                 ):
                     self._persist_url(custom, console)
+                else:
+                    self._set_runtime_url(custom)
                 continue
 
             # Install/start selected.
