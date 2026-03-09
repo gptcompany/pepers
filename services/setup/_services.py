@@ -134,6 +134,21 @@ class ExternalServiceCheck:
         os.environ[key] = url
         console.print(f"[green]Saved {key}={url} in {env_path}[/]")
 
+    def _persist_url_silent(self, url: str) -> None:
+        env_urls = self._svc.get("env_urls")
+        if not isinstance(env_urls, list) or not env_urls:
+            return
+        key = next((k for k in env_urls if isinstance(k, str)), None)
+        if key is None:
+            return
+        env_path = self._env_path()
+        if env_path is None:
+            return
+        values = self._read_env_file()
+        values[key] = url
+        env_path.write_text("\n".join(f"{k}={v}" for k, v in values.items()) + "\n")
+        os.environ[key] = url
+
     def _set_runtime_url(self, url: str) -> None:
         env_urls = self._svc.get("env_urls")
         if not isinstance(env_urls, list) or not env_urls:
@@ -477,6 +492,8 @@ class ExternalServiceCheck:
         discovered = self._discover_running_url()
         if discovered:
             self._active_url = discovered
+            # Keep aggregated checks aligned with discovered healthy endpoint.
+            self._persist_url_silent(discovered)
             return True
         return False
 

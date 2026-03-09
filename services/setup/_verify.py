@@ -57,10 +57,29 @@ def _read_env_file() -> dict[str, str]:
     return values
 
 
-def _check_http(url: str, timeout: float = 3.0) -> bool:
+def _check_http(
+    url: str,
+    timeout: float = 3.0,
+    *,
+    expected_service: str | None = None,
+) -> bool:
     try:
         resp = requests.get(url, timeout=timeout, stream=True)
-        return resp.status_code < 500
+        if resp.status_code >= 500:
+            return False
+        if expected_service is None:
+            return True
+        try:
+            data = resp.json()
+        except ValueError:
+            return False
+        service = str(data.get("service", "")).lower()
+        status = str(data.get("status", "")).lower()
+        if expected_service == "rag":
+            return ("rag" in service or "rag_initialized" in data) and status == "ok"
+        if expected_service == "cas":
+            return "cas" in service and status == "ok"
+        return expected_service == service and status == "ok"
     except (requests.ConnectionError, requests.Timeout):
         return False
 
@@ -128,7 +147,8 @@ class AggregatedHealthCheck:
                 actual_port = port
             health_path = _INTERNAL_HEALTH_PATHS.get(svc_name, "/health")
             url = f"http://localhost:{actual_port}{health_path}"
-            ok = _check_http(url)
+            expected = None if svc_name == "mcp" else svc_name
+            ok = _check_http(url, expected_service=expected)
             status = "[green]✅ OK[/]" if ok else "[red]❌ Down[/]"
             table.add_row(svc_name.capitalize(), url, status, f":{actual_port}")
             if not ok:
@@ -138,7 +158,12 @@ class AggregatedHealthCheck:
         for name, (env_keys, default_url, path) in _EXTERNAL.items():
             base = _env_first(env_keys, default_url)
             url = base.rstrip("/") + path
-            ok = _check_http(url)
+            expected = None
+            if name == "CAS Service":
+                expected = "cas"
+            elif name == "RAG Service":
+                expected = "rag"
+            ok = _check_http(url, expected_service=expected)
             status = "[green]✅ OK[/]" if ok else "[red]❌ Down[/]"
 
             details = ""
@@ -183,13 +208,19 @@ class AggregatedHealthCheck:
                 actual_port = port
             health_path = _INTERNAL_HEALTH_PATHS.get(svc_name, "/health")
             url = f"http://localhost:{actual_port}{health_path}"
-            if not _check_http(url):
+            expected = None if svc_name == "mcp" else svc_name
+            if not _check_http(url, expected_service=expected):
                 all_ok = False
 
-        for _name, (env_keys, default_url, path) in _EXTERNAL.items():
+        for name, (env_keys, default_url, path) in _EXTERNAL.items():
             base = _env_first(env_keys, default_url)
             url = base.rstrip("/") + path
-            if not _check_http(url):
+            expected = None
+            if name == "CAS Service":
+                expected = "cas"
+            elif name == "RAG Service":
+                expected = "rag"
+            if not _check_http(url, expected_service=expected):
                 all_ok = False
 
         self._last_all_ok = all_ok
