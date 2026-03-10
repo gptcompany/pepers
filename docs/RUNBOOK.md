@@ -353,7 +353,56 @@ done
 curl -s "http://localhost:8775/runs?id=$RUN_ID" | python3 -m json.tool
 ```
 
-### 6.5 Query Generated Code
+### 6.5 Requeue a Partial or Failed Run
+
+Use requeue when a historical run is already terminal (`partial` or `failed`) and
+must be relaunched as a new audited run. This does **not** mutate the original
+row in place.
+
+Semantics:
+
+- `running` runs are handled by the startup resume path, not by requeue.
+- `partial` and `failed` runs can be requeued explicitly.
+- `paper_id` runs use `resume_from_current_stage`.
+- `query` runs use `rerun_query` because the original paper cohort is not stored
+  by `run_id` in shared pipeline tables.
+
+Preview the requeue plan first:
+
+```bash
+curl -s -X POST http://localhost:8775/runs/requeue \
+  -H "Content-Type: application/json" \
+  -d '{"run_id": "run-20260309-165416-a5f299", "dry_run": true}' \
+  | python3 -m json.tool
+```
+
+Launch a real requeue:
+
+```bash
+curl -s -X POST http://localhost:8775/runs/requeue \
+  -H "Content-Type: application/json" \
+  -d '{"run_id": "run-20260309-165416-a5f299"}' \
+  | python3 -m json.tool
+```
+
+Bulk preview:
+
+```bash
+curl -s -X POST http://localhost:8775/runs/requeue \
+  -H "Content-Type: application/json" \
+  -d '{"run_ids": ["run-a", "run-b"], "dry_run": true}' \
+  | python3 -m json.tool
+```
+
+Audit trail written into the new run's `pipeline_runs.params`:
+
+- `requeue_of`
+- `requeue_strategy`
+- `requeue_source_status`
+- `requeue_requested_at`
+- `requeue_source_failed_stage`
+
+### 6.6 Query Generated Code
 
 ```bash
 # All generated code for a paper
@@ -369,7 +418,7 @@ curl -s "http://localhost:8775/generated-code?paper_id=42&formula_id=551" | pyth
 curl -s "http://localhost:8775/generated-code?paper_id=42&limit=10&offset=20" | python3 -m json.tool
 ```
 
-### 6.6 Database Backup and Restore
+### 6.7 Database Backup and Restore
 
 ```bash
 # Backup
@@ -416,9 +465,17 @@ All configuration via environment variables with `RP_` prefix. Set in `.env`.
 
 | Variable | Default | Description |
 |----------|---------|-------------|
-| `RP_ORCHESTRATOR_TIMEOUT` | 300 | Per-service HTTP call timeout (seconds; codegen uses 900 via `RP_ORCHESTRATOR_CODEGEN_TIMEOUT`) |
+| `RP_ORCHESTRATOR_TIMEOUT` | 300 | Default per-service HTTP call timeout (seconds) |
+| `RP_ORCHESTRATOR_ANALYZER_TIMEOUT` | 1800 | Analyzer-specific timeout (seconds) |
 | `RP_ORCHESTRATOR_RETRY_MAX` | 3 | Max retries per service call |
 | `RP_ORCHESTRATOR_RETRY_BACKOFF` | 4.0 | Exponential backoff base (seconds) |
+| `RP_ORCHESTRATOR_CRON_ENABLED` | `false` | Enable cron scheduler |
+| `RP_ORCHESTRATOR_CRON` | `0 8 * * *` | Cron expression |
+| `RP_ORCHESTRATOR_STAGES_PER_RUN` | 5 | Stages per cron-triggered run |
+| `RP_ORCHESTRATOR_CRON_MAX_PAPERS` | 10 | Max papers per cron batch |
+| `RP_ORCHESTRATOR_CRON_MAX_FORMULAS` | 50 | Max formulas per cron batch |
+| `RP_ORCHESTRATOR_RESUME_STUCK_RUNS` | `true` | Resume orphaned `running` runs at boot; otherwise mark them failed |
+| `RP_ORCHESTRATOR_CODEGEN_TIMEOUT` | 900 | Codegen-specific timeout (seconds) |
 
 ### LLM
 

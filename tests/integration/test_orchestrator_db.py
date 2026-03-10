@@ -286,6 +286,126 @@ class TestOrchestratorHTTP:
             urllib.request.urlopen(req)
         assert exc_info.value.code == 400
 
+    def _post(self, path, data):
+        url = f"http://localhost:{self.port}{path}"
+        req = urllib.request.Request(
+            url,
+            data=json.dumps(data).encode("utf-8"),
+            headers={"Content-Type": "application/json"},
+            method="POST",
+        )
+        try:
+            with urllib.request.urlopen(req) as resp:
+                return resp.getcode(), json.loads(resp.read())
+        except urllib.error.HTTPError as e:
+            try:
+                content = json.loads(e.read())
+            except Exception:
+                content = {}
+            return e.code, content
+
+    def test_requeue_rejects_running(self):
+        with transaction(self.db_path) as conn:
+            conn.execute(
+                "INSERT INTO pipeline_runs (run_id, status, params, stages_requested) "
+                "VALUES (?, 'running', ?, 5)",
+                ("run-active", '{"query":"test"}'),
+            )
+
+        code, data = self._post("/runs/requeue", {"run_id": "run-active"})
+        assert code == 409
+        assert data["code"] == "RUN_STILL_RUNNING"
+
+    def test_requeue_rejects_completed(self):
+        with transaction(self.db_path) as conn:
+            conn.execute(
+                "INSERT INTO pipeline_runs (run_id, status, params, stages_requested) "
+                "VALUES (?, 'completed', ?, 5)",
+                ("run-done", '{"query":"test"}'),
+            )
+
+        code, data = self._post("/runs/requeue", {"run_id": "run-done"})
+        assert code == 409
+        assert data["code"] == "RUN_ALREADY_COMPLETED"
+
+    def test_requeue_dry_run_mixed(self):
+        with transaction(self.db_path) as conn:
+            conn.execute(
+                "INSERT INTO pipeline_runs (run_id, status, params, stages_requested) "
+                "VALUES (?, 'failed', ?, 5)",
+                ("run-f", '{"query":"f"}'),
+            )
+            conn.execute(
+                "INSERT INTO pipeline_runs (run_id, status, params, stages_requested) "
+                "VALUES (?, 'completed', ?, 5)",
+                ("run-c", '{"query":"c"}'),
+            )
+
+        code, data = self._post("/runs/requeue", {
+            "run_ids": ["run-f", "run-c"],
+            "dry_run": True,
+            "skip_preflight": True
+        })
+        assert code == 200
+        assert data["status"] == "dry_run"
+        assert data["accepted"] == 1
+        assert data["rejected"] == 1
+        assert "queued" in data
+        assert len(data["queued"]) == 1
+        assert data["queued"][0]["source_run_id"] == "run-f"
+
+    @patch("services.orchestrator.main.OrchestratorHandler._check_required_deps")
+    def test_requeue_preflight_failure(self, mock_check):
+        mock_check.return_value = (False, ["cas"])
+
+        with transaction(self.db_path) as conn:
+            conn.execute(
+                "INSERT INTO pipeline_runs (run_id, status, params, stages_requested) "
+                "VALUES (?, 'failed', ?, 5)",
+                ("run-fail", '{"query":"fail"}'),
+            )
+
+        code, data = self._post("/runs/requeue", {"run_id": "run-fail"})
+        assert code == 503
+        assert data["code"] == "PREFLIGHT_FAILED"
+        assert "cas" in data["error"]
+
+    @patch("services.orchestrator.pipeline.requests.post")
+    def test_requeue_persistence_and_audit(self, mock_post):
+        mock_post.return_value = MagicMock(status_code=200, json=lambda: {"ok": True})
+
+        with transaction(self.db_path) as conn:
+            conn.execute(
+                "INSERT INTO pipeline_runs (run_id, status, params, stages_requested) "
+                "VALUES (?, 'failed', ?, 5)",
+                ("run-orig", '{"query":"quant","max_papers":5}'),
+            )
+
+        code, data = self._post("/runs/requeue", {
+            "run_id": "run-orig",
+            "skip_preflight": True
+        })
+        assert code == 202
+        new_run_id = data["queued"][0]["run_id"]
+
+        # Give the thread a moment to insert the record
+        status = None
+        for _ in range(10):
+            runner = PipelineRunner(self.db_path)
+            status = runner.get_run_status(new_run_id)
+            if status:
+                break
+            time.sleep(0.1)
+
+        assert status is not None
+        assert status["status"] in {"running", "failed", "partial", "completed"}
+        params = status["params"]
+        assert params["query"] == "quant"
+        assert params["requeue_of"] == "run-orig"
+        assert params["requeue_strategy"] == "rerun_query"
+        assert params["requeue_source_status"] == "failed"
+        assert "requeue_requested_at" in params
+
 
 # ---------------------------------------------------------------------------
 # GET /papers and /formulas endpoint tests

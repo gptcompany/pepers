@@ -91,6 +91,7 @@ Default local ports: `:8770-:8776` (override in `.env`).
 | **Code Generation** | SymPy `codegen()` for C99/Rust/Python + batch LLM explanations |
 | **GitHub Discovery** | Search GitHub for paper implementations, analyze with Gemini |
 | **Async Pipeline** | `POST /run` returns HTTP 202, poll `GET /runs` for progress |
+| **Run Requeue** | `POST /runs/requeue` creates a new audited run derived from a `partial` or `failed` run |
 | **RAG Search** | Semantic search over processed papers via RAGAnything knowledge graph |
 | **Custom Notations** | Define custom LaTeX macros (e.g. `\Expect`, `\KL`) expanded before CAS validation |
 | **MCP Server** | HTTP + SSE interface with 11 tools for Claude Desktop/Cursor. Arcade flavor output! |
@@ -182,6 +183,11 @@ curl -X POST http://localhost:8775/run \
 # Check progress
 curl http://localhost:8775/runs?id=<run_id>
 
+# Preview requeue of a partial/failed run without launching it
+curl -X POST http://localhost:8775/runs/requeue \
+  -H "Content-Type: application/json" \
+  -d '{"run_id": "<old_run_id>", "dry_run": true}'
+
 # Search papers (RAG semantic search)
 curl -X POST http://localhost:8775/search \
   -H "Content-Type: application/json" \
@@ -257,6 +263,8 @@ All config via environment variables with `RP_` prefix:
 | `RP_LLM_TEMPERATURE` | `0.0` | LLM temperature (determinism) |
 | `RP_NOTIFY_URLS` | — | Apprise notification URLs (CSV) |
 | `RP_ORCHESTRATOR_CRON` | `0 8 * * *` | Daily pipeline schedule |
+| `RP_ORCHESTRATOR_ANALYZER_TIMEOUT` | `1800` | Analyzer-specific timeout (seconds) |
+| `RP_ORCHESTRATOR_RESUME_STUCK_RUNS` | `true` | Resume orphaned `running` runs at orchestrator boot |
 | `RP_DISCOVERY_SOURCES` | `arxiv` | Paper sources: `arxiv`, `openalex` (comma-separated) |
 | `RP_ORCHESTRATOR_CRON_ENABLED` | `false` | Enable cron scheduler (disabled by default) |
 | `RP_MCP_PORT` | `8776` | MCP Server SSE port |
@@ -272,6 +280,7 @@ See [docs/RUNBOOK.md](docs/RUNBOOK.md) for full configuration reference.
 |--------|----------|-------------|
 | `POST /run` | Trigger async pipeline (HTTP 202) |
 | `GET /runs` | List/poll pipeline runs |
+| `POST /runs/requeue` | Requeue a `partial` or `failed` run as a new derived run |
 | `POST /search` | RAG semantic search |
 | `GET /papers` | List papers by stage |
 | `GET /formulas` | List formulas by paper |
@@ -296,6 +305,16 @@ See [docs/RUNBOOK.md](docs/RUNBOOK.md) for full configuration reference.
 | `add_notation` | Add/update custom LaTeX notation |
 | `list_notations` | List all custom notations |
 | `remove_notation` | Remove a custom notation |
+
+### Run Semantics
+
+- `POST /run` always creates a new async run and returns HTTP `202`.
+- Orchestrator restart can automatically resume orphaned runs only if they are still stored as `status='running'`.
+- Historical runs already marked `partial` are terminal and are not resumed in place.
+- `POST /runs/requeue` creates a new audited run derived from the source run:
+  - `paper_id` runs use `resume_from_current_stage`
+  - `query` runs use `rerun_query`
+- Use `"dry_run": true` first to inspect what would be queued without starting work.
 
 #### Guided Workflows (MCP Prompts)
 

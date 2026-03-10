@@ -17,6 +17,7 @@ from services.orchestrator.main import (
     _run_pipeline_async,
 )
 from services.orchestrator.pipeline import (
+    RequeueError,
     STAGE_ORDER,
     STAGE_PARAMS,
     PipelineRunner,
@@ -25,6 +26,17 @@ from services.orchestrator.pipeline import (
     _stage_url,
 )
 from services.orchestrator.scheduler import create_scheduler
+
+
+def _assert_stage_skipped(result: dict, stage_name: str, upstream_stage: str) -> None:
+    """Assert a stage result was explicitly marked as skipped."""
+    stage_result = result["results"][stage_name]
+    assert (
+        stage_result.get("status") == "skipped"
+        or stage_result.get("skipped") is True
+    )
+    reason = stage_result.get("reason", stage_result.get("error", ""))
+    assert upstream_stage in reason
 
 
 # ---------------------------------------------------------------------------
@@ -317,6 +329,7 @@ class TestRunPipeline:
         self.runner.timeout = 5
         self.runner.retry_max = 0
         self.runner.retry_backoff = 1.0
+        self.runner.STAGE_TIMEOUTS = {"analyzer": 1800, "codegen": 900}
 
     @patch.object(PipelineRunner, "_call_service_with_retry")
     def test_query_run_all_stages(self, mock_call):
@@ -334,16 +347,18 @@ class TestRunPipeline:
         mock_call.side_effect = [
             {"papers_found": 3},
             ServiceError("Analyzer down"),
-            {"processed": 2},
-            {"valid": 1},
-            {"code_generated": {"c99": 1}},
         ]
 
         result = self.runner.run(query="test", stages=5)
 
         assert result["status"] == "partial"
-        assert result["stages_completed"] == 4
+        assert result["stages_completed"] == 1
+        assert result["stages_skipped"] == 3
         assert len(result["errors"]) == 1
+        assert mock_call.call_count == 2
+        _assert_stage_skipped(result, "extractor", "analyzer")
+        _assert_stage_skipped(result, "validator", "analyzer")
+        _assert_stage_skipped(result, "codegen", "analyzer")
 
     @patch.object(PipelineRunner, "_call_service_with_retry")
     def test_all_stages_fail(self, mock_call):
@@ -353,7 +368,28 @@ class TestRunPipeline:
 
         assert result["status"] == "failed"
         assert result["stages_completed"] == 0
-        assert len(result["errors"]) == 5
+        assert result["stages_skipped"] == 4
+        assert len(result["errors"]) == 1
+        assert mock_call.call_count == 1
+        _assert_stage_skipped(result, "analyzer", "discovery")
+        _assert_stage_skipped(result, "extractor", "discovery")
+        _assert_stage_skipped(result, "validator", "discovery")
+        _assert_stage_skipped(result, "codegen", "discovery")
+
+    @patch.object(PipelineRunner, "_get_paper_stage", return_value="discovered")
+    @patch.object(PipelineRunner, "_call_service_with_retry")
+    def test_paper_scoped_failure_skips_downstream(self, mock_call, mock_stage):
+        mock_call.side_effect = [ServiceError("Analyzer down")]
+
+        result = self.runner.run(paper_id=42, stages=4)
+
+        assert result["status"] == "failed"
+        assert result["stages_completed"] == 0
+        assert result["stages_skipped"] == 3
+        assert mock_call.call_count == 1
+        _assert_stage_skipped(result, "extractor", "analyzer")
+        _assert_stage_skipped(result, "validator", "analyzer")
+        _assert_stage_skipped(result, "codegen", "analyzer")
 
     @patch.object(PipelineRunner, "_call_service_with_retry")
     def test_run_returns_time_ms(self, mock_call):
@@ -822,6 +858,181 @@ class TestOrchestratorHandler:
             "Run invalid not found", "NOT_FOUND", 404
         )
 
+    @patch("services.orchestrator.main._start_pipeline_thread")
+    def test_handle_requeue_runs_single(self, mock_start_thread):
+        handler = OrchestratorHandler.__new__(OrchestratorHandler)
+        handler.runner = MagicMock()
+        handler.runner.build_requeue_plan.return_value = {
+            "source_run_id": "run-old",
+            "new_run_id": "run-new",
+            "strategy": "rerun_query",
+            "stages": 5,
+            "stage_names": [
+                "discovery",
+                "analyzer",
+                "extractor",
+                "validator",
+                "codegen",
+            ],
+            "params": {
+                "query": "quant finance topic",
+                "topic": None,
+                "paper_id": None,
+                "max_papers": 10,
+                "max_formulas": 50,
+                "force": False,
+                "requeue_of": "run-old",
+                "requeue_strategy": "rerun_query",
+                "requeue_source_status": "partial",
+                "requeue_requested_at": "2026-03-10T12:00:00+00:00",
+                "requeue_source_stages_completed": 1,
+                "requeue_source_stages_requested": 5,
+                "requeue_source_failed_stage": "analyzer",
+            },
+        }
+        handler.runner.check_external_health.return_value = {
+            "all_healthy": True,
+            "deps": {
+                "cas": {"healthy": True},
+                "rag": {"healthy": True},
+                "ollama": {"healthy": True},
+            },
+        }
+        handler.send_json = MagicMock()
+
+        handler.handle_requeue_runs({"run_id": "run-old"})
+
+        handler.send_json.assert_called_once()
+        payload = handler.send_json.call_args.args[0]
+        assert payload["status"] == "accepted"
+        assert payload["accepted"] == 1
+        assert payload["queued"][0]["run_id"] == "run-new"
+        mock_start_thread.assert_called_once()
+        kwargs = mock_start_thread.call_args.kwargs
+        assert kwargs["extra_params"]["requeue_of"] == "run-old"
+        assert kwargs["stages"] == 5
+
+    def test_handle_requeue_runs_rejects_all_invalid(self):
+        handler = OrchestratorHandler.__new__(OrchestratorHandler)
+        handler.runner = MagicMock()
+        handler.runner.build_requeue_plan.side_effect = RequeueError(
+            "Run run-old already completed successfully",
+            code="RUN_ALREADY_COMPLETED",
+            status=409,
+        )
+        handler.send_error_json = MagicMock()
+
+        res = handler.handle_requeue_runs({"run_id": "run-old"})
+
+        assert res is None
+        handler.send_error_json.assert_called_once()
+        assert handler.send_error_json.call_args.args[:3] == (
+            "Run run-old already completed successfully",
+            "RUN_ALREADY_COMPLETED",
+            409,
+        )
+
+    @patch("services.orchestrator.main._start_pipeline_thread")
+    def test_handle_requeue_runs_bulk_accepts_and_rejects(self, mock_start_thread):
+        handler = OrchestratorHandler.__new__(OrchestratorHandler)
+        handler.runner = MagicMock()
+        handler.runner.build_requeue_plan.side_effect = [
+            {
+                "source_run_id": "run-old-a",
+                "new_run_id": "run-new-a",
+                "strategy": "resume_from_current_stage",
+                "stages": 2,
+                "stage_names": ["validator", "codegen"],
+                "params": {
+                    "query": None,
+                    "topic": None,
+                    "paper_id": 42,
+                    "max_papers": 10,
+                    "max_formulas": 50,
+                    "force": False,
+                    "requeue_of": "run-old-a",
+                    "requeue_strategy": "resume_from_current_stage",
+                    "requeue_source_status": "partial",
+                    "requeue_requested_at": "2026-03-10T12:00:00+00:00",
+                    "requeue_source_stages_completed": 2,
+                    "requeue_source_stages_requested": 4,
+                    "requeue_source_failed_stage": "validator",
+                },
+            },
+            RequeueError(
+                "Run run-old-b is still running and cannot be requeued",
+                code="RUN_STILL_RUNNING",
+                status=409,
+            ),
+        ]
+        handler.runner.check_external_health.return_value = {
+            "all_healthy": True,
+            "deps": {
+                "cas": {"healthy": True},
+                "rag": {"healthy": True},
+                "ollama": {"healthy": True},
+            },
+        }
+        handler.send_json = MagicMock()
+
+        handler.handle_requeue_runs({"run_ids": ["run-old-a", "run-old-b"]})
+
+        payload = handler.send_json.call_args.args[0]
+        assert payload["accepted"] == 1
+        assert payload["rejected"] == 1
+        assert payload["queued"][0]["source_run_id"] == "run-old-a"
+        assert payload["errors"][0]["source_run_id"] == "run-old-b"
+        mock_start_thread.assert_called_once()
+
+    @patch("services.orchestrator.main._start_pipeline_thread")
+    def test_handle_requeue_runs_dry_run_does_not_start_threads(self, mock_start_thread):
+        handler = OrchestratorHandler.__new__(OrchestratorHandler)
+        handler.runner = MagicMock()
+        handler.runner.build_requeue_plan.return_value = {
+            "source_run_id": "run-old",
+            "new_run_id": "run-new",
+            "strategy": "rerun_query",
+            "stages": 5,
+            "stage_names": [
+                "discovery",
+                "analyzer",
+                "extractor",
+                "validator",
+                "codegen",
+            ],
+            "params": {
+                "query": "quant finance topic",
+                "topic": None,
+                "paper_id": None,
+                "max_papers": 10,
+                "max_formulas": 50,
+                "force": False,
+                "requeue_of": "run-old",
+                "requeue_strategy": "rerun_query",
+                "requeue_source_status": "partial",
+                "requeue_requested_at": "2026-03-10T12:00:00+00:00",
+                "requeue_source_stages_completed": 1,
+                "requeue_source_stages_requested": 5,
+                "requeue_source_failed_stage": "analyzer",
+            },
+        }
+        handler.runner.check_external_health.return_value = {
+            "all_healthy": True,
+            "deps": {
+                "cas": {"healthy": True},
+                "rag": {"healthy": True},
+                "ollama": {"healthy": True},
+            },
+        }
+        handler.send_json = MagicMock()
+
+        handler.handle_requeue_runs({"run_id": "run-old", "dry_run": True})
+
+        payload = handler.send_json.call_args.args[0]
+        assert payload["status"] == "dry_run"
+        assert payload["accepted"] == 1
+        mock_start_thread.assert_not_called()
+
     def test_handle_search_github_invalid_input(self):
         handler = OrchestratorHandler.__new__(OrchestratorHandler)
         handler.send_error_json = MagicMock()
@@ -1038,6 +1249,30 @@ class TestPipelineRunnerAdvanced:
             assert res["stages_completed"] == 1
             assert "analyzer: HTTP 500" in res["errors"][0]
 
+    @patch("requests.post")
+    def test_scoped_run_analyzer_timeout_skips_downstream_without_retry_amplification(
+        self, mock_post, initialized_db
+    ):
+        db_path = str(initialized_db)
+        runner = PipelineRunner(db_path)
+        runner.timeout = 0.1
+        runner.retry_max = 3
+
+        resp_ok = MagicMock(status_code=200)
+        resp_ok.json.return_value = {"papers_found": 1}
+        mock_post.side_effect = [resp_ok, requests.Timeout("Read timed out")]
+
+        with patch("services.orchestrator.pipeline.time.sleep"):
+            res = runner.run(query="test", stages=5)
+
+        assert res["status"] == "partial"
+        assert res["stages_completed"] == 1
+        assert mock_post.call_count == 2
+        assert "analyzer: Timeout" in res["errors"][0]
+        _assert_stage_skipped(res, "extractor", "analyzer")
+        _assert_stage_skipped(res, "validator", "analyzer")
+        _assert_stage_skipped(res, "codegen", "analyzer")
+
     def test_run_skips_stage_no_params(self, initialized_db):
         runner = PipelineRunner(str(initialized_db))
         # paper_id provided but no stages left (e.g. if paper was codegen already)
@@ -1126,6 +1361,55 @@ class TestOrchestratorMain:
         mock_svc.return_value.run.assert_called_once()
         mock_sched.assert_called_once()
 
+    @patch("services.orchestrator.main.BaseService")
+    @patch("services.orchestrator.main.load_config")
+    @patch("services.orchestrator.main.init_db")
+    @patch("services.orchestrator.main.create_scheduler")
+    @patch("services.orchestrator.main._resume_stuck_runs", return_value=(2, 1))
+    def test_main_resumes_stuck_runs_when_enabled(
+        self, mock_resume, mock_sched, mock_init, mock_load, mock_svc, initialized_db
+    ):
+        from services.orchestrator.main import main
+
+        mock_load.return_value = MagicMock(port=8775, db_path=str(initialized_db))
+        mock_sched.return_value = None
+
+        with patch.dict(os.environ, {"RP_ORCHESTRATOR_RESUME_STUCK_RUNS": "true"}):
+            main()
+
+        mock_init.assert_called_once()
+        mock_resume.assert_called_once()
+        mock_svc.return_value.run.assert_called_once()
+
+    @patch("services.orchestrator.main.BaseService")
+    @patch("services.orchestrator.main.load_config")
+    @patch("services.orchestrator.main.init_db")
+    @patch("services.orchestrator.main.create_scheduler")
+    @patch("services.orchestrator.pipeline.PipelineRunner.cleanup_stuck_runs", return_value=3)
+    @patch("services.orchestrator.main._resume_stuck_runs")
+    def test_main_cleans_stuck_runs_when_resume_disabled(
+        self,
+        mock_resume,
+        mock_cleanup,
+        mock_sched,
+        mock_init,
+        mock_load,
+        mock_svc,
+        initialized_db,
+    ):
+        from services.orchestrator.main import main
+
+        mock_load.return_value = MagicMock(port=8775, db_path=str(initialized_db))
+        mock_sched.return_value = None
+
+        with patch.dict(os.environ, {"RP_ORCHESTRATOR_RESUME_STUCK_RUNS": "false"}):
+            main()
+
+        mock_init.assert_called_once()
+        mock_resume.assert_not_called()
+        mock_cleanup.assert_called_once()
+        mock_svc.return_value.run.assert_called_once()
+
 
 class TestPipelineAsync:
     """Tests for async pipeline runner helper."""
@@ -1138,6 +1422,57 @@ class TestPipelineAsync:
         
         _run_pipeline_async(runner, "run-123")
         mock_notify.assert_not_called()
+
+    @patch("services.orchestrator.main.threading.Thread")
+    def test_resume_stuck_runs_spawns_threads(self, mock_thread):
+        from services.orchestrator.main import _resume_stuck_runs
+
+        runner = MagicMock()
+        runner.get_stuck_runs.return_value = [
+            {
+                "run_id": "run-a",
+                "params": {
+                    "query": "test",
+                    "topic": None,
+                    "paper_id": None,
+                    "max_papers": 10,
+                    "max_formulas": 50,
+                    "force": False,
+                },
+                "stages_requested": 5,
+            }
+        ]
+        runner.fail_runs.return_value = 0
+
+        resumed, failed = _resume_stuck_runs(runner)
+
+        assert resumed == 1
+        assert failed == 0
+        mock_thread.assert_called_once()
+        runner.fail_runs.assert_called_once_with(
+            [],
+            "Marked as failed: orphaned at service restart but not resumable",
+        )
+
+    @patch("services.orchestrator.main.threading.Thread")
+    def test_resume_stuck_runs_marks_invalid_rows_failed(self, mock_thread):
+        from services.orchestrator.main import _resume_stuck_runs
+
+        runner = MagicMock()
+        runner.get_stuck_runs.return_value = [
+            {"run_id": "run-bad", "params": None, "stages_requested": 5}
+        ]
+        runner.fail_runs.return_value = 1
+
+        resumed, failed = _resume_stuck_runs(runner)
+
+        assert resumed == 0
+        assert failed == 1
+        mock_thread.assert_not_called()
+        runner.fail_runs.assert_called_once_with(
+            ["run-bad"],
+            "Marked as failed: orphaned at service restart but not resumable",
+        )
 
 
     def test_handle_github_repos_no_paper_id(self, initialized_db):
@@ -1315,6 +1650,19 @@ class TestPipelineRunnerInit:
     def test_codegen_stage_timeout_default(self, clean_env):
         assert PipelineRunner.STAGE_TIMEOUTS.get("codegen") == 900
 
+    def test_analyzer_stage_timeout_default(self, clean_env):
+        assert PipelineRunner.STAGE_TIMEOUTS.get("analyzer") == 1800
+
+    def test_instance_stage_timeout_defaults(self, clean_env, tmp_path):
+        runner = PipelineRunner(tmp_path / "test.db")
+        assert runner.STAGE_TIMEOUTS["analyzer"] == 1800
+        assert runner.STAGE_TIMEOUTS["codegen"] == 900
+
+    def test_env_override_analyzer_stage_timeout(self, tmp_path):
+        with patch.dict(os.environ, {"RP_ORCHESTRATOR_ANALYZER_TIMEOUT": "600"}):
+            runner = PipelineRunner(tmp_path / "test.db")
+            assert runner.STAGE_TIMEOUTS["analyzer"] == 600
+
     def test_db_path_stored_as_string(self, tmp_path):
         runner = PipelineRunner(tmp_path / "test.db")
         assert isinstance(runner.db_path, str)
@@ -1329,6 +1677,7 @@ class TestRunInternals:
         self.runner.timeout = 5
         self.runner.retry_max = 0
         self.runner.retry_backoff = 1.0
+        self.runner.STAGE_TIMEOUTS = {"analyzer": 1800, "codegen": 900}
 
     @patch.object(PipelineRunner, "_call_service_with_retry")
     def test_run_params_dict_keys(self, mock_call):
@@ -1423,7 +1772,7 @@ class TestRunInternals:
     def test_codegen_uses_stage_timeout(self, mock_call):
         """Codegen stage should use STAGE_TIMEOUTS override."""
         mock_call.return_value = {"ok": True}
-        self.runner.STAGE_TIMEOUTS = {"codegen": 999}
+        self.runner.STAGE_TIMEOUTS = {"analyzer": 1800, "codegen": 999}
 
         # Run just codegen via paper_id trick
         with patch.object(self.runner, "_get_paper_stage", return_value="validated"):
@@ -1434,12 +1783,27 @@ class TestRunInternals:
         assert kwargs.get("timeout") == 999
 
     @patch.object(PipelineRunner, "_call_service_with_retry")
+    def test_analyzer_uses_stage_timeout(self, mock_call):
+        """Analyzer stage should use its dedicated timeout override."""
+        mock_call.return_value = {"ok": True}
+        self.runner.STAGE_TIMEOUTS = {"analyzer": 777, "codegen": 900}
+
+        self.runner.run(query="q", stages=2)
+
+        _, kwargs = mock_call.call_args_list[1]
+        assert kwargs.get("timeout") == 777
+        assert kwargs.get("retry_on_timeout") is False
+
+    @patch.object(PipelineRunner, "_call_service_with_retry")
     def test_service_url_format(self, mock_call):
         """Services are called at http://localhost:{port}/process."""
+        from services.orchestrator.pipeline import STAGE_ORDER
+
         mock_call.return_value = {"ok": True}
         self.runner.run(query="q", stages=1)
         url = mock_call.call_args[0][0]
-        assert url == "http://localhost:8770/process"
+        discovery_port = STAGE_ORDER[0][1]
+        assert url == f"http://localhost:{discovery_port}/process"
 
     @patch.object(PipelineRunner, "_call_service_with_retry")
     def test_discovery_papers_found_tracked(self, mock_call):
@@ -1511,6 +1875,20 @@ class TestCallServiceInternals:
 
         with pytest.raises(ServiceError, match="invalid paper_id"):
             self.runner._call_service_with_retry("http://test", {})
+
+    @patch("services.orchestrator.pipeline.time.sleep")
+    @patch("services.orchestrator.pipeline.requests.post")
+    def test_timeout_no_retry_when_disabled(self, mock_post, mock_sleep):
+        mock_post.side_effect = requests.Timeout("Read timed out")
+        self.runner.retry_max = 3
+
+        with pytest.raises(ServiceError, match="Timeout after 30s"):
+            self.runner._call_service_with_retry(
+                "http://test", {}, retry_on_timeout=False
+            )
+
+        assert mock_post.call_count == 1
+        mock_sleep.assert_not_called()
 
     @patch("services.orchestrator.pipeline.requests.post")
     def test_status_code_in_error_message(self, mock_post):
@@ -1716,10 +2094,12 @@ class TestHealthCheckDetails:
         # discovery ok, analyzer 502, rest ok + 3 external ok
         mock_get.side_effect = [resp_ok, resp_err, resp_ok, resp_ok, resp_ok, resp_ok, resp_ok, resp_ok]
 
+        from services.orchestrator.pipeline import STAGE_ORDER
+
         result = runner.get_services_health()
         assert result["services"]["analyzer"]["status"] == "error"
         assert "502" in result["services"]["analyzer"]["error"]
-        assert result["services"]["analyzer"]["port"] == 8771
+        assert result["services"]["analyzer"]["port"] == STAGE_ORDER[1][1]
 
     @patch("services.orchestrator.pipeline.requests.get")
     def test_services_health_connection_error(self, mock_get, initialized_db):

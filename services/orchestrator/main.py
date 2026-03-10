@@ -39,7 +39,7 @@ from shared.server import BaseHandler, BaseService, route
 
 from services.orchestrator.github_search import search_and_analyze
 from services.orchestrator.notifications import notify, notify_pipeline_result
-from services.orchestrator.pipeline import PipelineRunner
+from services.orchestrator.pipeline import PipelineRunner, RequeueError
 from services.orchestrator.scheduler import create_scheduler
 
 logger = logging.getLogger(__name__)
@@ -48,6 +48,43 @@ _RAG_URL = resolve_localhost_url(
     os.environ.get("RP_RAG_QUERY_URL", "http://localhost:8767")
 )
 _RAG_QUERY_TIMEOUT = int(os.environ.get("RP_RAG_QUERY_TIMEOUT", "30"))
+
+
+def _resume_stuck_runs(runner: PipelineRunner) -> tuple[int, int]:
+    """Resume orphaned async runs from pipeline_runs.
+
+    Returns:
+        Tuple of (resumed_count, failed_count).
+    """
+    resumed = 0
+    failed_run_ids: list[str] = []
+
+    for stuck in runner.get_stuck_runs():
+        run_id = stuck["run_id"]
+        params = stuck.get("params")
+        if not isinstance(params, dict):
+            failed_run_ids.append(run_id)
+            continue
+
+        _start_pipeline_thread(
+            runner,
+            run_id,
+            query=params.get("query"),
+            topic=params.get("topic"),
+            paper_id=params.get("paper_id"),
+            stages=int(stuck.get("stages_requested") or 5),
+            max_papers=params.get("max_papers", 10),
+            max_formulas=params.get("max_formulas", 50),
+            force=params.get("force", False),
+        )
+        resumed += 1
+        logger.warning("Resuming orphaned pipeline run: %s", run_id)
+
+    failed = runner.fail_runs(
+        failed_run_ids,
+        "Marked as failed: orphaned at service restart but not resumable",
+    )
+    return resumed, failed
 
 
 def _query_rag(query: str, mode: str = "hybrid", context_only: bool = False) -> dict:
@@ -65,6 +102,22 @@ def _query_rag(query: str, mode: str = "hybrid", context_only: bool = False) -> 
     return json.loads(resp.read().decode())
 
 
+def _start_pipeline_thread(
+    runner: PipelineRunner,
+    run_id: str,
+    **kwargs,
+) -> threading.Thread:
+    """Spawn a background pipeline thread and return it."""
+    thread = threading.Thread(
+        target=_run_pipeline_async,
+        args=(runner, run_id),
+        kwargs=kwargs,
+        daemon=True,
+    )
+    thread.start()
+    return thread
+
+
 class OrchestratorHandler(BaseHandler):
     """Handler for the Orchestrator service."""
 
@@ -73,6 +126,27 @@ class OrchestratorHandler(BaseHandler):
     def _db_path_required(self) -> str:
         assert self.db_path is not None, "Database path not configured"
         return self.db_path
+
+    def _check_required_deps(self, stage_names: list[str]) -> tuple[bool, list[str]]:
+        """Return whether external dependencies needed by stages are healthy."""
+        assert self.runner is not None, "PipelineRunner not initialized"
+        from services.orchestrator.pipeline import STAGE_EXTERNAL_DEPS
+
+        needed_deps = set()
+        for stage_name in stage_names:
+            needed_deps.update(STAGE_EXTERNAL_DEPS.get(stage_name, []))
+
+        if not needed_deps:
+            return True, []
+
+        ext = self.runner.check_external_health()
+        down = []
+        for name, info in ext["deps"].items():
+            if name not in needed_deps or info["healthy"]:
+                continue
+            reason = info.get("reason")
+            down.append(f"{name} ({reason})" if reason else name)
+        return not down, down
 
     @route("POST", "/run")
     def handle_run(self, data: dict) -> dict | None:
@@ -124,26 +198,17 @@ class OrchestratorHandler(BaseHandler):
 
         # Preflight: check only the external deps needed by requested stages
         if not skip_preflight:
-            from services.orchestrator.pipeline import STAGE_EXTERNAL_DEPS
-
             stage_list = self.runner._resolve_stages(query, paper_id, stages)
-            needed_deps = set()
-            for stage_name, _ in stage_list:
-                needed_deps.update(STAGE_EXTERNAL_DEPS.get(stage_name, []))
-
-            if needed_deps:
-                ext = self.runner.check_external_health()
-                down = [
-                    name for name, info in ext["deps"].items()
-                    if name in needed_deps and not info["healthy"]
-                ]
-                if down:
-                    self.send_error_json(
-                        f"External dependencies unavailable: {', '.join(down)}",
-                        "PREFLIGHT_FAILED",
-                        503,
-                    )
-                    return None
+            ok, down = self._check_required_deps(
+                [stage_name for stage_name, _ in stage_list]
+            )
+            if not ok:
+                self.send_error_json(
+                    f"External dependencies unavailable: {', '.join(down)}",
+                    "PREFLIGHT_FAILED",
+                    503,
+                )
+                return None
 
         run_id = PipelineRunner._generate_run_id()
 
@@ -152,22 +217,17 @@ class OrchestratorHandler(BaseHandler):
             run_id, query, paper_id, stages,
         )
 
-        # Spawn background thread
-        thread = threading.Thread(
-            target=_run_pipeline_async,
-            args=(self.runner, run_id),
-            kwargs={
-                "query": query,
-                "topic": topic,
-                "paper_id": paper_id,
-                "stages": stages,
-                "max_papers": max_papers,
-                "max_formulas": max_formulas,
-                "force": force,
-            },
-            daemon=True,
+        _start_pipeline_thread(
+            self.runner,
+            run_id,
+            query=query,
+            topic=topic,
+            paper_id=paper_id,
+            stages=stages,
+            max_papers=max_papers,
+            max_formulas=max_formulas,
+            force=force,
         )
-        thread.start()
 
         # Return 202 Accepted immediately
         self.send_json(
@@ -175,6 +235,212 @@ class OrchestratorHandler(BaseHandler):
             status=202,
         )
         return None  # Already sent response
+
+    @route("POST", "/runs/requeue")
+    def handle_requeue_runs(self, data: dict) -> dict | None:
+        """Create one or more derived runs from failed or partial runs."""
+        assert self.runner is not None, "PipelineRunner not initialized"
+
+        run_ids_raw = data.get("run_ids")
+        run_id = data.get("run_id")
+        if run_id is not None and run_ids_raw is not None:
+            self.send_error_json(
+                "Provide either run_id or run_ids, not both",
+                "VALIDATION_ERROR",
+                400,
+            )
+            return None
+
+        if run_id is not None:
+            run_ids = [run_id]
+        elif isinstance(run_ids_raw, list):
+            run_ids = run_ids_raw
+        else:
+            self.send_error_json(
+                "run_id or run_ids is required",
+                "VALIDATION_ERROR",
+                400,
+            )
+            return None
+
+        if not run_ids or not all(isinstance(item, str) and item.strip() for item in run_ids):
+            self.send_error_json(
+                "run_ids must contain one or more non-empty strings",
+                "VALIDATION_ERROR",
+                400,
+            )
+            return None
+
+        stages = data.get("stages")
+        max_papers = data.get("max_papers")
+        max_formulas = data.get("max_formulas")
+        strategy = data.get("strategy", "auto")
+        force = data.get("force")
+        dry_run = data.get("dry_run", False)
+        skip_preflight = data.get("skip_preflight", False)
+
+        if stages is not None and (not isinstance(stages, int) or not 1 <= stages <= 5):
+            self.send_error_json(
+                "stages must be between 1 and 5",
+                "VALIDATION_ERROR",
+                400,
+            )
+            return None
+        if max_papers is not None and (
+            not isinstance(max_papers, int) or not 1 <= max_papers <= 100
+        ):
+            self.send_error_json(
+                "max_papers must be an integer between 1 and 100",
+                "VALIDATION_ERROR",
+                400,
+            )
+            return None
+        if max_formulas is not None and (
+            not isinstance(max_formulas, int) or not 1 <= max_formulas <= 1000
+        ):
+            self.send_error_json(
+                "max_formulas must be an integer between 1 and 1000",
+                "VALIDATION_ERROR",
+                400,
+            )
+            return None
+        if not isinstance(strategy, str):
+            self.send_error_json(
+                "strategy must be a string",
+                "VALIDATION_ERROR",
+                400,
+            )
+            return None
+        if force is not None and not isinstance(force, bool):
+            self.send_error_json(
+                "force must be a boolean when provided",
+                "VALIDATION_ERROR",
+                400,
+            )
+            return None
+        if not isinstance(dry_run, bool):
+            self.send_error_json(
+                "dry_run must be a boolean",
+                "VALIDATION_ERROR",
+                400,
+            )
+            return None
+
+        plans: list[dict] = []
+        rejected: list[dict] = []
+        for source_run_id in run_ids:
+            try:
+                plans.append(
+                    self.runner.build_requeue_plan(
+                        source_run_id,
+                        strategy=strategy,
+                        stages=stages,
+                        max_papers=max_papers,
+                        max_formulas=max_formulas,
+                        force=force,
+                    )
+                )
+            except RequeueError as exc:
+                rejected.append(
+                    {
+                        "source_run_id": source_run_id,
+                        "error": str(exc),
+                        "code": exc.code,
+                        "status": exc.status,
+                    }
+                )
+
+        if not plans:
+            status = max((item["status"] for item in rejected), default=409)
+            self.send_error_json(
+                rejected[0]["error"] if rejected else "No runs eligible for requeue",
+                rejected[0]["code"] if rejected else "RUN_NOT_REQUEUEABLE",
+                status,
+                details={"rejected": rejected},
+            )
+            return None
+
+        if not skip_preflight:
+            stage_names = sorted(
+                {stage_name for plan in plans for stage_name in plan["stage_names"]}
+            )
+            ok, down = self._check_required_deps(stage_names)
+            if not ok:
+                self.send_error_json(
+                    f"External dependencies unavailable: {', '.join(down)}",
+                    "PREFLIGHT_FAILED",
+                    503,
+                    details={"rejected": rejected},
+                )
+                return None
+
+        queued = [
+            {
+                "source_run_id": plan["source_run_id"],
+                "run_id": plan["new_run_id"],
+                "strategy": plan["strategy"],
+                "stages": plan["stages"],
+                "stage_names": plan["stage_names"],
+            }
+            for plan in plans
+        ]
+
+        if dry_run:
+            self.send_json(
+                {
+                    "status": "dry_run",
+                    "accepted": len(queued),
+                    "rejected": len(rejected),
+                    "queued": queued,
+                    "errors": rejected,
+                }
+            )
+            return None
+
+        for plan in plans:
+            requeue_params = plan["params"]
+            _start_pipeline_thread(
+                self.runner,
+                plan["new_run_id"],
+                query=requeue_params.get("query"),
+                topic=requeue_params.get("topic"),
+                paper_id=requeue_params.get("paper_id"),
+                stages=plan["stages"],
+                max_papers=requeue_params.get("max_papers", 10),
+                max_formulas=requeue_params.get("max_formulas", 50),
+                force=requeue_params.get("force", False),
+                extra_params={
+                    "requeue_of": requeue_params.get("requeue_of"),
+                    "requeue_strategy": requeue_params.get("requeue_strategy"),
+                    "requeue_source_status": requeue_params.get(
+                        "requeue_source_status"
+                    ),
+                    "requeue_requested_at": requeue_params.get(
+                        "requeue_requested_at"
+                    ),
+                    "requeue_source_stages_completed": requeue_params.get(
+                        "requeue_source_stages_completed"
+                    ),
+                    "requeue_source_stages_requested": requeue_params.get(
+                        "requeue_source_stages_requested"
+                    ),
+                    "requeue_source_failed_stage": requeue_params.get(
+                        "requeue_source_failed_stage"
+                    ),
+                },
+            )
+
+        self.send_json(
+            {
+                "status": "accepted",
+                "accepted": len(queued),
+                "rejected": len(rejected),
+                "queued": queued,
+                "errors": rejected,
+            },
+            status=202,
+        )
+        return None
 
     @route("GET", "/status")
     def handle_status(self) -> dict:
@@ -704,10 +970,29 @@ def main() -> None:
     runner = PipelineRunner(config.db_path)
     OrchestratorHandler.runner = runner
 
-    # Clean up stuck pipeline runs from previous crashes
-    cleaned = runner.cleanup_stuck_runs()
-    if cleaned:
-        logger.warning("Cleaned %d stuck pipeline run(s) from previous crash", cleaned)
+    resume_stuck_runs = os.environ.get(
+        "RP_ORCHESTRATOR_RESUME_STUCK_RUNS", "true"
+    ).lower() in ("true", "1", "yes")
+    if resume_stuck_runs:
+        resumed, failed = _resume_stuck_runs(runner)
+        if resumed:
+            logger.warning(
+                "Resumed %d orphaned pipeline run(s) from previous crash",
+                resumed,
+            )
+        if failed:
+            logger.warning(
+                "Failed to resume %d orphaned pipeline run(s); marked failed",
+                failed,
+            )
+    else:
+        # Clean up stuck pipeline runs from previous crashes
+        cleaned = runner.cleanup_stuck_runs()
+        if cleaned:
+            logger.warning(
+                "Cleaned %d stuck pipeline run(s) from previous crash",
+                cleaned,
+            )
 
     # Create scheduler (if enabled)
     scheduler = create_scheduler(_cron_run)

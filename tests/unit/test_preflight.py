@@ -66,6 +66,49 @@ class TestCheckExternalHealth:
 
         assert result["all_healthy"] is False
 
+    @patch("services.orchestrator.pipeline.requests.get")
+    def test_cas_without_engines_marks_unhealthy(self, mock_get):
+        cas_resp = MagicMock(status_code=200)
+        cas_resp.json.return_value = {
+            "status": "ok",
+            "service": "cas-service",
+            "engines_total": 4,
+            "engines_available": 0,
+        }
+        rag_resp = MagicMock(status_code=200)
+        rag_resp.json.return_value = {"status": "ok"}
+        ollama_resp = MagicMock(status_code=200)
+        ollama_resp.json.side_effect = ValueError("not json")
+        mock_get.side_effect = [cas_resp, rag_resp, ollama_resp]
+
+        result = self.runner.check_external_health()
+
+        assert result["all_healthy"] is False
+        assert result["deps"]["cas"]["healthy"] is False
+        assert result["deps"]["cas"]["reason"] == "no_engines_available"
+        assert result["deps"]["cas"]["engines_available"] == 0
+
+    @patch("services.orchestrator.pipeline.requests.get")
+    def test_rag_open_circuit_breaker_marks_unhealthy(self, mock_get):
+        cas_resp = MagicMock(status_code=200)
+        cas_resp.json.return_value = {"status": "ok", "engines_available": 2}
+        rag_resp = MagicMock(status_code=200)
+        rag_resp.json.return_value = {
+            "status": "ok",
+            "version": "3.3-smart",
+            "circuit_breaker": {"state": "open"},
+        }
+        ollama_resp = MagicMock(status_code=200)
+        ollama_resp.json.side_effect = ValueError("not json")
+        mock_get.side_effect = [cas_resp, rag_resp, ollama_resp]
+
+        result = self.runner.check_external_health()
+
+        assert result["all_healthy"] is False
+        assert result["deps"]["rag"]["healthy"] is False
+        assert result["deps"]["rag"]["reason"] == "circuit_breaker_open"
+        assert result["deps"]["rag"]["version"] == "3.3-smart"
+
 
 class TestPreflightInHandleRun:
     """Tests for preflight check integration in handle_run()."""
@@ -221,6 +264,39 @@ class TestPreflightInHandleRun:
         assert result is None
         handler.send_error_json.assert_called_once()
         assert "rag" in handler.send_error_json.call_args[0][0]
+
+    @patch("threading.Thread")
+    @patch(
+        "services.orchestrator.pipeline.PipelineRunner._generate_run_id",
+        return_value="run-test-rag-reason",
+    )
+    def test_preflight_surfaces_dependency_reason(self, _gen_id, _thread):
+        handler = OrchestratorHandler.__new__(OrchestratorHandler)
+        handler.runner = MagicMock()
+        handler.runner._resolve_stages.return_value = [
+            ("discovery", 8770),
+            ("analyzer", 8771),
+            ("extractor", 8772),
+        ]
+        handler.runner.check_external_health.return_value = {
+            "all_healthy": False,
+            "deps": {
+                "cas": {"url": "http://localhost:8769", "healthy": True},
+                "rag": {
+                    "url": "http://localhost:8767",
+                    "healthy": False,
+                    "reason": "circuit_breaker_open",
+                },
+                "ollama": {"url": "http://localhost:11434", "healthy": True},
+            },
+        }
+        handler.send_error_json = MagicMock()
+
+        result = handler.handle_run({"query": "test", "stages": 3})
+
+        assert result is None
+        handler.send_error_json.assert_called_once()
+        assert "rag (circuit_breaker_open)" in handler.send_error_json.call_args[0][0]
 
 
 class TestServicesHealthIncludesExternal:

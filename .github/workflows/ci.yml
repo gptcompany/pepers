@@ -91,4 +91,5 @@ jobs:
           token: ${{ secrets.PAT }}
           repository: gptcompany/progressive-deploy
           event-type: pepers-build
-          client-payload: '{"ref": "${{ github.ref }}"}'
+          client-payload: >-
+            {"ref":"${{ github.sha }}","source_repo":"${{ github.repository }}","source_ref":"${{ github.ref_name }}","source_sha":"${{ github.sha }}","source_workflow":"${{ github.workflow }}"}

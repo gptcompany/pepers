@@ -36,6 +36,21 @@ from services.orchestrator.metrics import (
 
 logger = logging.getLogger(__name__)
 
+
+class RequeueError(Exception):
+    """Raised when a historical run cannot be safely requeued."""
+
+    def __init__(
+        self,
+        message: str,
+        *,
+        code: str = "REQUEUE_ERROR",
+        status: int = 400,
+    ) -> None:
+        super().__init__(message)
+        self.code = code
+        self.status = status
+
 def _stage_port(service: str, default: int) -> int:
     raw = os.environ.get(f"RP_{service.upper()}_PORT", str(default))
     try:
@@ -85,6 +100,11 @@ EXTERNAL_DEPS: list[tuple[str, str, str]] = [
     ),
 ]
 
+EXTERNAL_UNHEALTHY_REASONS: dict[str, str] = {
+    "cas_no_engines": "no_engines_available",
+    "rag_circuit_open": "circuit_breaker_open",
+}
+
 # Which stages require which external deps (hard dependencies only).
 # Ollama is excluded: codegen uses it as last-resort fallback in the LLM chain,
 # not as a hard requirement.
@@ -128,10 +148,12 @@ DB_STAGE_INDEX: dict[str, int] = {
 class PipelineRunner:
     """Executes pipeline stages sequentially with retry logic."""
 
-    # Per-stage timeout overrides (seconds).  Codegen processes N formulas
-    # sequentially (SymPy parse + codegen + optional LLM fallback per formula),
-    # so it needs a much longer timeout than fast stages like discovery.
+    # Per-stage timeout overrides (seconds).
+    # Analyzer can legitimately take much longer than the default 300s because it
+    # performs sequential LLM scoring across a batch of papers.
+    # Codegen likewise processes formulas sequentially and needs a longer timeout.
     STAGE_TIMEOUTS: dict[str, int] = {
+        "analyzer": int(os.environ.get("RP_ORCHESTRATOR_ANALYZER_TIMEOUT", "1800")),
         "codegen": int(os.environ.get("RP_ORCHESTRATOR_CODEGEN_TIMEOUT", "900")),
     }
 
@@ -142,6 +164,15 @@ class PipelineRunner:
         self.retry_backoff = float(
             os.environ.get("RP_ORCHESTRATOR_RETRY_BACKOFF", "4.0")
         )
+        # Keep per-instance overrides so tests and env patches are predictable.
+        self.STAGE_TIMEOUTS = {
+            "analyzer": int(
+                os.environ.get("RP_ORCHESTRATOR_ANALYZER_TIMEOUT", "1800")
+            ),
+            "codegen": int(
+                os.environ.get("RP_ORCHESTRATOR_CODEGEN_TIMEOUT", "900")
+            ),
+        }
 
     def run(
         self,
@@ -153,6 +184,7 @@ class PipelineRunner:
         max_formulas: int = 50,
         force: bool = False,
         run_id: str | None = None,
+        extra_params: dict | None = None,
     ) -> dict:
         """Execute a pipeline run.
 
@@ -181,6 +213,8 @@ class PipelineRunner:
             "max_formulas": max_formulas,
             "force": force,
         }
+        if extra_params:
+            params.update(extra_params)
 
         # Determine which stages to run
         stage_list = self._resolve_stages(query, paper_id, stages)
@@ -194,7 +228,10 @@ class PipelineRunner:
         results: dict[str, dict] = {}
         errors: list[str] = []
         stages_completed = 0
+        stages_skipped: list[str] = []
         has_failure = False
+        scoped_run = query is not None or paper_id is not None
+        blocked_by_stage: str | None = None
 
         # Stages that process formulas in batches need iteration
         BATCH_STAGES = {"validator", "codegen"}
@@ -202,6 +239,22 @@ class PipelineRunner:
 
         try:
             for stage_name, port in stage_list:
+                if blocked_by_stage is not None:
+                    logger.info(
+                        "Skipping stage %s: upstream stage %s failed",
+                        stage_name,
+                        blocked_by_stage,
+                    )
+                    results[stage_name] = {
+                        "status": "skipped",
+                        "reason": f"upstream_failed:{blocked_by_stage}",
+                        "upstream_stage": blocked_by_stage,
+                        "time_ms": 0,
+                    }
+                    stages_skipped.append(stage_name)
+                    STAGE_COMPLETED.labels(stage=stage_name, result="skipped").inc()
+                    continue
+
                 stage_params = self._build_stage_params(stage_name, params)
 
                 if not stage_params:
@@ -216,6 +269,7 @@ class PipelineRunner:
 
                 stage_timeout = self.STAGE_TIMEOUTS.get(stage_name, self.timeout)
                 try:
+                    retry_on_timeout = stage_name != "analyzer"
                     if stage_name in BATCH_STAGES:
                         # Iterate until all formulas are processed
                         batch_results: list[dict] = []
@@ -223,6 +277,7 @@ class PipelineRunner:
                             result = self._call_service_with_retry(
                                 f"{stage_base_url}/process", stage_params,
                                 timeout=stage_timeout,
+                                retry_on_timeout=retry_on_timeout,
                             )
                             batch_results.append(result)
                             processed = result.get("formulas_processed", 0)
@@ -238,6 +293,7 @@ class PipelineRunner:
                         result = self._call_service_with_retry(
                             f"{stage_base_url}/process", stage_params,
                             timeout=stage_timeout,
+                            retry_on_timeout=retry_on_timeout,
                         )
 
                     stage_duration = time.time() - stage_start
@@ -255,12 +311,22 @@ class PipelineRunner:
                     stage_ms = int(stage_duration * 1000)
                     error_msg = f"{stage_name}: {e}"
                     errors.append(error_msg)
-                    results[stage_name] = {"error": str(e), "time_ms": stage_ms}
+                    results[stage_name] = {
+                        "status": "failed",
+                        "error": str(e),
+                        "time_ms": stage_ms,
+                    }
                     has_failure = True
                     STAGE_DURATION.labels(stage=stage_name).observe(stage_duration)
                     STAGE_COMPLETED.labels(stage=stage_name, result="failure").inc()
                     logger.error("Stage %s failed: %s", stage_name, e)
-                    # Continue to next stage — other papers may be processable
+                    # For query/paper-scoped runs, downstream stages depend on this
+                    # stage's output. Mark them skipped instead of reporting false
+                    # progress like 4/5 after analyzer failure.
+                    if scoped_run:
+                        blocked_by_stage = stage_name
+                    # For unscoped backlog runs, continue — later stages may still
+                    # process already-eligible items from the global DB.
 
             # Extract paper/formula counts from stage results for Prometheus
             papers_found = results.get("discovery", {}).get("papers_found", 0)
@@ -289,6 +355,8 @@ class PipelineRunner:
             "status": status,
             "stages_completed": stages_completed,
             "stages_requested": len(stage_list),
+            "stages_skipped": len(stages_skipped),
+            "skipped_stages": stages_skipped,
             "results": results,
             "errors": errors,
             "time_ms": elapsed_ms,
@@ -406,7 +474,12 @@ class PipelineRunner:
         return result
 
     def _call_service_with_retry(
-        self, url: str, params: dict, *, timeout: int | None = None,
+        self,
+        url: str,
+        params: dict,
+        *,
+        timeout: int | None = None,
+        retry_on_timeout: bool = True,
     ) -> dict:
         """Call a service endpoint with exponential backoff retry.
 
@@ -414,6 +487,7 @@ class PipelineRunner:
             url: Service /process URL.
             params: Request body.
             timeout: Request timeout in seconds (overrides default).
+            retry_on_timeout: Whether request timeouts should be retried.
 
         Returns:
             Parsed JSON response.
@@ -453,6 +527,8 @@ class PipelineRunner:
                 last_error = ServiceError(f"Connection refused: {e}")
             except requests.Timeout as e:
                 last_error = ServiceError(f"Timeout after {effective_timeout}s: {e}")
+                if not retry_on_timeout:
+                    break
 
             if attempt < self.retry_max:
                 delay = self.retry_backoff ** attempt  # 1, 4, 16
@@ -578,11 +654,57 @@ class PipelineRunner:
             url = f"{base_url}{health_path}"
             try:
                 resp = requests.get(url, timeout=3)
-                healthy = resp.status_code < 400
-            except requests.RequestException:
-                healthy = False
+                payload: dict | None = None
+                try:
+                    data = resp.json()
+                    payload = data if isinstance(data, dict) else None
+                except ValueError:
+                    payload = None
 
-            deps[name] = {"url": base_url, "healthy": healthy}
+                healthy = resp.status_code < 400
+                dep_info: dict[str, object] = {
+                    "url": base_url,
+                    "healthy": healthy,
+                    "status_code": resp.status_code,
+                }
+                if payload:
+                    for field in ("service", "version", "status"):
+                        if field in payload:
+                            dep_info[field] = payload[field]
+
+                    if name == "cas":
+                        dep_info["engines_total"] = payload.get("engines_total")
+                        dep_info["engines_available"] = payload.get(
+                            "engines_available"
+                        )
+                        if healthy and payload.get("engines_available", 1) <= 0:
+                            dep_info["healthy"] = False
+                            dep_info["reason"] = EXTERNAL_UNHEALTHY_REASONS[
+                                "cas_no_engines"
+                            ]
+                    elif name == "rag":
+                        circuit_breaker = payload.get("circuit_breaker")
+                        if isinstance(circuit_breaker, dict):
+                            dep_info["circuit_breaker"] = circuit_breaker
+                            if (
+                                healthy
+                                and circuit_breaker.get("state") == "open"
+                            ):
+                                dep_info["healthy"] = False
+                                dep_info["reason"] = EXTERNAL_UNHEALTHY_REASONS[
+                                    "rag_circuit_open"
+                                ]
+
+                healthy = bool(dep_info["healthy"])
+            except requests.RequestException as e:
+                healthy = False
+                dep_info = {
+                    "url": base_url,
+                    "healthy": False,
+                    "error": str(e),
+                }
+
+            deps[name] = dep_info
             if not healthy:
                 all_healthy = False
 
@@ -628,6 +750,279 @@ class PipelineRunner:
         for rid in run_ids:
             logger.warning("Cleaned stuck pipeline run: %s", rid)
         return len(run_ids)
+
+    def get_stuck_runs(self) -> list[dict]:
+        """Return pipeline_runs rows still marked as running.
+
+        These runs are orphaned after an orchestrator restart. Callers can
+        either resume them asynchronously or mark them failed.
+        """
+        with transaction(self.db_path) as conn:
+            rows = conn.execute(
+                "SELECT run_id, params, stages_requested, started_at "
+                "FROM pipeline_runs WHERE status = 'running' "
+                "ORDER BY started_at ASC"
+            ).fetchall()
+
+        stuck_runs: list[dict] = []
+        for row in rows:
+            params = row["params"]
+            if isinstance(params, str):
+                try:
+                    params = json.loads(params)
+                except Exception:
+                    params = None
+            stuck_runs.append(
+                {
+                    "run_id": row["run_id"],
+                    "params": params,
+                    "stages_requested": row["stages_requested"],
+                    "started_at": row["started_at"],
+                }
+            )
+        return stuck_runs
+
+    def build_requeue_plan(
+        self,
+        run_id: str,
+        *,
+        strategy: str = "auto",
+        stages: int | None = None,
+        max_papers: int | None = None,
+        max_formulas: int | None = None,
+        force: bool | None = None,
+    ) -> dict:
+        """Build a safe requeue plan for a historical run."""
+        source = self.get_run_status(run_id)
+        if source is None:
+            raise RequeueError(
+                f"Run {run_id} not found",
+                code="NOT_FOUND",
+                status=404,
+            )
+
+        source_status = source.get("status")
+        if source_status == "running":
+            raise RequeueError(
+                f"Run {run_id} is still running and cannot be requeued",
+                code="RUN_STILL_RUNNING",
+                status=409,
+            )
+        if source_status == "completed":
+            raise RequeueError(
+                f"Run {run_id} already completed successfully",
+                code="RUN_ALREADY_COMPLETED",
+                status=409,
+            )
+        if source_status not in {"partial", "failed"}:
+            raise RequeueError(
+                f"Run {run_id} with status {source_status!r} is not requeueable",
+                code="RUN_NOT_REQUEUEABLE",
+                status=409,
+            )
+
+        source_params = source.get("params")
+        if not isinstance(source_params, dict):
+            raise RequeueError(
+                f"Run {run_id} has no valid params to requeue",
+                code="RUN_PARAMS_INVALID",
+                status=409,
+            )
+
+        requested_stages = self._normalize_stage_count(
+            stages if stages is not None else source.get("stages_requested")
+        )
+        chosen_strategy = self._select_requeue_strategy(source_params, strategy)
+
+        requeue_params = {
+            "query": source_params.get("query"),
+            "topic": source_params.get("topic"),
+            "paper_id": source_params.get("paper_id"),
+            "max_papers": self._coerce_positive_int(
+                max_papers if max_papers is not None else source_params.get(
+                    "max_papers"
+                ),
+                default=10,
+            ),
+            "max_formulas": self._coerce_positive_int(
+                max_formulas if max_formulas is not None else source_params.get(
+                    "max_formulas"
+                ),
+                default=50,
+            ),
+            "force": (
+                force if force is not None
+                else bool(source_params.get("force", False))
+            ),
+            "requeue_of": run_id,
+            "requeue_strategy": chosen_strategy,
+            "requeue_source_status": source_status,
+            "requeue_requested_at": datetime.now(timezone.utc).isoformat(),
+            "requeue_source_stages_completed": source.get("stages_completed", 0),
+            "requeue_source_stages_requested": source.get("stages_requested", 0),
+            "requeue_source_failed_stage": self._detect_failed_stage(source),
+        }
+
+        if chosen_strategy == "resume_from_current_stage":
+            paper_id = requeue_params.get("paper_id")
+            if not isinstance(paper_id, int):
+                raise RequeueError(
+                    f"Run {run_id} has no paper_id to resume",
+                    code="RUN_NOT_PAPER_SCOPED",
+                    status=409,
+                )
+            requeue_params["query"] = None
+            stage_list = self._resolve_stages(None, paper_id, requested_stages)
+            if not stage_list:
+                current_stage = self._get_paper_stage(paper_id)
+                raise RequeueError(
+                    f"Paper {paper_id} is already at terminal stage {current_stage!r}",
+                    code="RUN_ALREADY_AT_TERMINAL_STAGE",
+                    status=409,
+                )
+        elif chosen_strategy == "rerun_query":
+            query = requeue_params.get("query")
+            if not isinstance(query, str) or not query.strip():
+                raise RequeueError(
+                    f"Run {run_id} has no original query to rerun",
+                    code="RUN_NOT_QUERY_SCOPED",
+                    status=409,
+                )
+            query = query.strip()
+            requeue_params["query"] = query
+            requeue_params["paper_id"] = None
+            stage_list = self._resolve_stages(query, None, requested_stages)
+        else:
+            raise RequeueError(
+                f"Unsupported requeue strategy: {chosen_strategy}",
+                code="UNSUPPORTED_REQUEUE_STRATEGY",
+                status=400,
+            )
+
+        return {
+            "source_run_id": run_id,
+            "source_status": source_status,
+            "source_params": source_params,
+            "new_run_id": self._generate_run_id(),
+            "strategy": chosen_strategy,
+            "stages": len(stage_list),
+            "stage_names": [stage_name for stage_name, _ in stage_list],
+            "params": requeue_params,
+        }
+
+    @staticmethod
+    def _normalize_stage_count(value: object) -> int:
+        """Clamp a user/database stage count into the supported 1-5 range."""
+        try:
+            parsed = int(value)
+        except (TypeError, ValueError):
+            parsed = 5
+        return max(1, min(parsed, 5))
+
+    @staticmethod
+    def _coerce_positive_int(value: object, *, default: int) -> int:
+        """Coerce an optional numeric field, falling back to a sensible default."""
+        try:
+            parsed = int(value)
+        except (TypeError, ValueError):
+            return default
+        return parsed if parsed > 0 else default
+
+    @staticmethod
+    def _detect_failed_stage(run_record: dict) -> str | None:
+        """Infer the first failed or skipped stage from a stored run result."""
+        results = run_record.get("results")
+        if isinstance(results, dict):
+            for stage_name, _ in STAGE_ORDER:
+                stage_result = results.get(stage_name)
+                if not isinstance(stage_result, dict):
+                    continue
+                if stage_result.get("status") in {"failed", "skipped"}:
+                    return stage_name
+                if stage_result.get("success") is False:
+                    return stage_name
+                if isinstance(stage_result.get("error"), str):
+                    return stage_name
+
+        errors = run_record.get("errors")
+        valid_stage_names = {name for name, _ in STAGE_ORDER}
+        if isinstance(errors, list):
+            for error in errors:
+                if not isinstance(error, str):
+                    continue
+                stage_name, _, _ = error.partition(":")
+                if stage_name in valid_stage_names:
+                    return stage_name
+        return None
+
+    @staticmethod
+    def _select_requeue_strategy(source_params: dict, strategy: str) -> str:
+        """Resolve the requested requeue strategy against source run scope."""
+        normalized = (strategy or "auto").strip().lower()
+        has_paper_id = isinstance(source_params.get("paper_id"), int)
+        has_query = isinstance(source_params.get("query"), str) and bool(
+            source_params.get("query", "").strip()
+        )
+
+        if normalized == "auto":
+            if has_paper_id:
+                return "resume_from_current_stage"
+            if has_query:
+                return "rerun_query"
+            raise RequeueError(
+                "Only paper-scoped or query-scoped runs can be requeued safely",
+                code="RUN_SCOPE_UNSUPPORTED",
+                status=409,
+            )
+
+        if normalized == "resume_from_current_stage":
+            if not has_paper_id:
+                raise RequeueError(
+                    "resume_from_current_stage requires a paper-scoped run",
+                    code="RUN_NOT_PAPER_SCOPED",
+                    status=409,
+                )
+            return normalized
+
+        if normalized == "rerun_query":
+            if not has_query:
+                raise RequeueError(
+                    "rerun_query requires a query-scoped run",
+                    code="RUN_NOT_QUERY_SCOPED",
+                    status=409,
+                )
+            return normalized
+
+        raise RequeueError(
+            f"Unsupported requeue strategy: {strategy}",
+            code="UNSUPPORTED_REQUEUE_STRATEGY",
+            status=400,
+        )
+
+    def fail_runs(self, run_ids: list[str], reason: str) -> int:
+        """Mark specific running runs as failed.
+
+        Returns:
+            Number of rows updated.
+        """
+        if not run_ids:
+            return 0
+
+        placeholders = ",".join("?" for _ in run_ids)
+        error_json = json.dumps([reason])
+
+        with transaction(self.db_path) as conn:
+            cursor = conn.execute(
+                "UPDATE pipeline_runs SET status = 'failed', "
+                "errors = ?, completed_at = datetime('now') "
+                f"WHERE status = 'running' AND run_id IN ({placeholders})",
+                (error_json, *run_ids),
+            )
+            updated = cursor.rowcount
+
+        for rid in run_ids:
+            logger.warning("Marked orphaned pipeline run as failed: %s", rid)
+        return updated
 
     # -- Run persistence --
 

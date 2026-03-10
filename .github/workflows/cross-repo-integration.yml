@@ -60,8 +60,16 @@ jobs:
       - name: Install pepers dependencies
         run: uv sync --extra dev --extra setup
 
-      - name: Validate setup wizard compatibility tests
-        run: uv run pytest -q tests/unit/test_setup_wizard.py
+      - name: Validate shared compatibility checks
+        run: uv run pytest -q tests/unit/test_setup_wizard.py tests/unit/test_preflight.py
+
+      - name: Validate CAS integration surface
+        if: ${{ steps.meta.outputs.service == 'cas-service' }}
+        run: uv run pytest -q tests/unit/test_validator.py
+
+      - name: Validate RAG integration surface
+        if: ${{ steps.meta.outputs.service == 'rag-service' }}
+        run: uv run pytest -q tests/unit/test_extractor.py
 
       - name: Probe updated dependency service health
         continue-on-error: true
