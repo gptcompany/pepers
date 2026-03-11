@@ -72,7 +72,9 @@ jobs:
           echo "pct=$COV" >> "$GITHUB_OUTPUT"
 
       - name: Update coverage badge
+        id: badge
         if: runner.os == 'Linux' && github.ref == 'refs/heads/main' && github.event_name == 'push' && steps.cov.outputs.pct
+        continue-on-error: true
         uses: schneegans/dynamic-badges-action@v1.7.0
         with:
           auth: ${{ secrets.GIST_TOKEN }}
@@ -83,6 +85,11 @@ jobs:
           valColorRange: ${{ steps.cov.outputs.pct }}
           minColorRange: 40
           maxColorRange: 90
+
+      - name: Warn if coverage badge update failed
+        if: always() && runner.os == 'Linux' && github.ref == 'refs/heads/main' && github.event_name == 'push' && steps.cov.outputs.pct && steps.badge.outcome == 'failure'
+        run: |
+          echo "::warning::Coverage badge update failed. Check GIST_TOKEN validity/scope and gist access for ac39e6516b7114f96b84ba445b8e7a83."
 
       - name: Trigger progressive-deploy build
         if: success() && github.event_name == 'push' && github.ref == 'refs/heads/main'
