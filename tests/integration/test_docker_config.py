@@ -167,3 +167,20 @@ class TestExtractorPathMapping:
         assert env["RP_EXTRACTOR_RAG_DATA_HOST"] == "/legacy/rag-data"
         assert env["RP_EXTRACTOR_PDF_HOST_DIR"] == "/legacy/rag-data/pdfs"
         assert rag_volume["source"] == "/legacy/rag-data"
+
+
+class TestAnalyzerLlmDefaults:
+    def test_analyzer_prefers_oauth_and_relaxed_timeouts_by_default(self):
+        config = _load_compose_config(
+            {
+                "RP_ANALYZER_LLM_FALLBACK_ORDER": "",
+                "RP_GEMINI_CLI_USE_OAUTH": "",
+                "RP_LLM_TIMEOUT_GEMINI_CLI": "",
+                "RP_LLM_TIMEOUT_OLLAMA": "",
+            }
+        )
+        env = config["services"]["analyzer"]["environment"]
+        assert env["RP_ANALYZER_LLM_FALLBACK_ORDER"] == "gemini_cli,gemini_sdk"
+        assert env["RP_GEMINI_CLI_USE_OAUTH"] == "true"
+        assert env["RP_LLM_TIMEOUT_GEMINI_CLI"] == "60"
+        assert env["RP_LLM_TIMEOUT_OLLAMA"] == "120"

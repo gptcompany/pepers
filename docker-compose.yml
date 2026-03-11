@@ -68,16 +68,16 @@ services:
       - RP_DB_PATH=/data/research.db
       - RP_ANALYZER_THRESHOLD=0.7
       - RP_ANALYZER_MAX_PAPERS=10
-      - RP_ANALYZER_LLM_FALLBACK_ORDER=gemini_cli,gemini_sdk,openrouter,ollama
+      - RP_ANALYZER_LLM_FALLBACK_ORDER=${RP_ANALYZER_LLM_FALLBACK_ORDER:-gemini_cli,gemini_sdk}
       - RP_ANALYZER_REQUEST_BUDGET_SECONDS=900
-      - RP_LLM_TIMEOUT_GEMINI_CLI=60
+      - RP_LLM_TIMEOUT_GEMINI_CLI=${RP_LLM_TIMEOUT_GEMINI_CLI:-60}
       - RP_LLM_TIMEOUT_GEMINI_SDK=20
       - RP_LLM_TIMEOUT_OPENROUTER=20
-      - RP_LLM_TIMEOUT_OLLAMA=40
+      - RP_LLM_TIMEOUT_OLLAMA=${RP_LLM_TIMEOUT_OLLAMA:-120}
       - RP_DOCKER_HOST_GATEWAY=host.docker.internal
       - RP_LOG_LEVEL=INFO
       - HOME=/home/pepers
-      - RP_GEMINI_CLI_USE_OAUTH=${RP_GEMINI_CLI_USE_OAUTH:-false}
+      - RP_GEMINI_CLI_USE_OAUTH=${RP_GEMINI_CLI_USE_OAUTH:-true}
     env_file: .env
     volumes:
       - ${PEPERS_DATA_DIR:-./data}:/data
