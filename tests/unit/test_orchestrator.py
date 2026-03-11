@@ -383,6 +383,37 @@ class TestRunPipeline:
         _assert_stage_skipped(result, "validator", "analyzer")
         _assert_stage_skipped(result, "codegen", "analyzer")
 
+    @patch.object(PipelineRunner, "_get_paper_stage", return_value="discovered")
+    @patch.object(PipelineRunner, "_call_service_with_retry")
+    def test_extractor_zero_processed_with_failures_is_treated_as_failure(
+        self, mock_call, mock_stage
+    ):
+        mock_call.side_effect = [
+            {
+                "papers_analyzed": 1,
+                "papers_accepted": 1,
+                "papers_rejected": 0,
+                "errors": [],
+            },
+            {
+                "success": False,
+                "papers_processed": 0,
+                "formulas_extracted": 0,
+                "papers_failed": 1,
+                "errors": ["paper 42: HTTP Error 429: Too Many Requests"],
+            },
+        ]
+
+        result = self.runner.run(paper_id=42, stages=4)
+
+        assert result["status"] == "partial"
+        assert result["stages_completed"] == 1
+        assert result["results"]["extractor"]["status"] == "failed"
+        assert result["results"]["extractor"]["papers_failed"] == 1
+        assert "Extractor returned no successful papers" in result["errors"][0]
+        _assert_stage_skipped(result, "validator", "extractor")
+        _assert_stage_skipped(result, "codegen", "extractor")
+
     @patch.object(PipelineRunner, "_call_service_with_retry")
     def test_all_stages_fail(self, mock_call):
         mock_call.side_effect = ServiceError("all down")

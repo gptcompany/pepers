@@ -1036,6 +1036,7 @@ class TestExtractorHandler:
         # PDF download fails
         mock_pdf.side_effect = Exception("Download failed")
         resp = handler.handle_process({"paper_id": 1})
+        assert resp["success"] is False
         assert resp["papers_processed"] == 0
         assert resp["papers_failed"] == 1
         
@@ -1064,6 +1065,7 @@ class TestExtractorHandler:
         mock_rag.return_value = "$$ E = m c^2 + \alpha \beta \gamma $$"
         
         resp = handler.handle_process({"paper_id": 1})
+        assert resp["success"] is True
         assert resp["papers_processed"] == 1
         assert resp["formulas_extracted"] == 1
         
@@ -1100,6 +1102,7 @@ class TestExtractorHandler:
         mock_rag.return_value = "$$ E = m c^2 + \\alpha \\beta \\gamma $$"
 
         resp = handler.handle_process({"paper_id": 1})
+        assert resp["success"] is True
         assert resp["papers_processed"] == 1
         mock_rag.assert_called_once_with(Path("/tmp/p.pdf"), "paper:1", "http://rag")
 
@@ -1129,6 +1132,7 @@ class TestExtractorHandler:
         mock_check.return_value = {"status": "ok"}
 
         resp = handler.handle_process({"paper_id": 1})
+        assert resp["success"] is False
         assert resp["papers_processed"] == 0
         assert resp["papers_failed"] == 1
         assert "no downloadable PDF source" in resp["errors"][0]

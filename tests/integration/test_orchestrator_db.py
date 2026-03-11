@@ -817,6 +817,58 @@ class TestRunsEndpoint:
         assert final_status["run_id"] == run_id
         assert final_status["completed_at"] is not None
 
+    @patch("services.orchestrator.pipeline.requests.post")
+    def test_async_paper_run_marks_extractor_soft_failure_as_partial(self, mock_post):
+        analyzer_resp = MagicMock()
+        analyzer_resp.status_code = 200
+        analyzer_resp.json.return_value = {
+            "papers_analyzed": 1,
+            "papers_accepted": 1,
+            "papers_rejected": 0,
+            "errors": [],
+        }
+
+        extractor_resp = MagicMock()
+        extractor_resp.status_code = 200
+        extractor_resp.json.return_value = {
+            "success": False,
+            "service": "extractor",
+            "papers_processed": 0,
+            "formulas_extracted": 0,
+            "papers_failed": 1,
+            "errors": ["paper 1: HTTP Error 429: Too Many Requests"],
+        }
+
+        mock_post.side_effect = [analyzer_resp, extractor_resp]
+
+        body = json.dumps({"paper_id": 1, "stages": 4}).encode()
+        req = urllib.request.Request(
+            f"http://localhost:{self.port}/run",
+            data=body,
+            headers={"Content-Type": "application/json"},
+        )
+        resp = urllib.request.urlopen(req)
+        run_id = json.loads(resp.read())["run_id"]
+
+        deadline = time.monotonic() + 10
+        final_status = None
+        while time.monotonic() < deadline:
+            time.sleep(0.5)
+            poll_resp = urllib.request.urlopen(
+                f"http://localhost:{self.port}/runs?id={run_id}"
+            )
+            poll_data = json.loads(poll_resp.read())
+            if poll_data.get("status") != "running":
+                final_status = poll_data
+                break
+
+        assert final_status is not None, "Run did not complete within 10s"
+        assert final_status["status"] == "partial"
+        assert final_status["results"]["extractor"]["status"] == "failed"
+        assert final_status["results"]["extractor"]["papers_failed"] == 1
+        assert final_status["results"]["validator"]["status"] == "skipped"
+        assert final_status["results"]["codegen"]["status"] == "skipped"
+
     def test_list_runs_with_limit(self):
         """list_runs respects limit parameter."""
         runner = OrchestratorHandler.runner

@@ -75,26 +75,54 @@ def _normalize_stage_errors(raw_errors: object) -> list[str]:
     return []
 
 
+def _stage_failure_payload(payload: dict | None, *, status: str = "failed") -> dict | None:
+    if payload is None:
+        return None
+    failed_payload = dict(payload)
+    failed_payload["status"] = status
+    return failed_payload
+
+
 def _raise_for_semantic_stage_failure(stage_name: str, result: dict) -> None:
     """Convert soft-failed stage payloads into orchestrator failures.
 
     Some services can return HTTP 200 even when they performed no useful work.
     For analyzer this previously let runs close as "completed" while every LLM
     provider had actually failed and no paper advanced beyond "discovered".
+    Extractor can also soft-fail by returning 200 with zero processed papers and
+    one or more per-paper errors, which should not count as a completed stage.
     """
-    if stage_name != "analyzer":
-        return
-
     errors = _normalize_stage_errors(result.get("errors"))
-    if not errors:
+    if stage_name == "analyzer":
+        if not errors:
+            return
+        if (
+            result.get("papers_analyzed", 0) == 0
+            and result.get("papers_accepted", 0) == 0
+            and result.get("papers_rejected", 0) == 0
+        ):
+            raise ServiceError(
+                f"Analyzer returned no progress: {errors[0]}",
+                payload=_stage_failure_payload(result),
+            )
         return
 
-    if (
-        result.get("papers_analyzed", 0) == 0
-        and result.get("papers_accepted", 0) == 0
-        and result.get("papers_rejected", 0) == 0
-    ):
-        raise ServiceError(f"Analyzer returned no progress: {errors[0]}")
+    if stage_name == "extractor":
+        if result.get("success") is False:
+            detail = errors[0] if errors else "extractor reported unsuccessful batch"
+            raise ServiceError(
+                f"Extractor returned no successful papers: {detail}",
+                payload=_stage_failure_payload(result),
+            )
+        if (
+            errors
+            and result.get("papers_processed", 0) == 0
+            and result.get("papers_failed", 0) > 0
+        ):
+            raise ServiceError(
+                f"Extractor returned no successful papers: {errors[0]}",
+                payload=_stage_failure_payload(result),
+            )
 
 
 # Stage order: (name, port)
@@ -343,11 +371,19 @@ class PipelineRunner:
                     stage_ms = int(stage_duration * 1000)
                     error_msg = f"{stage_name}: {e}"
                     errors.append(error_msg)
-                    results[stage_name] = {
-                        "status": "failed",
-                        "error": str(e),
-                        "time_ms": stage_ms,
-                    }
+                    payload = getattr(e, "payload", None)
+                    if isinstance(payload, dict):
+                        payload = dict(payload)
+                        payload["status"] = "failed"
+                        payload["error"] = str(e)
+                        payload["time_ms"] = stage_ms
+                        results[stage_name] = payload
+                    else:
+                        results[stage_name] = {
+                            "status": "failed",
+                            "error": str(e),
+                            "time_ms": stage_ms,
+                        }
                     has_failure = True
                     STAGE_DURATION.labels(stage=stage_name).observe(stage_duration)
                     STAGE_COMPLETED.labels(stage=stage_name, result="failure").inc()
@@ -1128,3 +1164,7 @@ class PipelineRunner:
 
 class ServiceError(Exception):
     """Raised when a service call fails after retries."""
+
+    def __init__(self, message: str, *, payload: dict | None = None) -> None:
+        super().__init__(message)
+        self.payload = payload

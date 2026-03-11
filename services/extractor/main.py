@@ -197,7 +197,7 @@ class ExtractorHandler(BaseHandler):
         )
 
         return {
-            "success": True,
+            "success": papers_ok > 0 or not errors,
             "service": "extractor",
             "papers_processed": papers_ok,
             "formulas_extracted": total_formulas,
