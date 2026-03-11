@@ -51,6 +51,7 @@ class RequeueError(Exception):
         self.code = code
         self.status = status
 
+
 def _stage_port(service: str, default: int) -> int:
     raw = os.environ.get(f"RP_{service.upper()}_PORT", str(default))
     try:
@@ -64,6 +65,36 @@ def _stage_url(service: str, port: int) -> str:
     if explicit:
         return explicit.rstrip("/")
     return f"http://localhost:{port}"
+
+
+def _normalize_stage_errors(raw_errors: object) -> list[str]:
+    if isinstance(raw_errors, list):
+        return [str(item) for item in raw_errors if item]
+    if raw_errors:
+        return [str(raw_errors)]
+    return []
+
+
+def _raise_for_semantic_stage_failure(stage_name: str, result: dict) -> None:
+    """Convert soft-failed stage payloads into orchestrator failures.
+
+    Some services can return HTTP 200 even when they performed no useful work.
+    For analyzer this previously let runs close as "completed" while every LLM
+    provider had actually failed and no paper advanced beyond "discovered".
+    """
+    if stage_name != "analyzer":
+        return
+
+    errors = _normalize_stage_errors(result.get("errors"))
+    if not errors:
+        return
+
+    if (
+        result.get("papers_analyzed", 0) == 0
+        and result.get("papers_accepted", 0) == 0
+        and result.get("papers_rejected", 0) == 0
+    ):
+        raise ServiceError(f"Analyzer returned no progress: {errors[0]}")
 
 
 # Stage order: (name, port)
@@ -295,6 +326,7 @@ class PipelineRunner:
                             timeout=stage_timeout,
                             retry_on_timeout=retry_on_timeout,
                         )
+                    _raise_for_semantic_stage_failure(stage_name, result)
 
                     stage_duration = time.time() - stage_start
                     stage_ms = int(stage_duration * 1000)

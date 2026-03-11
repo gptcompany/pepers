@@ -362,6 +362,28 @@ class TestRunPipeline:
         _assert_stage_skipped(result, "codegen", "analyzer")
 
     @patch.object(PipelineRunner, "_call_service_with_retry")
+    def test_analyzer_zero_progress_with_errors_is_treated_as_failure(self, mock_call):
+        mock_call.side_effect = [
+            {"papers_found": 3},
+            {
+                "papers_analyzed": 0,
+                "papers_accepted": 0,
+                "papers_rejected": 0,
+                "errors": ["paper 99: all LLM providers failed"],
+            },
+        ]
+
+        result = self.runner.run(query="test", stages=5)
+
+        assert result["status"] == "partial"
+        assert result["stages_completed"] == 1
+        assert result["results"]["analyzer"]["status"] == "failed"
+        assert "Analyzer returned no progress" in result["errors"][0]
+        _assert_stage_skipped(result, "extractor", "analyzer")
+        _assert_stage_skipped(result, "validator", "analyzer")
+        _assert_stage_skipped(result, "codegen", "analyzer")
+
+    @patch.object(PipelineRunner, "_call_service_with_retry")
     def test_all_stages_fail(self, mock_call):
         mock_call.side_effect = ServiceError("all down")
 
