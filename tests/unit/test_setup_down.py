@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import subprocess
 from pathlib import Path
+import unittest.mock
 from unittest.mock import MagicMock, patch
 
 from services.setup._docker import DockerBootCheck, DockerComposeDown, get_down_steps
@@ -35,15 +36,20 @@ class TestDockerComposeDown:
 
     def test_install_runs_compose_down(self, tmp_path):
         step = DockerComposeDown(tmp_path)
-        with patch("subprocess.run") as mock_run:
+        with (
+            patch("services.setup._docker._docker_bin", return_value="/usr/bin/docker"),
+            patch("services.setup._docker._docker_env", return_value={"PATH": "/usr/bin"}),
+            patch("subprocess.run") as mock_run,
+        ):
             mock_run.return_value = MagicMock(returncode=0)
             console = MagicMock()
             assert step.install(console) is True
             mock_run.assert_called_with(
-                ["docker", "compose", "down"],
+                [unittest.mock.ANY, "compose", "down"],
                 cwd=tmp_path,
                 check=True,
                 text=True,
+                env={"PATH": "/usr/bin"},
             )
 
     def test_install_returns_false_on_failure(self, tmp_path):
