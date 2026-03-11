@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import hashlib
+import http.client
 import json
 import urllib.error
 from pathlib import Path
@@ -224,11 +225,32 @@ class TestCheckService:
         with pytest.raises(RuntimeError, match="circuit breaker is open"):
             check_service("http://localhost:8767")
 
+    @patch("services.extractor.rag_client.time.sleep")
     @patch("services.extractor.rag_client.urllib.request.urlopen")
-    def test_service_unreachable(self, mock_urlopen):
+    def test_service_recovers_after_retry(self, mock_urlopen, mock_sleep):
+        healthy = MagicMock()
+        healthy.read.return_value = json.dumps({
+            "status": "ok",
+            "circuit_breaker": {"state": "closed"},
+        }).encode()
+        mock_urlopen.side_effect = [
+            urllib.error.URLError("timed out"),
+            healthy,
+        ]
+
+        result = check_service("http://localhost:8767")
+        assert result["status"] == "ok"
+        assert mock_urlopen.call_count == 2
+        mock_sleep.assert_called_once()
+
+    @patch("services.extractor.rag_client.time.sleep")
+    @patch("services.extractor.rag_client.urllib.request.urlopen")
+    def test_service_unreachable(self, mock_urlopen, mock_sleep):
         mock_urlopen.side_effect = urllib.error.URLError("Connection refused")
         with pytest.raises(urllib.error.URLError):
             check_service("http://localhost:8767")
+        assert mock_urlopen.call_count == 3
+        assert mock_sleep.call_count == 2
 
 
 # ---------------------------------------------------------------------------
@@ -276,6 +298,22 @@ class TestSubmitPdf:
         body = json.loads(req.data.decode())
         assert body["pdf_path"] == "/data/pdfs/test.pdf"
         assert body["paper_id"] == "2401.00001"
+
+    @patch("services.extractor.rag_client.time.sleep")
+    @patch("services.extractor.rag_client.urllib.request.urlopen")
+    def test_submit_retries_remote_disconnect(self, mock_urlopen, mock_sleep):
+        queued = MagicMock()
+        queued.read.return_value = json.dumps({"job_id": "job-abc-123"}).encode()
+        mock_urlopen.side_effect = [
+            http.client.RemoteDisconnected("remote closed"),
+            queued,
+        ]
+
+        result = submit_pdf(Path("/tmp/test.pdf"), "2401.00001")
+        assert result["cached"] is False
+        assert result["job_id"] == "job-abc-123"
+        assert mock_urlopen.call_count == 2
+        mock_sleep.assert_called_once()
 
 
 # ---------------------------------------------------------------------------
@@ -348,6 +386,25 @@ class TestPollJob:
 
         with pytest.raises(TimeoutError, match="timed out"):
             poll_job("job-1", timeout=600, interval=1)
+
+    @patch("services.extractor.rag_client.time.sleep")
+    @patch("services.extractor.rag_client.urllib.request.urlopen")
+    def test_poll_job_recovers_from_transient_transport_error(self, mock_urlopen, mock_sleep):
+        completed = MagicMock()
+        completed.read.return_value = json.dumps({
+            "status": "completed",
+            "result": {"output_dir": "/out"},
+        }).encode()
+        mock_urlopen.side_effect = [
+            urllib.error.URLError("timed out"),
+            completed,
+        ]
+
+        result = poll_job("job-1", timeout=600, interval=1)
+        assert result["output_dir"] == "/out"
+        assert mock_urlopen.call_count == 2
+        # One sleep from retry backoff, none from polling loop after completion.
+        mock_sleep.assert_called_once()
 
 
 # ---------------------------------------------------------------------------

@@ -8,10 +8,12 @@ Uses urllib.request (stdlib) — no extra dependencies.
 
 from __future__ import annotations
 
+import http.client
 import json
 import logging
 import os
 import time
+import urllib.error
 import urllib.request
 from pathlib import Path
 
@@ -20,10 +22,72 @@ logger = logging.getLogger(__name__)
 DEFAULT_BASE_URL = "http://localhost:8767"
 DEFAULT_POLL_INTERVAL = 10
 DEFAULT_TIMEOUT = 7200  # 2h — MinerU on CPU: ~10 min/page, 25-page paper = ~4h
+DEFAULT_REQUEST_TIMEOUT = 10.0
+DEFAULT_SUBMIT_TIMEOUT = 60.0
+DEFAULT_REQUEST_RETRIES = 3
+DEFAULT_RETRY_BACKOFF = 2.0
 
 # Container→host path mapping for RAGAnything (host-based service)
 _PDF_DIR = os.environ.get("RP_EXTRACTOR_PDF_DIR", "/data/pdfs")
 _PDF_HOST_DIR = os.environ.get("RP_EXTRACTOR_PDF_HOST_DIR", "")
+
+
+def _request_retries() -> int:
+    return max(1, int(os.environ.get("RP_EXTRACTOR_RAG_RETRIES", str(DEFAULT_REQUEST_RETRIES))))
+
+
+def _retry_backoff() -> float:
+    return max(0.0, float(os.environ.get("RP_EXTRACTOR_RAG_RETRY_BACKOFF", str(DEFAULT_RETRY_BACKOFF))))
+
+
+def _is_retryable_http_error(exc: BaseException) -> bool:
+    if isinstance(exc, urllib.error.HTTPError):
+        return exc.code in {408, 429, 500, 502, 503, 504}
+    return isinstance(
+        exc,
+        (
+            urllib.error.URLError,
+            TimeoutError,
+            ConnectionError,
+            ConnectionResetError,
+            http.client.HTTPException,
+            OSError,
+        ),
+    )
+
+
+def _json_request(
+    url_or_req: str | urllib.request.Request,
+    *,
+    timeout: float,
+    attempts: int | None = None,
+    backoff: float | None = None,
+    label: str,
+) -> dict:
+    """Open a JSON endpoint with retry/backoff for transient transport failures."""
+    if attempts is None:
+        attempts = _request_retries()
+    if backoff is None:
+        backoff = _retry_backoff()
+
+    last_error: BaseException | None = None
+    for attempt in range(1, attempts + 1):
+        try:
+            resp = urllib.request.urlopen(url_or_req, timeout=timeout)
+            return json.loads(resp.read().decode())
+        except Exception as exc:
+            last_error = exc
+            retryable = _is_retryable_http_error(exc)
+            if not retryable or attempt >= attempts:
+                raise
+            sleep_for = backoff * attempt
+            logger.warning(
+                "RAG request failed (%s), retrying %d/%d in %.1fs: %s",
+                label, attempt, attempts, sleep_for, exc,
+            )
+            time.sleep(sleep_for)
+
+    raise RuntimeError(f"Unreachable retry state for {label}: {last_error}")
 
 
 def check_service(base_url: str = DEFAULT_BASE_URL) -> dict:
@@ -32,8 +96,11 @@ def check_service(base_url: str = DEFAULT_BASE_URL) -> dict:
     Raises:
         RuntimeError: If circuit breaker is open or service unreachable.
     """
-    resp = urllib.request.urlopen(f"{base_url}/status", timeout=10)
-    data = json.loads(resp.read().decode())
+    data = _json_request(
+        f"{base_url}/status",
+        timeout=DEFAULT_REQUEST_TIMEOUT,
+        label="status",
+    )
 
     if data.get("circuit_breaker", {}).get("state") == "open":
         raise RuntimeError("RAGAnything circuit breaker is open")
@@ -71,8 +138,11 @@ def submit_pdf(
         headers={"Content-Type": "application/json"},
         method="POST",
     )
-    resp = urllib.request.urlopen(req, timeout=30)
-    data = json.loads(resp.read().decode())
+    data = _json_request(
+        req,
+        timeout=DEFAULT_SUBMIT_TIMEOUT,
+        label=f"submit:{paper_id}",
+    )
 
     if data.get("cached"):
         return {"cached": True, "result": data}
@@ -95,10 +165,25 @@ def poll_job(
     deadline = time.time() + timeout
 
     while time.time() < deadline:
-        resp = urllib.request.urlopen(
-            f"{base_url}/jobs/{job_id}", timeout=10
-        )
-        data = json.loads(resp.read().decode())
+        try:
+            data = _json_request(
+                f"{base_url}/jobs/{job_id}",
+                timeout=DEFAULT_REQUEST_TIMEOUT,
+                label=f"job:{job_id}",
+            )
+        except Exception as exc:
+            if not _is_retryable_http_error(exc):
+                raise
+            remaining = deadline - time.time()
+            if remaining <= 0:
+                break
+            sleep_for = min(interval, remaining)
+            logger.warning(
+                "Transient RAG polling error for %s, retrying in %.1fs: %s",
+                job_id, sleep_for, exc,
+            )
+            time.sleep(sleep_for)
+            continue
 
         if data["status"] == "completed":
             return data["result"]
