@@ -30,7 +30,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        runner: [[self-hosted, Linux, X64, muletto]]
+        runner: [[self-hosted, Linux, X64]]
         python-version: ["3.11"]
 
     steps:

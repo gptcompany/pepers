@@ -26,7 +26,7 @@ permissions:
 
 jobs:
   validate:
-    runs-on: [self-hosted, Linux, X64, muletto]
+    runs-on: [self-hosted, Linux, X64]
     timeout-minutes: 20
 
     steps:

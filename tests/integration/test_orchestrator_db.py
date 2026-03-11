@@ -406,6 +406,22 @@ class TestOrchestratorHTTP:
         assert params["requeue_source_status"] == "failed"
         assert "requeue_requested_at" in params
 
+    def test_requeue_rejects_terminal_paper(self):
+        with transaction(self.db_path) as conn:
+            conn.execute(
+                "INSERT INTO papers (id, arxiv_id, title, stage) VALUES (?, ?, ?, ?)",
+                (99, "2401.00099", "Terminal Paper", "codegen"),
+            )
+            conn.execute(
+                "INSERT INTO pipeline_runs (run_id, status, params, stages_requested) "
+                "VALUES (?, 'failed', ?, 5)",
+                ("run-term", '{"query":null,"paper_id":99}'),
+            )
+
+        code, data = self._post("/runs/requeue", {"run_id": "run-term"})
+        assert code == 409
+        assert data["code"] == "RUN_ALREADY_AT_TERMINAL_STAGE"
+
 
 # ---------------------------------------------------------------------------
 # GET /papers and /formulas endpoint tests
