@@ -209,4 +209,4 @@ class TestOrchestratorStageTimeoutDefaults:
         )
         env = config["services"]["orchestrator"]["environment"]
         assert env["RP_ORCHESTRATOR_ANALYZER_TIMEOUT"] == "1800"
-        assert env["RP_ORCHESTRATOR_EXTRACTOR_TIMEOUT"] == "1800"
+        assert env["RP_ORCHESTRATOR_EXTRACTOR_TIMEOUT"] == "7200"
