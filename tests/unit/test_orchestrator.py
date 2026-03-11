@@ -1771,15 +1771,24 @@ class TestPipelineRunnerInit:
     def test_analyzer_stage_timeout_default(self, clean_env):
         assert PipelineRunner.STAGE_TIMEOUTS.get("analyzer") == 1800
 
+    def test_extractor_stage_timeout_default(self, clean_env):
+        assert PipelineRunner.STAGE_TIMEOUTS.get("extractor") == 1800
+
     def test_instance_stage_timeout_defaults(self, clean_env, tmp_path):
         runner = PipelineRunner(tmp_path / "test.db")
         assert runner.STAGE_TIMEOUTS["analyzer"] == 1800
+        assert runner.STAGE_TIMEOUTS["extractor"] == 1800
         assert runner.STAGE_TIMEOUTS["codegen"] == 900
 
     def test_env_override_analyzer_stage_timeout(self, tmp_path):
         with patch.dict(os.environ, {"RP_ORCHESTRATOR_ANALYZER_TIMEOUT": "600"}):
             runner = PipelineRunner(tmp_path / "test.db")
             assert runner.STAGE_TIMEOUTS["analyzer"] == 600
+
+    def test_env_override_extractor_stage_timeout(self, tmp_path):
+        with patch.dict(os.environ, {"RP_ORCHESTRATOR_EXTRACTOR_TIMEOUT": "1200"}):
+            runner = PipelineRunner(tmp_path / "test.db")
+            assert runner.STAGE_TIMEOUTS["extractor"] == 1200
 
     def test_db_path_stored_as_string(self, tmp_path):
         runner = PipelineRunner(tmp_path / "test.db")
@@ -1795,7 +1804,11 @@ class TestRunInternals:
         self.runner.timeout = 5
         self.runner.retry_max = 0
         self.runner.retry_backoff = 1.0
-        self.runner.STAGE_TIMEOUTS = {"analyzer": 1800, "codegen": 900}
+        self.runner.STAGE_TIMEOUTS = {
+            "analyzer": 1800,
+            "extractor": 1800,
+            "codegen": 900,
+        }
 
     @patch.object(PipelineRunner, "_call_service_with_retry")
     def test_run_params_dict_keys(self, mock_call):
@@ -1904,12 +1917,33 @@ class TestRunInternals:
     def test_analyzer_uses_stage_timeout(self, mock_call):
         """Analyzer stage should use its dedicated timeout override."""
         mock_call.return_value = {"ok": True}
-        self.runner.STAGE_TIMEOUTS = {"analyzer": 777, "codegen": 900}
+        self.runner.STAGE_TIMEOUTS = {
+            "analyzer": 777,
+            "extractor": 1800,
+            "codegen": 900,
+        }
 
         self.runner.run(query="q", stages=2)
 
         _, kwargs = mock_call.call_args_list[1]
         assert kwargs.get("timeout") == 777
+        assert kwargs.get("retry_on_timeout") is False
+
+    @patch.object(PipelineRunner, "_call_service_with_retry")
+    def test_extractor_uses_stage_timeout_without_retry(self, mock_call):
+        """Extractor should use its dedicated timeout and avoid timeout retries."""
+        mock_call.return_value = {"papers_analyzed": 1, "papers_accepted": 1, "papers_rejected": 0, "errors": []}
+        self.runner.STAGE_TIMEOUTS = {
+            "analyzer": 777,
+            "extractor": 1234,
+            "codegen": 900,
+        }
+
+        with patch.object(self.runner, "_get_paper_stage", return_value="analyzed"):
+            self.runner.run(paper_id=1, stages=1)
+
+        _, kwargs = mock_call.call_args
+        assert kwargs.get("timeout") == 1234
         assert kwargs.get("retry_on_timeout") is False
 
     @patch.object(PipelineRunner, "_call_service_with_retry")

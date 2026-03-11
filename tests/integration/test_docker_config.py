@@ -197,3 +197,16 @@ class TestExtractorRagDefaults:
         env = config["services"]["extractor"]["environment"]
         assert env["RP_EXTRACTOR_RAG_REQUEST_TIMEOUT"] == "30"
         assert env["RP_EXTRACTOR_RAG_SUBMIT_TIMEOUT"] == "60"
+
+
+class TestOrchestratorStageTimeoutDefaults:
+    def test_orchestrator_uses_stage_specific_timeouts_by_default(self):
+        config = _load_compose_config(
+            {
+                "RP_ORCHESTRATOR_ANALYZER_TIMEOUT": "",
+                "RP_ORCHESTRATOR_EXTRACTOR_TIMEOUT": "",
+            }
+        )
+        env = config["services"]["orchestrator"]["environment"]
+        assert env["RP_ORCHESTRATOR_ANALYZER_TIMEOUT"] == "1800"
+        assert env["RP_ORCHESTRATOR_EXTRACTOR_TIMEOUT"] == "1800"

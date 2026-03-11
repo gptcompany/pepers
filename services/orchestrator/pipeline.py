@@ -7,6 +7,7 @@ Environment:
     RP_ORCHESTRATOR_RETRY_MAX=3             # Max retries per service call
     RP_ORCHESTRATOR_RETRY_BACKOFF=4.0       # Backoff base (seconds)
     RP_ORCHESTRATOR_TIMEOUT=300             # Default request timeout (seconds)
+    RP_ORCHESTRATOR_EXTRACTOR_TIMEOUT=1800  # Extractor-specific timeout (seconds)
     RP_ORCHESTRATOR_CODEGEN_TIMEOUT=900     # Codegen-specific timeout (seconds)
 """
 
@@ -213,6 +214,7 @@ class PipelineRunner:
     # Codegen likewise processes formulas sequentially and needs a longer timeout.
     STAGE_TIMEOUTS: dict[str, int] = {
         "analyzer": int(os.environ.get("RP_ORCHESTRATOR_ANALYZER_TIMEOUT", "1800")),
+        "extractor": int(os.environ.get("RP_ORCHESTRATOR_EXTRACTOR_TIMEOUT", "1800")),
         "codegen": int(os.environ.get("RP_ORCHESTRATOR_CODEGEN_TIMEOUT", "900")),
     }
 
@@ -227,6 +229,9 @@ class PipelineRunner:
         self.STAGE_TIMEOUTS = {
             "analyzer": int(
                 os.environ.get("RP_ORCHESTRATOR_ANALYZER_TIMEOUT", "1800")
+            ),
+            "extractor": int(
+                os.environ.get("RP_ORCHESTRATOR_EXTRACTOR_TIMEOUT", "1800")
             ),
             "codegen": int(
                 os.environ.get("RP_ORCHESTRATOR_CODEGEN_TIMEOUT", "900")
@@ -340,7 +345,7 @@ class PipelineRunner:
 
                 stage_timeout = self.STAGE_TIMEOUTS.get(stage_name, self.timeout)
                 try:
-                    retry_on_timeout = stage_name != "analyzer"
+                    retry_on_timeout = stage_name not in {"analyzer", "extractor"}
                     if stage_name in BATCH_STAGES:
                         # Iterate until all formulas are processed
                         batch_results: list[dict] = []
