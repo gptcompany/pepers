@@ -101,9 +101,16 @@ class TestBuildScoringSystemPrompt:
 class TestAnalyzerFallbackOrder:
     def test_default_order(self, monkeypatch):
         monkeypatch.delenv("RP_ANALYZER_LLM_FALLBACK_ORDER", raising=False)
+        monkeypatch.delenv("RP_LLM_FALLBACK_ORDER", raising=False)
         assert _analyzer_fallback_order() == DEFAULT_ANALYZER_FALLBACK_ORDER
 
+    def test_global_env_fallback(self, monkeypatch):
+        monkeypatch.delenv("RP_ANALYZER_LLM_FALLBACK_ORDER", raising=False)
+        monkeypatch.setenv("RP_LLM_FALLBACK_ORDER", "openrouter,ollama")
+        assert _analyzer_fallback_order() == ["openrouter", "ollama"]
+
     def test_env_override(self, monkeypatch):
+        monkeypatch.setenv("RP_LLM_FALLBACK_ORDER", "openrouter,ollama")
         monkeypatch.setenv(
             "RP_ANALYZER_LLM_FALLBACK_ORDER",
             "gemini_sdk,openrouter,ollama",

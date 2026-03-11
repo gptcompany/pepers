@@ -29,6 +29,7 @@ import time
 
 from shared.config import load_config
 from shared.db import init_db, transaction
+from shared.llm import parse_provider_order
 from shared.server import BaseHandler, BaseService, route
 
 from services.analyzer.llm import fallback_chain
@@ -53,9 +54,12 @@ DEFAULT_ANALYZER_FALLBACK_ORDER = [
 
 def _analyzer_fallback_order() -> list[str]:
     """Prefer fast Gemini/OpenRouter providers before local heavy fallbacks."""
-    raw = os.environ.get("RP_ANALYZER_LLM_FALLBACK_ORDER", "")
-    order = [item.strip() for item in raw.split(",") if item.strip()]
-    return order or list(DEFAULT_ANALYZER_FALLBACK_ORDER)
+    raw = os.environ.get("RP_ANALYZER_LLM_FALLBACK_ORDER")
+    if raw is not None:
+        return parse_provider_order(raw, DEFAULT_ANALYZER_FALLBACK_ORDER)
+
+    global_raw = os.environ.get("RP_LLM_FALLBACK_ORDER")
+    return parse_provider_order(global_raw, DEFAULT_ANALYZER_FALLBACK_ORDER)
 
 
 def migrate_db(db_path: str) -> None:

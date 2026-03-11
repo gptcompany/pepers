@@ -126,10 +126,9 @@ class TestAutoStart:
 
 
 class TestExtractorPathMapping:
-    def test_compose_no_longer_uses_pwd_for_project_host_dir(self):
+    def test_compose_uses_pwd_as_legacy_project_host_dir_fallback(self):
         content = (REPO_ROOT / "docker-compose.yml").read_text()
-        assert "RP_EXTRACTOR_PROJECT_HOST_DIR=${PWD}" not in content
-        assert "RP_EXTRACTOR_PROJECT_HOST_DIR=${PEPERS_PROJECT_HOST_DIR:-}" in content
+        assert "RP_EXTRACTOR_PROJECT_HOST_DIR=${PEPERS_PROJECT_HOST_DIR:-${PWD}}" in content
 
     def test_extractor_project_host_dir_uses_explicit_env(self):
         config = _load_compose_config(
@@ -140,6 +139,15 @@ class TestExtractorPathMapping:
         )
         env = config["services"]["extractor"]["environment"]
         assert env["RP_EXTRACTOR_PROJECT_HOST_DIR"] == "/stable/project/root"
+
+    def test_extractor_project_host_dir_falls_back_to_pwd_when_explicit_env_missing(self):
+        config = _load_compose_config(
+            {
+                "PWD": "/caller/repo/root",
+            }
+        )
+        env = config["services"]["extractor"]["environment"]
+        assert env["RP_EXTRACTOR_PROJECT_HOST_DIR"] == "/caller/repo/root"
 
     def test_extractor_honors_legacy_rag_data_host_override(self):
         config = _load_compose_config(
