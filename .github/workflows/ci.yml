@@ -27,6 +27,8 @@ jobs:
   test:
     name: "test / python-${{ matrix.python-version }}"
     runs-on: ${{ matrix.runner }}
+    env:
+      PROGRESSIVE_DEPLOY_TOKEN: ${{ secrets.PAT }}
     strategy:
       fail-fast: false
       matrix:
@@ -92,11 +94,23 @@ jobs:
           echo "::warning::Coverage badge update failed. Check GIST_TOKEN validity/scope and gist access for ac39e6516b7114f96b84ba445b8e7a83."
 
       - name: Trigger progressive-deploy build
-        if: success() && github.event_name == 'push' && github.ref == 'refs/heads/main'
+        id: progressive_dispatch
+        if: success() && github.event_name == 'push' && github.ref == 'refs/heads/main' && env.PROGRESSIVE_DEPLOY_TOKEN != ''
+        continue-on-error: true
         uses: peter-evans/repository-dispatch@v3
         with:
-          token: ${{ secrets.PAT }}
+          token: ${{ env.PROGRESSIVE_DEPLOY_TOKEN }}
           repository: gptcompany/progressive-deploy
           event-type: pepers-build
           client-payload: >-
             {"ref":"${{ github.sha }}","source_repo":"${{ github.repository }}","source_ref":"${{ github.ref_name }}","source_sha":"${{ github.sha }}","source_workflow":"${{ github.workflow }}"}
+
+      - name: Warn if progressive-deploy dispatch was skipped
+        if: success() && github.event_name == 'push' && github.ref == 'refs/heads/main' && env.PROGRESSIVE_DEPLOY_TOKEN == ''
+        run: |
+          echo "::warning::Skipping progressive-deploy dispatch because PAT is not configured for this workflow."
+
+      - name: Warn if progressive-deploy dispatch failed
+        if: always() && github.event_name == 'push' && github.ref == 'refs/heads/main' && env.PROGRESSIVE_DEPLOY_TOKEN != '' && steps.progressive_dispatch.outcome == 'failure'
+        run: |
+          echo "::warning::progressive-deploy dispatch failed. Check PAT validity/scope and access to gptcompany/progressive-deploy."

@@ -317,6 +317,12 @@ class TestCallOllama:
 class TestFallbackChain:
     """Tests for fallback_chain()."""
 
+    @pytest.fixture(autouse=True)
+    def setup_fallback_order(self):
+        with patch("shared.llm.DEFAULT_FALLBACK_ORDER",
+                   ["gemini_cli", "codex_cli", "claude_cli", "openrouter", "ollama"]):
+            yield
+
     @patch("shared.llm.call_ollama")
     @patch("shared.llm.call_openrouter")
     @patch("shared.llm.call_claude_cli", side_effect=RuntimeError("not available"))
