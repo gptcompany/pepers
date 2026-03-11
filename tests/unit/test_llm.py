@@ -157,6 +157,23 @@ class TestCallOllama:
         )
 
 
+class TestResolveGeminiModel:
+    def test_legacy_model_is_mapped(self, monkeypatch):
+        monkeypatch.setenv("RP_ANALYZER_GEMINI_MODEL", "gemini-1.5-flash")
+        import shared.llm as llm_mod
+
+        importlib.reload(llm_mod)
+        assert llm_mod._resolve_gemini_model() == "gemini-2.0-flash"
+
+    def test_default_model_is_supported(self, monkeypatch):
+        monkeypatch.delenv("RP_ANALYZER_GEMINI_MODEL", raising=False)
+        monkeypatch.delenv("RP_GEMINI_MODEL", raising=False)
+        import shared.llm as llm_mod
+
+        importlib.reload(llm_mod)
+        assert llm_mod._resolve_gemini_model() == "gemini-2.0-flash"
+
+
 # ---------------------------------------------------------------------------
 # call_openrouter tests
 # ---------------------------------------------------------------------------
@@ -391,6 +408,7 @@ class TestCallCli:
         prompt_arg = cmd[-1]
         assert "sys" in prompt_arg
         assert "prompt" in prompt_arg
+        assert mock_run.call_args.kwargs["stdin"] is None
 
     @patch("shared.llm.subprocess.run")
     def test_json_provider_empty_output_raises_runtime_error(self, mock_run):

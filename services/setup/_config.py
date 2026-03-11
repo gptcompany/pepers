@@ -31,6 +31,7 @@ _CONFIG_VARS: list[tuple[str, str, str, str]] = [
     ("RP_DISCOVERY_SOURCES", "Discovery sources (comma-separated)", "arxiv", "text"),
     ("RP_ANALYZER_THRESHOLD", "Analyzer relevance threshold", "0.7", "text"),
     ("RP_ANALYZER_MAX_PAPERS", "Analyzer max papers per batch", "10", "text"),
+    ("RP_MAX_FORMULAS_DEFAULT", "Default max formulas per batch", "100", "text"),
     ("RP_EXTRACTOR_MAX_PAPERS", "Extractor max papers per batch", "10", "text"),
     ("RP_ORCHESTRATOR_CRON_ENABLED", "Enable cron scheduler", "false", "choice:true,false"),
     ("RP_ORCHESTRATOR_CRON", "Orchestrator cron expression", "0 8 * * *", "text"),
@@ -42,12 +43,10 @@ _CONFIG_VARS: list[tuple[str, str, str, str]] = [
         "text",
     ),
     ("RP_VALIDATOR_CAS_URL", "CAS service URL (validator)", "http://localhost:8769", "url"),
-    ("RP_VALIDATOR_MAX_FORMULAS", "Validator max formulas per batch", "50", "text"),
     ("RP_VALIDATOR_ENGINES", "Validator engines (comma-separated)", "sympy,sage", "text"),
     ("RP_EXTRACTOR_RAG_URL", "RAG service URL (extractor)", "http://localhost:8767", "url"),
     ("RP_RAG_QUERY_URL", "RAG query URL (orchestrator)", "http://localhost:8767", "url"),
     ("RP_CODEGEN_OLLAMA_URL", "Ollama URL (codegen)", "http://localhost:11434", "url"),
-    ("RP_CODEGEN_MAX_FORMULAS", "Codegen max formulas per batch", "50", "text"),
     ("RP_MCP_FLAVOR", "MCP output flavor", "arcade", "choice:arcade,plain"),
 ]
 

@@ -540,13 +540,12 @@ class TestEnvConfig:
     @patch("questionary.confirm")
     @patch("questionary.select")
     def test_install_with_custom_vars(self, mock_select, mock_confirm, mock_text, tmp_path):
-        # 27 standard variables. All will ask for text except those with "choice:"
-        # Let's count them:
-        # port (8), url (4), path (3), text (9), choice (3)
-        # Total text questions = 8 + 4 + 3 + 9 = 24
-
-        # mock all standard text responses
-        standard_responses = ["std_val"] * 24
+        text_prompts = sum(
+            1
+            for _env_name, _desc, _default, validator in _CONFIG_VARS
+            if not validator.startswith("choice:")
+        )
+        standard_responses = ["std_val"] * text_prompts
         # then custom var loop: key, val, next key empty
         custom_responses = ["CUSTOM_K", "CUSTOM_V", ""]
         
@@ -573,8 +572,7 @@ class TestEnvConfig:
     def test_config_vars_use_service_specific_external_env_names(self):
         keys = {name for name, *_ in _CONFIG_VARS}
         assert "RP_DISCOVERY_SOURCES" in keys
-        assert "RP_VALIDATOR_MAX_FORMULAS" in keys
-        assert "RP_CODEGEN_MAX_FORMULAS" in keys
+        assert "RP_MAX_FORMULAS_DEFAULT" in keys
         assert "RP_ORCHESTRATOR_CRON" in keys
         assert "RP_ORCHESTRATOR_STAGES_PER_RUN" in keys
         assert "RP_ORCHESTRATOR_DEFAULT_QUERY" in keys
@@ -586,6 +584,8 @@ class TestEnvConfig:
         assert "RP_CAS_URL" not in keys
         assert "RP_RAG_URL" not in keys
         assert "RP_OLLAMA_URL" not in keys
+        assert "RP_VALIDATOR_MAX_FORMULAS" not in keys
+        assert "RP_CODEGEN_MAX_FORMULAS" not in keys
 
     @patch.object(EnvConfig, "_reconcile_services_after_port_change")
     @patch.object(EnvConfig, "_auto_resolve_internal_port_conflicts", return_value=True)

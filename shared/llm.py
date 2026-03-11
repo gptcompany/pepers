@@ -131,13 +131,17 @@ def call_cli(
                 env["GEMINI_API_KEY"] = key
                 env.pop("GOOGLE_API_KEY", None)
 
+    stdin = None
+    if input_text is None and provider_name != "gemini_cli":
+        stdin = subprocess.DEVNULL
+
     result = subprocess.run(
         cmd,
         capture_output=True,
         text=True,
         timeout=timeout,
         input=input_text,
-        stdin=subprocess.DEVNULL if input_text is None else None,
+        stdin=stdin,
         env=env,
     )
 
@@ -230,6 +234,28 @@ def _resolve_ollama_base_url(base_url: str | None = None) -> str:
     return resolve_localhost_url("http://localhost:11434")
 
 
+def _resolve_gemini_model(model: str | None = None) -> str:
+    """Resolve the effective Gemini model for analyzer/codegen calls."""
+    resolved = (
+        model
+        or os.environ.get("RP_ANALYZER_GEMINI_MODEL", "").strip()
+        or os.environ.get("RP_GEMINI_MODEL", "").strip()
+        or "gemini-2.0-flash"
+    )
+    legacy_map = {
+        "gemini-1.5-flash": "gemini-2.0-flash",
+        "models/gemini-1.5-flash": "gemini-2.0-flash",
+    }
+    normalized = legacy_map.get(resolved, resolved)
+    if normalized != resolved:
+        logger.warning(
+            "Gemini model %s is legacy/unsupported; using %s instead",
+            resolved,
+            normalized,
+        )
+    return normalized
+
+
 def call_gemini_cli(
     prompt: str,
     system: str,
@@ -264,6 +290,8 @@ def call_gemini_sdk(
     """
     from google import genai
     from google.genai import types
+
+    model = _resolve_gemini_model(model)
 
     client = genai.Client(
         api_key=_get_gemini_api_key(),
