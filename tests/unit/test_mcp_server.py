@@ -9,6 +9,8 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 
+from shared.config import get_default_max_formulas
+
 
 # ---------------------------------------------------------------------------
 # CLI and Main entry points
@@ -126,7 +128,9 @@ class TestMCPServerTools:
             res = run_pipeline("query", paper_id=1, stages=3)
             assert "Pipeline run run-456 started" in res
             mock_call.assert_called_once_with("POST", "/run", {
-                "stages": 3, "max_papers": 10, "max_formulas": 50,
+                "stages": 3,
+                "max_papers": 10,
+                "max_formulas": get_default_max_formulas(),
                 "query": "query", "paper_id": 1
             }, timeout=10)
 
