@@ -454,6 +454,43 @@ class TestRunPipeline:
         assert "time_ms" in result
         assert isinstance(result["time_ms"], int)
 
+    def test_run_persists_progress_between_stages(self, initialized_db):
+        runner = PipelineRunner(str(initialized_db))
+        runner.timeout = 5
+        runner.retry_max = 0
+        runner.retry_backoff = 1.0
+        runner.STAGE_TIMEOUTS = {"analyzer": 1800, "codegen": 900}
+        discovery_url = f"{_stage_url(*STAGE_ORDER[0])}/process"
+        analyzer_url = f"{_stage_url(*STAGE_ORDER[1])}/process"
+
+        def fake_call(url, params, **kwargs):
+            if url == discovery_url:
+                return {"papers_found": 1}
+            if url == analyzer_url:
+                status = runner.get_run_status("run-progress")
+                assert status is not None
+                assert status["status"] == "running"
+                assert status["stages_completed"] == 1
+                assert status["results"]["discovery"]["papers_found"] == 1
+                assert status["errors"] == []
+                return {
+                    "papers_analyzed": 1,
+                    "papers_accepted": 1,
+                    "papers_rejected": 0,
+                    "errors": [],
+                }
+            raise AssertionError(f"Unexpected service call: {url}")
+
+        with patch.object(runner, "_call_service_with_retry", side_effect=fake_call):
+            result = runner.run(query="test", stages=2, run_id="run-progress")
+
+        assert result["status"] == "completed"
+        assert result["stages_completed"] == 2
+        final_status = runner.get_run_status("run-progress")
+        assert final_status["status"] == "completed"
+        assert final_status["stages_completed"] == 2
+        assert final_status["results"]["analyzer"]["papers_analyzed"] == 1
+
 
 # ---------------------------------------------------------------------------
 # Stage order and params constants

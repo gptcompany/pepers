@@ -312,6 +312,12 @@ class PipelineRunner:
                     }
                     stages_skipped.append(stage_name)
                     STAGE_COMPLETED.labels(stage=stage_name, result="skipped").inc()
+                    self._persist_run_progress(
+                        run_id,
+                        results=results,
+                        errors=errors,
+                        stages_completed=stages_completed,
+                    )
                     continue
 
                 stage_params = self._build_stage_params(stage_name, params)
@@ -320,6 +326,12 @@ class PipelineRunner:
                     # Skip stages with no applicable params (e.g., Discovery without query)
                     logger.info("Skipping %s: no applicable params", stage_name)
                     STAGE_COMPLETED.labels(stage=stage_name, result="skipped").inc()
+                    self._persist_run_progress(
+                        run_id,
+                        results=results,
+                        errors=errors,
+                        stages_completed=stages_completed,
+                    )
                     continue
 
                 logger.info("Dispatching stage: %s (port %d)", stage_name, port)
@@ -366,6 +378,12 @@ class PipelineRunner:
                     logger.info(
                         "Stage %s completed in %dms", stage_name, stage_ms
                     )
+                    self._persist_run_progress(
+                        run_id,
+                        results=results,
+                        errors=errors,
+                        stages_completed=stages_completed,
+                    )
                 except ServiceError as e:
                     stage_duration = time.time() - stage_start
                     stage_ms = int(stage_duration * 1000)
@@ -395,6 +413,12 @@ class PipelineRunner:
                         blocked_by_stage = stage_name
                     # For unscoped backlog runs, continue — later stages may still
                     # process already-eligible items from the global DB.
+                    self._persist_run_progress(
+                        run_id,
+                        results=results,
+                        errors=errors,
+                        stages_completed=stages_completed,
+                    )
 
             # Extract paper/formula counts from stage results for Prometheus
             papers_found = results.get("discovery", {}).get("papers_found", 0)
@@ -1122,6 +1146,31 @@ class PipelineRunner:
                     run_id,
                 ),
             )
+
+    def _persist_run_progress(
+        self,
+        run_id: str,
+        *,
+        results: dict,
+        errors: list[str],
+        stages_completed: int,
+    ) -> None:
+        """Persist in-flight run progress so /runs reflects current stage state."""
+        try:
+            with transaction(self.db_path) as conn:
+                conn.execute(
+                    "UPDATE pipeline_runs SET "
+                    "status = 'running', results = ?, errors = ?, stages_completed = ? "
+                    "WHERE run_id = ?",
+                    (
+                        json.dumps(results, default=str),
+                        json.dumps(errors, default=str),
+                        stages_completed,
+                        run_id,
+                    ),
+                )
+        except Exception:
+            logger.debug("pipeline_runs progress update failed, skipping persistence")
 
     def get_run_status(self, run_id: str) -> dict | None:
         """Get a single pipeline run by ID."""
