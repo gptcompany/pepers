@@ -132,6 +132,20 @@ class TestEnvConfigInstallDefaults:
         content = env_path.read_text()
         assert "RP_DB_PATH=/custom/path" in content
 
+    def test_preserves_existing_legacy_formula_overrides(self, tmp_path):
+        env_path = tmp_path / ".env"
+        env_path.write_text(
+            "RP_VALIDATOR_MAX_FORMULAS=250\n"
+            "RP_CODEGEN_MAX_FORMULAS=125\n"
+        )
+
+        cfg = EnvConfig(tmp_path)
+        cfg.install_defaults(_console())
+
+        content = env_path.read_text()
+        assert "RP_VALIDATOR_MAX_FORMULAS=250" in content
+        assert "RP_CODEGEN_MAX_FORMULAS=125" in content
+
     def test_idempotent(self, tmp_path):
         cfg = EnvConfig(tmp_path)
         console = _console()

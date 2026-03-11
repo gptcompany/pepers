@@ -113,15 +113,19 @@ def call_cli(
             cfg["timeout_env"], str(cfg["default_timeout"])
         ))
 
-    # Build env — gemini_cli can use OAuth login; strip API key when OAuth is preferred.
+    # Build env — prefer explicit OAuth opt-in, otherwise use API key when present.
     env = dict(os.environ)
     if provider_name == "gemini_cli":
-        prefer_oauth = os.environ.get("RP_GEMINI_CLI_USE_OAUTH", "true").lower() in (
-            "1",
-            "true",
-            "yes",
-            "on",
-        )
+        raw_oauth_pref = os.environ.get("RP_GEMINI_CLI_USE_OAUTH")
+        if raw_oauth_pref is None:
+            prefer_oauth = not bool(os.environ.get("GEMINI_API_KEY", "").strip())
+        else:
+            prefer_oauth = raw_oauth_pref.lower() in (
+                "1",
+                "true",
+                "yes",
+                "on",
+            )
         if prefer_oauth:
             env.pop("GEMINI_API_KEY", None)
             env.pop("GOOGLE_API_KEY", None)
@@ -129,7 +133,7 @@ def call_cli(
             key = os.environ.get("GEMINI_API_KEY", "").strip()
             if key:
                 env["GEMINI_API_KEY"] = key
-                env.pop("GOOGLE_API_KEY", None)
+            env.pop("GOOGLE_API_KEY", None)
 
     stdin = None
     if input_text is None and provider_name != "gemini_cli":

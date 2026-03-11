@@ -69,6 +69,18 @@ def _read_env_values(path: Path) -> dict[str, str]:
     return values
 
 
+def _merge_existing_custom_values(
+    existing_values: dict[str, str],
+    config_values: dict[str, str],
+) -> dict[str, str]:
+    """Preserve existing custom/legacy env vars not managed by the wizard."""
+    merged = dict(config_values)
+    for key, value in existing_values.items():
+        if key not in merged:
+            merged[key] = value
+    return merged
+
+
 def _validate_port(val: str) -> bool | str:
     try:
         p = int(val)
@@ -178,6 +190,7 @@ class EnvConfig:
 
         changed = self._auto_resolve_internal_port_conflicts(config_values, console)
 
+        config_values = _merge_existing_custom_values(existing_values, config_values)
         env_content = "\n".join(f"{k}={v}" for k, v in config_values.items()) + "\n"
         self._env_path.write_text(env_content)
         console.print(f"\n[green]Wrote {self._env_path}[/]")
@@ -198,6 +211,7 @@ class EnvConfig:
             value = existing.get(env_name) or os.environ.get(env_name, "") or resolved
             config_values[env_name] = value
         changed = self._auto_resolve_internal_port_conflicts(config_values, console)
+        config_values = _merge_existing_custom_values(existing, config_values)
         self._env_path.write_text(
             "\n".join(f"{k}={v}" for k, v in config_values.items()) + "\n"
         )

@@ -411,6 +411,40 @@ class TestCallCli:
         assert mock_run.call_args.kwargs["stdin"] is None
 
     @patch("shared.llm.subprocess.run")
+    def test_gemini_cli_prefers_api_key_when_oauth_unset(self, mock_run, monkeypatch):
+        mock_run.return_value = MagicMock(
+            returncode=0,
+            stdout=json.dumps({"response": "ok"}),
+            stderr="",
+        )
+        monkeypatch.delenv("RP_GEMINI_CLI_USE_OAUTH", raising=False)
+        monkeypatch.setenv("GEMINI_API_KEY", "test-key")
+        monkeypatch.setenv("GOOGLE_API_KEY", "legacy-key")
+        from shared.llm import call_cli
+
+        call_cli("gemini_cli", "prompt", system="sys")
+        env = mock_run.call_args.kwargs["env"]
+        assert env["GEMINI_API_KEY"] == "test-key"
+        assert "GOOGLE_API_KEY" not in env
+
+    @patch("shared.llm.subprocess.run")
+    def test_gemini_cli_explicit_oauth_strips_api_keys(self, mock_run, monkeypatch):
+        mock_run.return_value = MagicMock(
+            returncode=0,
+            stdout=json.dumps({"response": "ok"}),
+            stderr="",
+        )
+        monkeypatch.setenv("RP_GEMINI_CLI_USE_OAUTH", "true")
+        monkeypatch.setenv("GEMINI_API_KEY", "test-key")
+        monkeypatch.setenv("GOOGLE_API_KEY", "legacy-key")
+        from shared.llm import call_cli
+
+        call_cli("gemini_cli", "prompt", system="sys")
+        env = mock_run.call_args.kwargs["env"]
+        assert "GEMINI_API_KEY" not in env
+        assert "GOOGLE_API_KEY" not in env
+
+    @patch("shared.llm.subprocess.run")
     def test_json_provider_empty_output_raises_runtime_error(self, mock_run):
         mock_run.return_value = MagicMock(
             returncode=0,
