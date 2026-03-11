@@ -469,6 +469,30 @@ class TestCallCli:
             call_cli("claude_cli", "prompt")
 
     @patch("shared.llm.subprocess.run")
+    def test_json_provider_empty_output_raises_runtime_error(self, mock_run):
+        mock_run.return_value = MagicMock(
+            returncode=0,
+            stdout="",
+            stderr="silent crash",
+        )
+        from shared.llm import call_cli
+
+        with pytest.raises(RuntimeError, match="returned empty response"):
+            call_cli("claude_cli", "prompt")
+
+    @patch("shared.llm.subprocess.run")
+    def test_json_provider_invalid_output_raises_runtime_error(self, mock_run):
+        mock_run.return_value = MagicMock(
+            returncode=0,
+            stdout="not-json",
+            stderr="",
+        )
+        from shared.llm import call_cli
+
+        with pytest.raises(RuntimeError, match="returned invalid JSON"):
+            call_cli("claude_cli", "prompt")
+
+    @patch("shared.llm.subprocess.run")
     def test_nonzero_exit_raises(self, mock_run):
         """Non-zero exit code raises RuntimeError."""
         mock_run.return_value = MagicMock(
