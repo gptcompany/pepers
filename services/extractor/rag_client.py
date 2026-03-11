@@ -22,7 +22,7 @@ logger = logging.getLogger(__name__)
 DEFAULT_BASE_URL = "http://localhost:8767"
 DEFAULT_POLL_INTERVAL = 10
 DEFAULT_TIMEOUT = 7200  # 2h — MinerU on CPU: ~10 min/page, 25-page paper = ~4h
-DEFAULT_REQUEST_TIMEOUT = 10.0
+DEFAULT_REQUEST_TIMEOUT = 30.0
 DEFAULT_SUBMIT_TIMEOUT = 60.0
 DEFAULT_REQUEST_RETRIES = 3
 DEFAULT_RETRY_BACKOFF = 2.0
@@ -57,6 +57,30 @@ def _request_retries() -> int:
 
 def _retry_backoff() -> float:
     return max(0.0, float(os.environ.get("RP_EXTRACTOR_RAG_RETRY_BACKOFF", str(DEFAULT_RETRY_BACKOFF))))
+
+
+def _request_timeout() -> float:
+    return max(
+        1.0,
+        float(
+            os.environ.get(
+                "RP_EXTRACTOR_RAG_REQUEST_TIMEOUT",
+                str(DEFAULT_REQUEST_TIMEOUT),
+            )
+        ),
+    )
+
+
+def _submit_timeout() -> float:
+    return max(
+        _request_timeout(),
+        float(
+            os.environ.get(
+                "RP_EXTRACTOR_RAG_SUBMIT_TIMEOUT",
+                str(DEFAULT_SUBMIT_TIMEOUT),
+            )
+        ),
+    )
 
 
 def _is_retryable_http_error(exc: BaseException) -> bool:
@@ -131,7 +155,7 @@ def check_service(base_url: str = DEFAULT_BASE_URL) -> dict:
     """
     data = _json_request(
         f"{base_url}/status",
-        timeout=DEFAULT_REQUEST_TIMEOUT,
+        timeout=_request_timeout(),
         label="status",
     )
 
@@ -175,7 +199,7 @@ def submit_pdf(
     # /process creates server-side work, so transport errors must not replay it.
     data = _json_request(
         req,
-        timeout=DEFAULT_SUBMIT_TIMEOUT,
+        timeout=_submit_timeout(),
         attempts=1,
         label=f"submit:{paper_id}",
     )
@@ -207,7 +231,7 @@ def poll_job(
         try:
             data = _json_request(
                 f"{base_url}/jobs/{job_id}",
-                timeout=min(DEFAULT_REQUEST_TIMEOUT, remaining),
+                timeout=min(_request_timeout(), remaining),
                 deadline=deadline,
                 label=f"job:{job_id}",
             )

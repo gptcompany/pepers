@@ -184,3 +184,16 @@ class TestAnalyzerLlmDefaults:
         assert env["RP_GEMINI_CLI_USE_OAUTH"] == "true"
         assert env["RP_LLM_TIMEOUT_GEMINI_CLI"] == "60"
         assert env["RP_LLM_TIMEOUT_OLLAMA"] == "120"
+
+
+class TestExtractorRagDefaults:
+    def test_extractor_uses_relaxed_rag_timeouts_by_default(self):
+        config = _load_compose_config(
+            {
+                "RP_EXTRACTOR_RAG_REQUEST_TIMEOUT": "",
+                "RP_EXTRACTOR_RAG_SUBMIT_TIMEOUT": "",
+            }
+        )
+        env = config["services"]["extractor"]["environment"]
+        assert env["RP_EXTRACTOR_RAG_REQUEST_TIMEOUT"] == "30"
+        assert env["RP_EXTRACTOR_RAG_SUBMIT_TIMEOUT"] == "60"

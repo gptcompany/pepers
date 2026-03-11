@@ -231,6 +231,11 @@ class TestDownloadPdf:
 class TestCheckService:
     """Tests for check_service() — mock urllib.request.urlopen."""
 
+    def test_request_timeout_reads_env_override(self, monkeypatch):
+        monkeypatch.setenv("RP_EXTRACTOR_RAG_REQUEST_TIMEOUT", "45")
+
+        assert rag_client_module._request_timeout() == pytest.approx(45.0)
+
     @patch("services.extractor.rag_client.urllib.request.urlopen")
     def test_service_healthy(self, mock_urlopen):
         mock_resp = MagicMock()
@@ -242,6 +247,7 @@ class TestCheckService:
 
         result = check_service("http://localhost:8767")
         assert result["status"] == "ok"
+        assert mock_urlopen.call_args.kwargs["timeout"] == pytest.approx(30.0)
 
     @patch("services.extractor.rag_client.urllib.request.urlopen")
     def test_circuit_breaker_open(self, mock_urlopen):
@@ -291,6 +297,12 @@ class TestCheckService:
 class TestSubmitPdf:
     """Tests for submit_pdf() — mock urllib.request.urlopen."""
 
+    def test_submit_timeout_not_lower_than_request_timeout(self, monkeypatch):
+        monkeypatch.setenv("RP_EXTRACTOR_RAG_REQUEST_TIMEOUT", "45")
+        monkeypatch.setenv("RP_EXTRACTOR_RAG_SUBMIT_TIMEOUT", "20")
+
+        assert rag_client_module._submit_timeout() == pytest.approx(45.0)
+
     @patch("services.extractor.rag_client.urllib.request.urlopen")
     def test_cached_result(self, mock_urlopen):
         mock_resp = MagicMock()
@@ -325,6 +337,7 @@ class TestSubmitPdf:
         submit_pdf(Path("/data/pdfs/test.pdf"), "2401.00001", "http://rag:8767")
         req = mock_urlopen.call_args[0][0]
         assert req.full_url == "http://rag:8767/process"
+        assert mock_urlopen.call_args.kwargs["timeout"] == pytest.approx(60.0)
         body = json.loads(req.data.decode())
         assert body["pdf_path"] == "/data/pdfs/test.pdf"
         assert body["paper_id"] == "2401.00001"
