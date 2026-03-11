@@ -70,6 +70,17 @@ def _load_notations(db_path: str) -> list[dict]:
         return []
 
 
+def _build_extraction_paper_id(paper: Paper) -> str:
+    """Build a stable document identifier for RAG processing."""
+    if paper.arxiv_id:
+        return f"arxiv:{paper.arxiv_id}"
+    if paper.id is not None:
+        return f"paper:{paper.id}"
+    if paper.doi:
+        return f"doi:{paper.doi}"
+    raise ValueError("cannot build extraction document id")
+
+
 class ExtractorHandler(BaseHandler):
     """Handler for the Extractor service.
 
@@ -133,16 +144,19 @@ class ExtractorHandler(BaseHandler):
             paper = Paper(**paper_row)
 
             try:
+                if not pdf.has_download_source(paper):
+                    raise ValueError(
+                        "no downloadable PDF source (missing arxiv_id and pdf_url)"
+                    )
+
                 # Step 1: Download PDF
                 pdf_path = pdf.download_pdf(
                     paper, Path(self.pdf_dir), session
                 )
 
                 # Step 2: RAGAnything processing
-                if paper.arxiv_id is None:
-                    raise ValueError("paper.arxiv_id is required for extraction")
                 markdown = rag_client.process_paper(
-                    pdf_path, paper.arxiv_id, self.rag_url
+                    pdf_path, _build_extraction_paper_id(paper), self.rag_url
                 )
 
                 # Step 3: Extract formulas
@@ -199,7 +213,11 @@ def _query_papers(
     max_papers: int,
     force: bool,
 ) -> list:
-    """Query papers with stage='analyzed' (or specific paper_id with force)."""
+    """Query papers ready for extraction.
+
+    Batch mode filters out rows with no downloadable source so extractor does not
+    spend its budget on papers that can only fail with `pdf/None`.
+    """
     with transaction(db_path) as conn:
         if paper_id is not None:
             if force:
@@ -216,6 +234,8 @@ def _query_papers(
         else:
             cursor = conn.execute(
                 "SELECT * FROM papers WHERE stage='analyzed' "
+                "AND (NULLIF(TRIM(COALESCE(arxiv_id, '')), '') IS NOT NULL "
+                "OR NULLIF(TRIM(COALESCE(pdf_url, '')), '') IS NOT NULL) "
                 "ORDER BY created_at ASC LIMIT ?",
                 (max_papers,),
             )

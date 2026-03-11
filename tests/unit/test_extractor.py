@@ -17,7 +17,9 @@ from services.extractor.pdf import (
     create_session,
     download_pdf,
     get_pdf_url,
+    has_download_source,
 )
+from services.extractor import rag_client as rag_client_module
 from services.extractor.rag_client import (
     check_service,
     poll_job,
@@ -37,6 +39,7 @@ from services.extractor.latex import (
 )
 from services.extractor.main import (
     ExtractorHandler,
+    _build_extraction_paper_id,
     _check_consistency,
     _load_notations,
     _mark_failed,
@@ -95,6 +98,33 @@ class TestGetPdfUrl:
         paper = _make_paper(pdf_url=None)
         url = get_pdf_url(paper)
         assert url == f"{EXPORT_BASE}/2401.00001"
+
+    def test_missing_download_source_raises(self):
+        paper = _make_paper(arxiv_id=None, pdf_url=None)
+        with pytest.raises(ValueError, match="no downloadable PDF source"):
+            get_pdf_url(paper)
+
+
+class TestDownloadSourceHelpers:
+    def test_has_download_source_with_arxiv(self):
+        assert has_download_source(_make_paper(pdf_url=None)) is True
+
+    def test_has_download_source_with_pdf_url_only(self):
+        assert has_download_source(_make_paper(arxiv_id=None, pdf_url="https://example.com/paper.pdf")) is True
+
+    def test_has_download_source_missing_both(self):
+        assert has_download_source(_make_paper(arxiv_id=None, pdf_url=None)) is False
+
+    def test_build_extraction_paper_id_prefers_arxiv(self):
+        assert _build_extraction_paper_id(_make_paper(id=7)) == "arxiv:2401.00001"
+
+    def test_build_extraction_paper_id_falls_back_to_paper_id(self):
+        assert (
+            _build_extraction_paper_id(
+                _make_paper(id=42, arxiv_id=None, pdf_url="https://example.com/paper.pdf")
+            )
+            == "paper:42"
+        )
 
 
 # ---------------------------------------------------------------------------
@@ -299,6 +329,24 @@ class TestSubmitPdf:
         assert body["pdf_path"] == "/data/pdfs/test.pdf"
         assert body["paper_id"] == "2401.00001"
 
+    @patch("services.extractor.rag_client.urllib.request.urlopen")
+    def test_request_format_resolves_relative_host_mapping(self, mock_urlopen, monkeypatch):
+        mock_resp = MagicMock()
+        mock_resp.read.return_value = json.dumps({"job_id": "j1"}).encode()
+        mock_urlopen.return_value = mock_resp
+        monkeypatch.setattr(rag_client_module, "_PDF_DIR", "/data/pdfs")
+        monkeypatch.setattr(rag_client_module, "_PDF_HOST_DIR", "./data/pdfs")
+        monkeypatch.setattr(
+            rag_client_module,
+            "_PROJECT_HOST_DIR",
+            "/media/sam/1TB/pepers",
+        )
+
+        submit_pdf(Path("/data/pdfs/test.pdf"), "2401.00001", "http://rag:8767")
+        req = mock_urlopen.call_args[0][0]
+        body = json.loads(req.data.decode())
+        assert body["pdf_path"] == "/media/sam/1TB/pepers/data/pdfs/test.pdf"
+
     @patch("services.extractor.rag_client.time.sleep")
     @patch("services.extractor.rag_client.urllib.request.urlopen")
     def test_submit_retries_remote_disconnect(self, mock_urlopen, mock_sleep):
@@ -444,6 +492,24 @@ class TestReadMarkdown:
         # Empty directory
         with pytest.raises(FileNotFoundError, match="No markdown files"):
             read_markdown(str(tmp_path))
+
+    def test_read_markdown_resolves_relative_rag_data_host(self, tmp_path, monkeypatch):
+        host_dir = tmp_path / "rag-service" / "data" / "out"
+        host_dir.mkdir(parents=True)
+        (host_dir / "output.md").write_text("# Relative host mapping")
+        monkeypatch.setattr(
+            rag_client_module,
+            "_PROJECT_HOST_DIR",
+            str(tmp_path / "pepers"),
+        )
+        monkeypatch.setattr(
+            rag_client_module,
+            "_RAG_DATA_HOST",
+            "../rag-service/data",
+        )
+
+        result = read_markdown(str(host_dir))
+        assert "Relative host mapping" in result
 
 
 # ---------------------------------------------------------------------------
@@ -826,6 +892,32 @@ class TestExtractorHelpers:
         papers = _query_papers(str(analyzed_paper_db), 1, 10, True)
         assert len(papers) == 1
 
+    def test_query_papers_batch_filters_missing_download_source(self, analyzed_paper_db):
+        from shared.db import transaction
+
+        db_path = str(analyzed_paper_db)
+        with transaction(db_path) as conn:
+            conn.execute(
+                "UPDATE papers SET arxiv_id=NULL, pdf_url=NULL WHERE id=1"
+            )
+            conn.execute(
+                "INSERT INTO papers (title, abstract, authors, categories, arxiv_id, pdf_url, stage, source) "
+                "VALUES (?, ?, ?, ?, ?, ?, 'analyzed', ?)",
+                (
+                    "Fallback PDF paper",
+                    "Abstract",
+                    '["Alice"]',
+                    '["q-fin.PM"]',
+                    None,
+                    "https://example.com/paper.pdf",
+                    "openalex",
+                ),
+            )
+
+        papers = _query_papers(db_path, None, 10, False)
+        assert len(papers) == 1
+        assert papers[0]["pdf_url"] == "https://example.com/paper.pdf"
+
     def test_store_results(self, analyzed_paper_db):
         db_path = str(analyzed_paper_db)
         formula = Formula(
@@ -954,11 +1046,71 @@ class TestExtractorHandler:
         assert p_row["stage"] == "extracted"
         conn.close()
 
+    @patch("services.extractor.main.pdf.create_session")
+    @patch("services.extractor.main.pdf.download_pdf")
+    @patch("services.extractor.main.rag_client.process_paper")
+    @patch("services.extractor.main.rag_client.check_service")
+    def test_handle_process_non_arxiv_pdf_uses_fallback_document_id(
+        self, mock_check, mock_rag, mock_pdf, mock_session, analyzed_paper_db
+    ):
+        from shared.db import transaction
+
+        db_path = str(analyzed_paper_db)
+        with transaction(db_path) as conn:
+            conn.execute(
+                "UPDATE papers SET arxiv_id=NULL, pdf_url=? WHERE id=1",
+                ("https://example.com/paper.pdf",),
+            )
+
+        handler = ExtractorHandler.__new__(ExtractorHandler)
+        handler.db_path = db_path
+        handler.pdf_dir = "/tmp"
+        handler.download_delay = 0
+        handler.rag_url = "http://rag"
+
+        mock_check.return_value = {"status": "ok"}
+        mock_pdf.return_value = Path("/tmp/p.pdf")
+        mock_rag.return_value = "$$ E = m c^2 + \\alpha \\beta \\gamma $$"
+
+        resp = handler.handle_process({"paper_id": 1})
+        assert resp["papers_processed"] == 1
+        mock_rag.assert_called_once_with(Path("/tmp/p.pdf"), "paper:1", "http://rag")
+
     def test_handle_process_paper_not_found(self, initialized_db):
         handler = ExtractorHandler.__new__(ExtractorHandler)
         handler.db_path = str(initialized_db)
         resp = handler.handle_process({"paper_id": 999})
         assert resp["papers_processed"] == 0
+
+    @patch("services.extractor.main.rag_client.check_service")
+    def test_handle_process_specific_paper_without_download_source_marks_failed(
+        self, mock_check, analyzed_paper_db
+    ):
+        from shared.db import get_connection, transaction
+
+        db_path = str(analyzed_paper_db)
+        with transaction(db_path) as conn:
+            conn.execute(
+                "UPDATE papers SET arxiv_id=NULL, pdf_url=NULL WHERE id=1"
+            )
+
+        handler = ExtractorHandler.__new__(ExtractorHandler)
+        handler.db_path = db_path
+        handler.pdf_dir = "/tmp"
+        handler.download_delay = 0
+        handler.rag_url = "http://rag"
+        mock_check.return_value = {"status": "ok"}
+
+        resp = handler.handle_process({"paper_id": 1})
+        assert resp["papers_processed"] == 0
+        assert resp["papers_failed"] == 1
+        assert "no downloadable PDF source" in resp["errors"][0]
+
+        conn = get_connection(db_path)
+        row = conn.execute("SELECT stage, error FROM papers WHERE id=1").fetchone()
+        conn.close()
+        assert row["stage"] == "failed"
+        assert "no downloadable PDF source" in row["error"]
 
     @patch("services.extractor.main.rag_client.check_service")
     def test_handle_process_service_down(self, mock_check, analyzed_paper_db):

@@ -23,6 +23,11 @@ USER_AGENT = "ResearchPipeline/1.0 (academic-formula-extraction)"
 DOWNLOAD_TIMEOUT = 60
 
 
+def has_download_source(paper: Paper) -> bool:
+    """Return True when a paper has enough metadata to attempt PDF download."""
+    return bool((paper.pdf_url or "").strip() or (paper.arxiv_id or "").strip())
+
+
 def create_session() -> requests.Session:
     """Create a reusable session with retry strategy."""
     session = requests.Session()
@@ -47,6 +52,8 @@ def get_pdf_url(paper: Paper) -> str:
         url = paper.pdf_url.replace("http://arxiv.org", "https://export.arxiv.org")
         url = url.replace("https://arxiv.org", "https://export.arxiv.org")
         return url
+    if not paper.arxiv_id:
+        raise ValueError("no downloadable PDF source (missing arxiv_id and pdf_url)")
     return f"{EXPORT_BASE}/{paper.arxiv_id}"
 
 

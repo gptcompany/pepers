@@ -30,6 +30,25 @@ DEFAULT_RETRY_BACKOFF = 2.0
 # Container→host path mapping for RAGAnything (host-based service)
 _PDF_DIR = os.environ.get("RP_EXTRACTOR_PDF_DIR", "/data/pdfs")
 _PDF_HOST_DIR = os.environ.get("RP_EXTRACTOR_PDF_HOST_DIR", "")
+_PROJECT_HOST_DIR = os.environ.get("RP_EXTRACTOR_PROJECT_HOST_DIR", "")
+_RAG_DATA_HOST = os.environ.get("RP_EXTRACTOR_RAG_DATA_HOST", "")
+
+
+def _resolve_host_dir(path_str: str) -> str:
+    if not path_str:
+        return ""
+    path = Path(path_str)
+    if path.is_absolute() or not _PROJECT_HOST_DIR:
+        return str(path)
+    return str((Path(_PROJECT_HOST_DIR) / path).resolve())
+
+
+def _resolved_pdf_host_dir() -> str:
+    return _resolve_host_dir(_PDF_HOST_DIR)
+
+
+def _resolved_rag_data_host() -> str:
+    return _resolve_host_dir(_RAG_DATA_HOST)
 
 
 def _request_retries() -> int:
@@ -111,8 +130,9 @@ def check_service(base_url: str = DEFAULT_BASE_URL) -> dict:
 def _map_to_host_path(container_path: Path) -> str:
     """Map container PDF path to host path for RAGAnything."""
     path_str = str(container_path)
-    if _PDF_HOST_DIR and path_str.startswith(_PDF_DIR):
-        mapped = path_str.replace(_PDF_DIR, _PDF_HOST_DIR, 1)
+    pdf_host_dir = _resolved_pdf_host_dir()
+    if pdf_host_dir and path_str.startswith(_PDF_DIR):
+        mapped = path_str.replace(_PDF_DIR, pdf_host_dir, 1)
         logger.debug("Path mapped: %s → %s", path_str, mapped)
         return mapped
     return path_str
@@ -217,7 +237,7 @@ def read_markdown(output_dir: str) -> str:
                 src, dst = mapping.split(":", 1)
                 candidates.append(output_dir.replace(src, dst))
     # Docker container: RAG data mounted at /rag-data
-    rag_data_host = os.environ.get("RP_EXTRACTOR_RAG_DATA_HOST", "")
+    rag_data_host = _resolved_rag_data_host()
     if rag_data_host:
         candidates.append(output_dir.replace(rag_data_host, "/rag-data"))
 

@@ -113,16 +113,17 @@ services:
       - RP_EXTRACTOR_PORT=${RP_EXTRACTOR_PORT:-8772}
       - RP_DB_PATH=/data/research.db
       - RP_EXTRACTOR_MAX_PAPERS=10
-      - RP_EXTRACTOR_PDF_DIR=/data/pdfs
-      - RP_EXTRACTOR_PDF_HOST_DIR=${PEPERS_DATA_DIR:-./data}/pdfs
+      - RP_EXTRACTOR_PDF_DIR=/rag-data/pdfs
+      - RP_EXTRACTOR_PDF_HOST_DIR=${RAG_DATA_PATH:-../rag-service/data}/pdfs
+      - RP_EXTRACTOR_PROJECT_HOST_DIR=${PWD}
       - RP_EXTRACTOR_RAG_URL=${RP_EXTRACTOR_RAG_URL:-http://localhost:8767}
-      - RP_EXTRACTOR_RAG_DATA_HOST=${RAG_DATA_HOST:-}
+      - RP_EXTRACTOR_RAG_DATA_HOST=${RAG_DATA_PATH:-../rag-service/data}
       - RP_DOCKER_HOST_GATEWAY=host.docker.internal
       - RP_LOG_LEVEL=INFO
     env_file: .env
     volumes:
       - ${PEPERS_DATA_DIR:-./data}:/data
-      - ${RAG_DATA_PATH:-./data}:/rag-data:ro
+      - ${RAG_DATA_PATH:-../rag-service/data}:/rag-data
     user: "${PEPERS_UID:-1000}:${PEPERS_GID:-1000}"
     restart: always
     logging: *default-logging
