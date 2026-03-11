@@ -25,9 +25,10 @@ Production operations guide for the 7-service research paper processing pipeline
 - RAGAnything server on port 8767 (PDF processing)
 - CAS validation server on port 8769 (SymPy + SageMath required; MATLAB + WolframAlpha optional)
 - At least one LLM provider:
-  - **Ollama** (recommended for local): default fallback
-  - **OpenRouter**: requires `OPENROUTER_API_KEY`
-  - **Gemini**: requires `GEMINI_API_KEY` or Gemini CLI. **Note**: If using Docker, the Gemini/Claude/Codex CLIs are pre-bundled.
+  - **Gemini CLI** (recommended for Docker analyzer): mounted cached OAuth session, default analyzer primary
+  - **Gemini SDK**: requires `GEMINI_API_KEY`, default analyzer secondary
+  - **Ollama**: optional local fallback, recommended for codegen or explicit analyzer override
+  - **OpenRouter**: optional, requires `OPENROUTER_API_KEY`
 - **Setup Wizard**: Run `pepers-setup check` to automatically verify all prerequisites.
 
 ## 3. Startup Order
@@ -228,15 +229,16 @@ RP_MCP_PORT=8776 RP_MCP_FLAVOR=arcade python -m services.mcp
 
 **Symptom**: Analyzer or codegen return connection errors or timeouts.
 
-**Cause**: Ollama not running, OpenRouter API key expired, Gemini quota exhausted.
+**Cause**: Gemini CLI timeout, Gemini SDK quota exhausted, Ollama slow/unavailable, or OpenRouter API key expired.
 
-**Impact**: `fallback_chain()` automatically tries next provider in order. If all providers fail, the stage fails for that paper.
+**Impact**: `fallback_chain()` automatically tries the configured providers in order. The default Docker analyzer chain is `gemini_cli,gemini_sdk`; if all configured providers fail, the stage fails for that paper.
 
 **Resolution**:
-1. Check Ollama: `curl http://localhost:11434/api/tags`
-2. Check OpenRouter: verify `OPENROUTER_API_KEY` in `.env`
-3. Check Gemini: `gemini -p "test"` or verify `GEMINI_API_KEY`
-4. Restart the failed provider and retry the pipeline run.
+1. Check Gemini CLI in the analyzer container: `docker exec pepers-analyzer-1 gemini -p "test"`
+2. Check Gemini SDK quota / key: verify `GEMINI_API_KEY` in `.env`
+3. Check Ollama only if it is explicitly in the analyzer/codegen fallback chain: `curl http://localhost:11434/api/tags`
+4. Check OpenRouter only if enabled: verify `OPENROUTER_API_KEY` in `.env`
+5. Restart the failed provider and retry the pipeline run.
 
 ### 5.6 Extractor PDF Processing Failure
 
@@ -485,6 +487,7 @@ All configuration via environment variables with `RP_` prefix. Set in `.env`.
 | `RP_LLM_SEED` | 42 | LLM seed for reproducibility |
 | `RP_LLM_FALLBACK_ORDER` | `gemini_cli,codex_cli,claude_cli,openrouter,ollama` | Comma-separated provider fallback order |
 | `RP_CODEGEN_FALLBACK_ORDER` | (same as above) | Codegen-specific override; falls back to `RP_LLM_FALLBACK_ORDER` |
+| `RP_MAX_FORMULAS_DEFAULT` | 100 | Global default formulas limit for validator/codegen |
 
 ### CLI Providers
 
@@ -502,6 +505,10 @@ CLI LLM providers are data-driven via `shared/cli_providers.json`. Available pro
 # Set custom fallback order (tried left-to-right, first success wins)
 RP_LLM_FALLBACK_ORDER=gemini_cli,codex_cli,claude_cli,openrouter,ollama
 
+# Docker analyzer defaults
+RP_GEMINI_CLI_USE_OAUTH=true
+RP_ANALYZER_LLM_FALLBACK_ORDER=gemini_cli,gemini_sdk
+
 # Override timeout for a specific provider
 RP_LLM_TIMEOUT_CLAUDE_CLI=180
 ```
@@ -512,7 +519,7 @@ RP_LLM_TIMEOUT_CLAUDE_CLI=180
 
 | Variable | Default | Description |
 |----------|---------|-------------|
-| `RP_MAX_FORMULAS` | 50 | Max formulas per validator/codegen batch |
+| `RP_MAX_FORMULAS_DEFAULT` | 100 | Default formulas per validator/codegen batch |
 | `RP_CODEGEN_BATCH_SIZE` | 10 | Formulas per batch explain LLM call (clamped 5-25) |
 
 ### Analyzer
@@ -521,6 +528,8 @@ RP_LLM_TIMEOUT_CLAUDE_CLI=180
 |----------|---------|-------------|
 | `RP_ANALYZER_TOPIC` | `Kelly criterion, optimal bet sizing, fractional Kelly, portfolio optimization` | Scoring topic (topic-agnostic) |
 | `RP_ANALYZER_THRESHOLD` | 0.7 | Min avg_score to pass analysis (0.0-1.0) |
+| `RP_ANALYZER_LLM_FALLBACK_ORDER` | `gemini_cli,gemini_sdk` | Analyzer-specific provider order override |
+| `RP_GEMINI_CLI_USE_OAUTH` | `true` | Reuse mounted Gemini CLI OAuth session in Docker |
 
 ### Codegen
 

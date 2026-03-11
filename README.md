@@ -85,7 +85,7 @@ Default local ports: `:8770-:8776` (override in `.env`).
 | Feature | What It Does |
 |---------|-------------|
 | **Multi-source Discovery** | arXiv + OpenAlex (200M+ works) + Semantic Scholar + CrossRef enrichment |
-| **LLM Analysis** | 5-criteria relevance scoring with configurable fallback chain (Gemini, Claude, Codex, OpenRouter, Ollama) |
+| **LLM Analysis** | 5-criteria relevance scoring. Analyzer defaults to `gemini_cli -> gemini_sdk`; broader fallback chains remain configurable |
 | **Formula Extraction** | PDF -> RAGAnything text -> 5-pass LaTeX regex with complexity filtering |
 | **CAS Validation** | Multi-engine consensus: SymPy + SageMath (required); MATLAB + WolframAlpha (optional). All available engines must agree = VALID |
 | **Code Generation** | SymPy `codegen()` for C99/Rust/Python + batch LLM explanations |
@@ -261,6 +261,7 @@ All config via environment variables with `RP_` prefix:
 | `RP_LOG_LEVEL` | `INFO` | Logging level |
 | `RP_LLM_FALLBACK_ORDER` | `gemini_cli,codex_cli,...` | LLM provider priority |
 | `RP_LLM_TEMPERATURE` | `0.0` | LLM temperature (determinism) |
+| `RP_MAX_FORMULAS_DEFAULT` | `100` | Global default formulas batch limit for validator/codegen |
 | `RP_NOTIFY_URLS` | — | Apprise notification URLs (CSV) |
 | `RP_ORCHESTRATOR_CRON` | `0 8 * * *` | Daily pipeline schedule |
 | `RP_ORCHESTRATOR_ANALYZER_TIMEOUT` | `1800` | Analyzer-specific timeout (seconds) |
@@ -271,6 +272,11 @@ All config via environment variables with `RP_` prefix:
 | `RP_MCP_FLAVOR` | `arcade` | MCP output flavor: `arcade` or `plain` |
 
 See [docs/RUNBOOK.md](docs/RUNBOOK.md) for full configuration reference.
+
+Analyzer defaults in Docker are intentionally conservative:
+- `RP_GEMINI_CLI_USE_OAUTH=true` so the bundled `gemini` CLI reuses the mounted cached login/session.
+- `RP_ANALYZER_LLM_FALLBACK_ORDER=gemini_cli,gemini_sdk` by default.
+- `openrouter` and `ollama` remain available, but are opt-in for analyzer runs because they were slower or less reliable in local production tests.
 
 ## API Endpoints
 
