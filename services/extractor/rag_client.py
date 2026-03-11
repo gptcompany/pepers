@@ -81,6 +81,7 @@ def _json_request(
     timeout: float,
     attempts: int | None = None,
     backoff: float | None = None,
+    deadline: float | None = None,
     label: str,
 ) -> dict:
     """Open a JSON endpoint with retry/backoff for transient transport failures."""
@@ -91,8 +92,16 @@ def _json_request(
 
     last_error: BaseException | None = None
     for attempt in range(1, attempts + 1):
+        request_timeout = timeout
+        if deadline is not None:
+            remaining = deadline - time.time()
+            if remaining <= 0:
+                if last_error is not None:
+                    raise last_error
+                raise TimeoutError(f"RAG request {label} timed out")
+            request_timeout = min(request_timeout, remaining)
         try:
-            resp = urllib.request.urlopen(url_or_req, timeout=timeout)
+            resp = urllib.request.urlopen(url_or_req, timeout=request_timeout)
             return json.loads(resp.read().decode())
         except Exception as exc:
             last_error = exc
@@ -100,6 +109,11 @@ def _json_request(
             if not retryable or attempt >= attempts:
                 raise
             sleep_for = backoff * attempt
+            if deadline is not None:
+                remaining = deadline - time.time()
+                if remaining <= 0:
+                    raise
+                sleep_for = min(sleep_for, remaining)
             logger.warning(
                 "RAG request failed (%s), retrying %d/%d in %.1fs: %s",
                 label, attempt, attempts, sleep_for, exc,
@@ -158,9 +172,11 @@ def submit_pdf(
         headers={"Content-Type": "application/json"},
         method="POST",
     )
+    # /process creates server-side work, so transport errors must not replay it.
     data = _json_request(
         req,
         timeout=DEFAULT_SUBMIT_TIMEOUT,
+        attempts=1,
         label=f"submit:{paper_id}",
     )
 
@@ -184,11 +200,15 @@ def poll_job(
     """
     deadline = time.time() + timeout
 
-    while time.time() < deadline:
+    while True:
+        remaining = deadline - time.time()
+        if remaining <= 0:
+            break
         try:
             data = _json_request(
                 f"{base_url}/jobs/{job_id}",
-                timeout=DEFAULT_REQUEST_TIMEOUT,
+                timeout=min(DEFAULT_REQUEST_TIMEOUT, remaining),
+                deadline=deadline,
                 label=f"job:{job_id}",
             )
         except Exception as exc:
@@ -212,8 +232,17 @@ def poll_job(
                 f"RAGAnything job {job_id} failed: {data.get('error')}"
             )
 
-        logger.debug("Job %s status: %s, waiting %ds", job_id, data["status"], interval)
-        time.sleep(interval)
+        remaining = deadline - time.time()
+        if remaining <= 0:
+            break
+        sleep_for = min(interval, remaining)
+        logger.debug(
+            "Job %s status: %s, waiting %.1fs",
+            job_id,
+            data["status"],
+            sleep_for,
+        )
+        time.sleep(sleep_for)
 
     raise TimeoutError(f"RAGAnything job {job_id} timed out after {timeout}s")
 

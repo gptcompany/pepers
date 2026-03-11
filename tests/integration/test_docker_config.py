@@ -4,14 +4,32 @@ Validates log rotation, memory limits, stop_grace_period, and init settings
 by parsing the resolved Docker Compose config.
 """
 
-import subprocess
 import json
+import os
+import subprocess
 from pathlib import Path
 
 import pytest
 
 SERVICES = ["discovery", "analyzer", "extractor", "validator", "codegen", "orchestrator", "mcp"]
 REGULAR_SERVICES = [s for s in SERVICES if s != "orchestrator"]
+REPO_ROOT = Path(__file__).resolve().parent.parent.parent
+
+
+def _load_compose_config(env_overrides: dict[str, str] | None = None) -> dict:
+    """Parse resolved docker-compose.yml via docker compose config."""
+    env = os.environ.copy()
+    if env_overrides:
+        env.update(env_overrides)
+    result = subprocess.run(
+        ["docker", "compose", "config", "--format", "json"],
+        capture_output=True,
+        text=True,
+        cwd=str(REPO_ROOT),
+        env=env,
+    )
+    assert result.returncode == 0, f"docker compose config failed: {result.stderr}"
+    return json.loads(result.stdout)
 
 
 def _parse_duration_s(value) -> int:
@@ -29,13 +47,7 @@ def _parse_duration_s(value) -> int:
 @pytest.fixture(scope="module")
 def compose_config():
     """Parse resolved docker-compose.yml via docker compose config."""
-    result = subprocess.run(
-        ["docker", "compose", "config", "--format", "json"],
-        capture_output=True, text=True,
-        cwd=str(Path(__file__).resolve().parent.parent.parent),
-    )
-    assert result.returncode == 0, f"docker compose config failed: {result.stderr}"
-    return json.loads(result.stdout)
+    return _load_compose_config()
 
 
 class TestLogRotation:
@@ -111,3 +123,39 @@ class TestAutoStart:
             capture_output=True, text=True,
         )
         assert result.stdout.strip() == "enabled", "Docker daemon not systemd-enabled"
+
+
+class TestExtractorPathMapping:
+    def test_compose_no_longer_uses_pwd_for_project_host_dir(self):
+        content = (REPO_ROOT / "docker-compose.yml").read_text()
+        assert "RP_EXTRACTOR_PROJECT_HOST_DIR=${PWD}" not in content
+        assert "RP_EXTRACTOR_PROJECT_HOST_DIR=${PEPERS_PROJECT_HOST_DIR:-}" in content
+
+    def test_extractor_project_host_dir_uses_explicit_env(self):
+        config = _load_compose_config(
+            {
+                "PEPERS_PROJECT_HOST_DIR": "/stable/project/root",
+                "PWD": "/wrong/caller/pwd",
+            }
+        )
+        env = config["services"]["extractor"]["environment"]
+        assert env["RP_EXTRACTOR_PROJECT_HOST_DIR"] == "/stable/project/root"
+
+    def test_extractor_honors_legacy_rag_data_host_override(self):
+        config = _load_compose_config(
+            {
+                "PEPERS_PROJECT_HOST_DIR": "/stable/project/root",
+                "RAG_DATA_HOST": "/legacy/rag-data",
+                "RAG_DATA_PATH": "",
+            }
+        )
+        env = config["services"]["extractor"]["environment"]
+        rag_volume = next(
+            volume
+            for volume in config["services"]["extractor"]["volumes"]
+            if volume["target"] == "/rag-data"
+        )
+
+        assert env["RP_EXTRACTOR_RAG_DATA_HOST"] == "/legacy/rag-data"
+        assert env["RP_EXTRACTOR_PDF_HOST_DIR"] == "/legacy/rag-data/pdfs"
+        assert rag_volume["source"] == "/legacy/rag-data"

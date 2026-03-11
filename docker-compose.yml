@@ -68,6 +68,8 @@ services:
       - RP_DB_PATH=/data/research.db
       - RP_ANALYZER_THRESHOLD=0.7
       - RP_ANALYZER_MAX_PAPERS=10
+      - RP_ANALYZER_LLM_FALLBACK_ORDER=gemini_cli,gemini_sdk,openrouter,ollama
+      - RP_ANALYZER_REQUEST_BUDGET_SECONDS=900
       - RP_DOCKER_HOST_GATEWAY=host.docker.internal
       - RP_LOG_LEVEL=INFO
       - HOME=/home/pepers
@@ -114,16 +116,16 @@ services:
       - RP_DB_PATH=/data/research.db
       - RP_EXTRACTOR_MAX_PAPERS=10
       - RP_EXTRACTOR_PDF_DIR=/rag-data/pdfs
-      - RP_EXTRACTOR_PDF_HOST_DIR=${RAG_DATA_PATH:-../rag-service/data}/pdfs
-      - RP_EXTRACTOR_PROJECT_HOST_DIR=${PWD}
+      - RP_EXTRACTOR_PDF_HOST_DIR=${RAG_DATA_HOST:-${RAG_DATA_PATH:-../rag-service/data}}/pdfs
+      - RP_EXTRACTOR_PROJECT_HOST_DIR=${PEPERS_PROJECT_HOST_DIR:-}
       - RP_EXTRACTOR_RAG_URL=${RP_EXTRACTOR_RAG_URL:-http://localhost:8767}
-      - RP_EXTRACTOR_RAG_DATA_HOST=${RAG_DATA_PATH:-../rag-service/data}
+      - RP_EXTRACTOR_RAG_DATA_HOST=${RAG_DATA_HOST:-${RAG_DATA_PATH:-../rag-service/data}}
       - RP_DOCKER_HOST_GATEWAY=host.docker.internal
       - RP_LOG_LEVEL=INFO
     env_file: .env
     volumes:
       - ${PEPERS_DATA_DIR:-./data}:/data
-      - ${RAG_DATA_PATH:-../rag-service/data}:/rag-data
+      - ${RAG_DATA_HOST:-${RAG_DATA_PATH:-../rag-service/data}}:/rag-data
     user: "${PEPERS_UID:-1000}:${PEPERS_GID:-1000}"
     restart: always
     logging: *default-logging
@@ -156,7 +158,6 @@ services:
       - RP_DB_PATH=/data/research.db
       - RP_VALIDATOR_CAS_URL=${RP_VALIDATOR_CAS_URL:-http://localhost:8769}
       - RP_DOCKER_HOST_GATEWAY=host.docker.internal
-      - RP_VALIDATOR_MAX_FORMULAS=50
       - RP_LOG_LEVEL=INFO
     env_file: .env
     volumes:
@@ -193,7 +194,6 @@ services:
       - RP_DB_PATH=/data/research.db
       - RP_CODEGEN_OLLAMA_URL=${RP_CODEGEN_OLLAMA_URL:-http://localhost:11434}
       - RP_DOCKER_HOST_GATEWAY=host.docker.internal
-      - RP_CODEGEN_MAX_FORMULAS=50
       - RP_LOG_LEVEL=INFO
       - HOME=/tmp
     env_file: .env
@@ -240,7 +240,6 @@ services:
       - RP_ORCHESTRATOR_STAGES_PER_RUN=5
       - RP_ORCHESTRATOR_DEFAULT_QUERY=abs:"Kelly criterion" AND cat:q-fin.*
       - RP_ORCHESTRATOR_CRON_MAX_PAPERS=10
-      - RP_ORCHESTRATOR_CRON_MAX_FORMULAS=50
       - RP_ORCHESTRATOR_RETRY_MAX=3
       - RP_ORCHESTRATOR_RETRY_BACKOFF=4.0
       - RP_ORCHESTRATOR_TIMEOUT=300

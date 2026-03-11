@@ -471,6 +471,7 @@ class TestEnvConfig:
         env_file.write_text(
             "RP_DB_PATH=/tmp/test.db\n"
             "RP_DISCOVERY_PORT=8770\n"
+            "PEPERS_PROJECT_HOST_DIR=/tmp/project\n"
             "RP_VALIDATOR_CAS_URL=http://localhost:8769\n"
             "RP_EXTRACTOR_RAG_URL=http://localhost:8767\n"
             "RP_CODEGEN_OLLAMA_URL=http://localhost:11434\n"

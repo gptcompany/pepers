@@ -4,7 +4,6 @@ from __future__ import annotations
 
 import subprocess
 from pathlib import Path
-import unittest.mock
 from unittest.mock import MagicMock, patch
 
 from services.setup._docker import DockerBootCheck, DockerComposeDown, get_down_steps
@@ -45,7 +44,7 @@ class TestDockerComposeDown:
             console = MagicMock()
             assert step.install(console) is True
             mock_run.assert_called_with(
-                [unittest.mock.ANY, "compose", "down"],
+                ["/usr/bin/docker", "compose", "down"],
                 cwd=tmp_path,
                 check=True,
                 text=True,

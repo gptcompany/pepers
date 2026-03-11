@@ -349,19 +349,14 @@ class TestSubmitPdf:
 
     @patch("services.extractor.rag_client.time.sleep")
     @patch("services.extractor.rag_client.urllib.request.urlopen")
-    def test_submit_retries_remote_disconnect(self, mock_urlopen, mock_sleep):
-        queued = MagicMock()
-        queued.read.return_value = json.dumps({"job_id": "job-abc-123"}).encode()
-        mock_urlopen.side_effect = [
-            http.client.RemoteDisconnected("remote closed"),
-            queued,
-        ]
+    def test_submit_does_not_retry_remote_disconnect(self, mock_urlopen, mock_sleep):
+        mock_urlopen.side_effect = http.client.RemoteDisconnected("remote closed")
 
-        result = submit_pdf(Path("/tmp/test.pdf"), "2401.00001")
-        assert result["cached"] is False
-        assert result["job_id"] == "job-abc-123"
-        assert mock_urlopen.call_count == 2
-        mock_sleep.assert_called_once()
+        with pytest.raises(http.client.RemoteDisconnected, match="remote closed"):
+            submit_pdf(Path("/tmp/test.pdf"), "2401.00001")
+
+        assert mock_urlopen.call_count == 1
+        mock_sleep.assert_not_called()
 
 
 # ---------------------------------------------------------------------------
@@ -453,6 +448,25 @@ class TestPollJob:
         assert mock_urlopen.call_count == 2
         # One sleep from retry backoff, none from polling loop after completion.
         mock_sleep.assert_called_once()
+
+    @patch("services.extractor.rag_client.time.time")
+    @patch("services.extractor.rag_client.time.sleep")
+    @patch("services.extractor.rag_client.urllib.request.urlopen")
+    def test_poll_job_caps_request_budget_to_remaining_timeout(
+        self,
+        mock_urlopen,
+        mock_sleep,
+        mock_time,
+    ):
+        mock_time.side_effect = [0.0, 14.0, 14.0, 14.5, 15.0, 15.0, 15.0, 15.0]
+        mock_urlopen.side_effect = urllib.error.URLError("timed out")
+
+        with pytest.raises(TimeoutError, match="timed out after 15"):
+            poll_job("job-1", timeout=15, interval=10)
+
+        assert mock_urlopen.call_count == 1
+        assert mock_urlopen.call_args.kwargs["timeout"] == pytest.approx(1.0)
+        mock_sleep.assert_called_once_with(pytest.approx(0.5))
 
 
 # ---------------------------------------------------------------------------

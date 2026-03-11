@@ -147,6 +147,7 @@ class TestEnvConfigInstallDefaults:
         content = (tmp_path / ".env").read_text()
         assert "{root}" not in content
         assert str(tmp_path) in content
+        assert f"PEPERS_PROJECT_HOST_DIR={tmp_path}" in content
 
 
 # ── TestComputeVerdict ───────────────────────────────────────
