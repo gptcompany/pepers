@@ -14,7 +14,7 @@ Environment:
     RP_ORCHESTRATOR_STAGES_PER_RUN=5        # Stages per cron run
     RP_ORCHESTRATOR_DEFAULT_QUERY=...       # Default arXiv query for cron
     RP_ORCHESTRATOR_CRON_MAX_PAPERS=10      # Max papers per cron batch
-    RP_ORCHESTRATOR_CRON_MAX_FORMULAS=50    # Max formulas per cron batch
+    RP_ORCHESTRATOR_CRON_MAX_FORMULAS=100   # Max formulas per cron batch override
     RP_ORCHESTRATOR_RETRY_MAX=3             # Max retries per service call
     RP_ORCHESTRATOR_RETRY_BACKOFF=4.0       # Backoff base (seconds)
     RP_ORCHESTRATOR_TIMEOUT=300             # Request timeout (seconds)
@@ -32,7 +32,7 @@ import time
 import urllib.request
 from urllib.parse import parse_qs
 
-from shared.config import load_config, resolve_localhost_url
+from shared.config import get_default_max_formulas, load_config, resolve_localhost_url
 from shared.db import init_db, transaction
 from shared.models import Formula, GitHubAnalysis, GitHubRepo, Paper
 from shared.server import BaseHandler, BaseService, route
@@ -74,7 +74,7 @@ def _resume_stuck_runs(runner: PipelineRunner) -> tuple[int, int]:
             paper_id=params.get("paper_id"),
             stages=int(stuck.get("stages_requested") or 5),
             max_papers=params.get("max_papers", 10),
-            max_formulas=params.get("max_formulas", 50),
+            max_formulas=params.get("max_formulas", get_default_max_formulas()),
             force=params.get("force", False),
         )
         resumed += 1
@@ -162,7 +162,7 @@ class OrchestratorHandler(BaseHandler):
                 "paper_id": 42,
                 "stages": 5,
                 "max_papers": 10,
-                "max_formulas": 50,
+                "max_formulas": 100,
                 "force": false
             }
 
@@ -175,7 +175,7 @@ class OrchestratorHandler(BaseHandler):
         paper_id = data.get("paper_id")
         stages = data.get("stages", 5)
         max_papers = data.get("max_papers", 10)
-        max_formulas = data.get("max_formulas", 50)
+        max_formulas = data.get("max_formulas", get_default_max_formulas())
         force = data.get("force", False)
         skip_preflight = data.get("skip_preflight", False)
 
@@ -407,7 +407,9 @@ class OrchestratorHandler(BaseHandler):
                 paper_id=requeue_params.get("paper_id"),
                 stages=plan["stages"],
                 max_papers=requeue_params.get("max_papers", 10),
-                max_formulas=requeue_params.get("max_formulas", 50),
+                max_formulas=requeue_params.get(
+                    "max_formulas", get_default_max_formulas()
+                ),
                 force=requeue_params.get("force", False),
                 extra_params={
                     "requeue_of": requeue_params.get("requeue_of"),
@@ -935,7 +937,12 @@ def _cron_run() -> None:
     )
     stages = int(os.environ.get("RP_ORCHESTRATOR_STAGES_PER_RUN", "5"))
     max_papers = int(os.environ.get("RP_ORCHESTRATOR_CRON_MAX_PAPERS", "10"))
-    max_formulas = int(os.environ.get("RP_ORCHESTRATOR_CRON_MAX_FORMULAS", "50"))
+    max_formulas = int(
+        os.environ.get(
+            "RP_ORCHESTRATOR_CRON_MAX_FORMULAS",
+            str(get_default_max_formulas()),
+        )
+    )
 
     logger.info("Cron run starting: query=%s stages=%d", query, stages)
     start = time.time()

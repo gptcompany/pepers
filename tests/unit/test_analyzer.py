@@ -25,7 +25,9 @@ from services.analyzer.llm import (
 )
 from services.analyzer.main import (
     AnalyzerHandler,
+    DEFAULT_ANALYZER_FALLBACK_ORDER,
     _parse_llm_response,
+    _analyzer_fallback_order,
     _query_papers,
     _update_paper_score,
     migrate_db,
@@ -94,6 +96,23 @@ class TestBuildScoringSystemPrompt:
         prompt = build_scoring_system_prompt()
         assert "No explicit run topic was provided" in prompt
         assert "Do not assume any hidden default domain" in prompt
+
+
+class TestAnalyzerFallbackOrder:
+    def test_default_order(self, monkeypatch):
+        monkeypatch.delenv("RP_ANALYZER_LLM_FALLBACK_ORDER", raising=False)
+        assert _analyzer_fallback_order() == DEFAULT_ANALYZER_FALLBACK_ORDER
+
+    def test_env_override(self, monkeypatch):
+        monkeypatch.setenv(
+            "RP_ANALYZER_LLM_FALLBACK_ORDER",
+            "gemini_sdk,openrouter,ollama",
+        )
+        assert _analyzer_fallback_order() == [
+            "gemini_sdk",
+            "openrouter",
+            "ollama",
+        ]
 
 
 # ---------------------------------------------------------------------------
@@ -488,6 +507,68 @@ class TestAnalyzerHandlerValidation:
         system_prompt = mock_fc.call_args.args[1]
         assert "Samuel Lopes algebra Weyl algebra Hochschild cohomology" in system_prompt
         mock_update.assert_called_once()
+
+    @patch("services.analyzer.main._update_paper_score")
+    @patch("services.analyzer.main.fallback_chain")
+    @patch("services.analyzer.main._query_papers")
+    def test_handle_process_uses_analyzer_specific_fallback_order(
+        self,
+        mock_query,
+        mock_fc,
+        mock_update,
+        sample_llm_response_json,
+        monkeypatch,
+    ):
+        mock_query.return_value = [
+            {"id": 1, "title": "Test", "abstract": "A " * 30,
+             "authors": '["A"]', "categories": '["math.RT"]'},
+        ]
+        mock_fc.return_value = (sample_llm_response_json, "gemini_sdk")
+        monkeypatch.setenv(
+            "RP_ANALYZER_LLM_FALLBACK_ORDER",
+            "gemini_sdk,openrouter,ollama",
+        )
+
+        handler = self._make_handler()
+        AnalyzerHandler.handle_process(handler, {})
+
+        assert mock_fc.call_args.kwargs["order"] == [
+            "gemini_sdk",
+            "openrouter",
+            "ollama",
+        ]
+        mock_update.assert_called_once()
+
+    @patch("services.analyzer.main._update_paper_score")
+    @patch("services.analyzer.main.fallback_chain")
+    @patch("services.analyzer.main._query_papers")
+    @patch("services.analyzer.main.time.time")
+    def test_handle_process_stops_when_request_budget_exhausted(
+        self,
+        mock_time,
+        mock_query,
+        mock_fc,
+        mock_update,
+        sample_llm_response_json,
+    ):
+        mock_query.return_value = [
+            {"id": 1, "title": "Paper 1", "abstract": "A " * 30,
+             "authors": '["A"]', "categories": '["math.RT"]'},
+            {"id": 2, "title": "Paper 2", "abstract": "B " * 30,
+             "authors": '["B"]', "categories": '["math.RT"]'},
+        ]
+        mock_fc.return_value = (sample_llm_response_json, "gemini_cli")
+        mock_time.side_effect = [0, 901, 902, 903]
+
+        handler = self._make_handler()
+        handler.request_budget_seconds = 900
+
+        result = AnalyzerHandler.handle_process(handler, {})
+
+        assert result["papers_analyzed"] == 1
+        assert mock_fc.call_count == 1
+        assert mock_update.call_count == 1
+        assert "batch budget exhausted after 1 papers; 1 deferred" in result["errors"]
 
 
 # ---------------------------------------------------------------------------

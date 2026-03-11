@@ -22,7 +22,7 @@ from pathlib import Path
 
 import requests
 
-from shared.config import resolve_localhost_url
+from shared.config import get_default_max_formulas, resolve_localhost_url
 from shared.db import transaction
 
 from services.orchestrator.metrics import (
@@ -181,7 +181,7 @@ class PipelineRunner:
         paper_id: int | None = None,
         stages: int = 5,
         max_papers: int = 10,
-        max_formulas: int = 50,
+        max_formulas: int = get_default_max_formulas(),
         force: bool = False,
         run_id: str | None = None,
         extra_params: dict | None = None,
@@ -848,7 +848,7 @@ class PipelineRunner:
                 max_formulas if max_formulas is not None else source_params.get(
                     "max_formulas"
                 ),
-                default=50,
+                default=get_default_max_formulas(),
             ),
             "force": (
                 force if force is not None

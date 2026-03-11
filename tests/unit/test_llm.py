@@ -53,6 +53,22 @@ class TestParseFloatEnv:
         assert _parse_float_env("_TEST_FLOAT", "0") == 0.0
 
 
+class TestDefaultMaxFormulasConfig:
+    def test_default_max_formulas_default(self, monkeypatch):
+        monkeypatch.delenv("RP_MAX_FORMULAS_DEFAULT", raising=False)
+        import shared.config as cfg_mod
+
+        importlib.reload(cfg_mod)
+        assert cfg_mod.get_default_max_formulas() == 100
+
+    def test_default_max_formulas_from_env(self, monkeypatch):
+        monkeypatch.setenv("RP_MAX_FORMULAS_DEFAULT", "250")
+        import shared.config as cfg_mod
+
+        importlib.reload(cfg_mod)
+        assert cfg_mod.get_default_max_formulas() == 250
+
+
 # ---------------------------------------------------------------------------
 # Helper: fake urlopen context-manager response
 # ---------------------------------------------------------------------------
@@ -375,6 +391,30 @@ class TestCallCli:
         prompt_arg = cmd[-1]
         assert "sys" in prompt_arg
         assert "prompt" in prompt_arg
+
+    @patch("shared.llm.subprocess.run")
+    def test_json_provider_empty_output_raises_runtime_error(self, mock_run):
+        mock_run.return_value = MagicMock(
+            returncode=0,
+            stdout="",
+            stderr="silent crash",
+        )
+        from shared.llm import call_cli
+
+        with pytest.raises(RuntimeError, match="returned empty response"):
+            call_cli("claude_cli", "prompt")
+
+    @patch("shared.llm.subprocess.run")
+    def test_json_provider_invalid_output_raises_runtime_error(self, mock_run):
+        mock_run.return_value = MagicMock(
+            returncode=0,
+            stdout="not-json",
+            stderr="",
+        )
+        from shared.llm import call_cli
+
+        with pytest.raises(RuntimeError, match="returned invalid JSON"):
+            call_cli("claude_cli", "prompt")
 
     @patch("shared.llm.subprocess.run")
     def test_nonzero_exit_raises(self, mock_run):

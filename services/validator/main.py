@@ -10,7 +10,7 @@ Usage:
 Environment:
     RP_VALIDATOR_PORT=8773                    # Service port (default: 8773)
     RP_VALIDATOR_CAS_URL=http://localhost:8769 # CAS microservice URL
-    RP_VALIDATOR_MAX_FORMULAS=50              # Default batch size
+    RP_VALIDATOR_MAX_FORMULAS=100             # Default batch size override
     RP_VALIDATOR_ENGINES=                       # Override: comma-separated (auto-discovered from CAS if empty)
     RP_VALIDATOR_MAX_WORKERS=4               # Parallel workers (1=sequential)
     RP_DB_PATH=data/research.db              # SQLite database path
@@ -25,7 +25,11 @@ import time
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from dataclasses import dataclass
 
-from shared.config import load_config, resolve_localhost_url
+from shared.config import (
+    get_default_max_formulas,
+    load_config,
+    resolve_localhost_url,
+)
 from shared.db import get_connection, init_db, transaction
 from shared.server import BaseHandler, BaseService, route
 
@@ -143,7 +147,7 @@ class ValidatorHandler(BaseHandler):
 
     cas_url: str = "http://localhost:8769"
     cas_timeout: int = 120
-    max_formulas_default: int = 50
+    max_formulas_default: int = get_default_max_formulas()
     engines: list[str] = []  # Auto-discovered from CAS /engines at startup
 
     @route("POST", "/process")
@@ -154,7 +158,7 @@ class ValidatorHandler(BaseHandler):
             {
                 "paper_id": 123,
                 "formula_id": 456,
-                "max_formulas": 50,
+                "max_formulas": 100,
                 "force": false,
                 "engines": ["..."]  (optional override, auto-discovered from CAS)
             }
@@ -399,7 +403,10 @@ def main() -> None:
         os.environ.get("RP_VALIDATOR_CAS_TIMEOUT", "120")
     )
     ValidatorHandler.max_formulas_default = int(
-        os.environ.get("RP_VALIDATOR_MAX_FORMULAS", "50")
+        os.environ.get(
+            "RP_VALIDATOR_MAX_FORMULAS",
+            str(get_default_max_formulas()),
+        )
     )
 
     # Auto-discover engines from CAS; env var override if set

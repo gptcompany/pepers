@@ -150,7 +150,17 @@ def call_cli(
 
     # Parse output based on format
     if cfg["output_format"] == "json":
-        data = json.loads(output)
+        if not output:
+            stderr = (result.stderr or "").strip()
+            detail = f" stderr={stderr[:200]}" if stderr else ""
+            raise RuntimeError(f"{provider_name} returned empty response.{detail}")
+        try:
+            data = json.loads(output)
+        except json.JSONDecodeError as exc:
+            snippet = output[:200]
+            raise RuntimeError(
+                f"{provider_name} returned invalid JSON: {exc}. output={snippet!r}"
+            ) from exc
         if data.get("error"):
             raise RuntimeError(
                 f"{provider_name} API error: {data['error'].get('message', data['error'])}"
@@ -447,3 +457,11 @@ def fallback_chain(
             errors.append(f"{name}: {e}")
 
     raise RuntimeError(f"All LLM providers failed: {'; '.join(errors)}")
+
+
+def parse_provider_order(raw: str | None, default: list[str]) -> list[str]:
+    """Parse a comma-separated provider order with fallback to a default list."""
+    if raw is None:
+        return list(default)
+    parsed = [item.strip() for item in raw.split(",") if item.strip()]
+    return parsed or list(default)

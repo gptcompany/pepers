@@ -23,6 +23,7 @@ import urllib.request
 import urllib.error
 
 from mcp.server.fastmcp import FastMCP
+from shared.config import get_default_max_formulas
 
 logger = logging.getLogger(__name__)
 
@@ -389,7 +390,7 @@ def run_pipeline(
     paper_id: int = 0,
     stages: int = 5,
     max_papers: int = 10,
-    max_formulas: int = 50,
+    max_formulas: int = get_default_max_formulas(),
 ) -> str:
     """Trigger an async pipeline run (discovery -> analysis -> extraction -> validation -> codegen).
 

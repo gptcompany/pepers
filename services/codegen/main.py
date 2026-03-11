@@ -10,7 +10,7 @@ Usage:
 Environment:
     RP_CODEGEN_PORT=8774                       # Service port (default: 8774)
     RP_CODEGEN_OLLAMA_URL=http://localhost:11434  # Ollama base URL
-    RP_CODEGEN_MAX_FORMULAS=50                 # Default batch size
+    RP_CODEGEN_MAX_FORMULAS=100                # Default batch size override
     RP_DB_PATH=data/research.db               # SQLite database path
     RP_LOG_LEVEL=INFO                         # Log level
 """
@@ -24,7 +24,11 @@ import logging
 import os
 import time
 
-from shared.config import load_config, resolve_localhost_url
+from shared.config import (
+    get_default_max_formulas,
+    load_config,
+    resolve_localhost_url,
+)
 from shared.db import get_connection, init_db, transaction
 from shared.server import BaseHandler, BaseService, route
 
@@ -77,7 +81,7 @@ class CodegenHandler(BaseHandler):
     """Handler for the Codegen service."""
 
     ollama_url: str = "http://localhost:11434"
-    max_formulas_default: int = 50
+    max_formulas_default: int = get_default_max_formulas()
 
     @route("POST", "/process")
     def handle_process(self, data: dict) -> dict | None:
@@ -87,7 +91,7 @@ class CodegenHandler(BaseHandler):
             {
                 "paper_id": 123,
                 "formula_id": 456,
-                "max_formulas": 50,
+                "max_formulas": 100,
                 "force": false
             }
 
@@ -356,7 +360,10 @@ def main() -> None:
         os.environ.get("RP_CODEGEN_OLLAMA_URL", "http://localhost:11434")
     )
     CodegenHandler.max_formulas_default = int(
-        os.environ.get("RP_CODEGEN_MAX_FORMULAS", "50")
+        os.environ.get(
+            "RP_CODEGEN_MAX_FORMULAS",
+            str(get_default_max_formulas()),
+        )
     )
 
     service = BaseService(

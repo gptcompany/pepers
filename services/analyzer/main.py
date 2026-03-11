@@ -43,6 +43,21 @@ from services.analyzer.prompt import (
 logger = logging.getLogger(__name__)
 
 
+DEFAULT_ANALYZER_FALLBACK_ORDER = [
+    "gemini_cli",
+    "gemini_sdk",
+    "openrouter",
+    "ollama",
+]
+
+
+def _analyzer_fallback_order() -> list[str]:
+    """Prefer fast Gemini/OpenRouter providers before local heavy fallbacks."""
+    raw = os.environ.get("RP_ANALYZER_LLM_FALLBACK_ORDER", "")
+    order = [item.strip() for item in raw.split(",") if item.strip()]
+    return order or list(DEFAULT_ANALYZER_FALLBACK_ORDER)
+
+
 def migrate_db(db_path: str) -> None:
     """Add prompt_version column if missing. Idempotent."""
     with transaction(db_path) as conn:
@@ -66,6 +81,7 @@ class AnalyzerHandler(BaseHandler):
 
     threshold: float = 0.7
     max_papers_default: int = 10
+    request_budget_seconds: int = 900
 
     @route("POST", "/process")
     def handle_process(self, data: dict) -> dict:
@@ -132,13 +148,42 @@ class AnalyzerHandler(BaseHandler):
         rejected = 0
         total_score = 0.0
         last_provider = None
+        fallback_order = _analyzer_fallback_order()
+        papers_seen = 0
+        raw_request_budget = getattr(
+            self,
+            "request_budget_seconds",
+            AnalyzerHandler.request_budget_seconds,
+        )
+        try:
+            if isinstance(raw_request_budget, (int, float, str)):
+                request_budget_seconds = int(raw_request_budget)
+            else:
+                raise TypeError("request budget must be numeric")
+        except (TypeError, ValueError):
+            request_budget_seconds = AnalyzerHandler.request_budget_seconds
 
         for paper in papers:
+            if (
+                request_budget_seconds > 0
+                and papers_seen > 0
+                and (time.time() - start) >= request_budget_seconds
+            ):
+                remaining = len(papers) - papers_seen
+                msg = (
+                    f"batch budget exhausted after {papers_seen} papers; "
+                    f"{remaining} deferred"
+                )
+                logger.warning(msg)
+                errors.append(msg)
+                break
+
             pid = paper["id"]
             title = paper["title"]
             abstract = paper["abstract"]
             authors = json.loads(paper["authors"]) if paper["authors"] else []
             categories = json.loads(paper["categories"]) if paper["categories"] else []
+            papers_seen += 1
 
             # Skip papers with no title
             if not title:
@@ -150,7 +195,11 @@ class AnalyzerHandler(BaseHandler):
 
             # Call LLM
             try:
-                response_text, provider = fallback_chain(prompt, system_prompt)
+                response_text, provider = fallback_chain(
+                    prompt,
+                    system_prompt,
+                    order=fallback_order,
+                )
                 last_provider = provider
             except RuntimeError as e:
                 errors.append(f"paper {pid}: {e}")
@@ -163,6 +212,7 @@ class AnalyzerHandler(BaseHandler):
                 system_prompt,
                 pid,
                 errors,
+                fallback_order=fallback_order,
             )
             if scores_data is None:
                 continue
@@ -275,6 +325,8 @@ def _parse_llm_response(
     system_prompt: str,
     paper_id: int,
     errors: list[str],
+    *,
+    fallback_order: list[str] | None = None,
 ) -> dict | None:
     """Parse LLM JSON response, retry once on failure."""
     try:
@@ -288,7 +340,11 @@ def _parse_llm_response(
         + "\n\nRespond ONLY with valid JSON, no markdown fences, no extra text."
     )
     try:
-        response_text, _ = fallback_chain(retry_prompt, system_prompt)
+        response_text, _ = fallback_chain(
+            retry_prompt,
+            system_prompt,
+            order=fallback_order,
+        )
         return json.loads(_clean_json_text(response_text))
     except (json.JSONDecodeError, RuntimeError) as e:
         errors.append(f"paper {paper_id}: invalid JSON after retry: {e}")
@@ -329,6 +385,9 @@ def main() -> None:
     )
     AnalyzerHandler.max_papers_default = int(
         os.environ.get("RP_ANALYZER_MAX_PAPERS", "10")
+    )
+    AnalyzerHandler.request_budget_seconds = int(
+        os.environ.get("RP_ANALYZER_REQUEST_BUDGET_SECONDS", "900")
     )
 
     service = BaseService(

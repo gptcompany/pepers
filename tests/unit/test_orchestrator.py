@@ -9,6 +9,7 @@ from unittest.mock import MagicMock, patch
 import pytest
 import requests
 
+from shared.config import get_default_max_formulas
 from shared.db import transaction
 from services.orchestrator.main import (
     OrchestratorHandler,
@@ -664,6 +665,33 @@ class TestOrchestratorHandler:
             status=202,
         )
         mock_thread.assert_called_once()
+
+    @patch("services.orchestrator.main._start_pipeline_thread")
+    @patch(
+        "services.orchestrator.pipeline.PipelineRunner._generate_run_id",
+        return_value="run-124",
+    )
+    def test_handle_run_uses_shared_default_max_formulas(
+        self, _mock_gen_id, mock_start_thread
+    ):
+        handler = OrchestratorHandler.__new__(OrchestratorHandler)
+        handler.runner = MagicMock()
+        handler.runner._resolve_stages.return_value = [("discovery", 8770)]
+        handler.runner.check_external_health.return_value = {
+            "all_healthy": True,
+            "deps": {
+                "cas": {"healthy": True},
+                "rag": {"healthy": True},
+                "ollama": {"healthy": True},
+            },
+        }
+        handler.send_json = MagicMock()
+
+        handler.handle_run({"query": "test", "stages": 1})
+
+        assert mock_start_thread.call_args.kwargs["max_formulas"] == (
+            get_default_max_formulas()
+        )
 
     def test_handle_github_repos_no_paper_id(self):
         handler = OrchestratorHandler.__new__(OrchestratorHandler)
