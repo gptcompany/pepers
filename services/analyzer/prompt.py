@@ -13,7 +13,8 @@ different research areas.
 
 from __future__ import annotations
 
-PROMPT_VERSION = "v2"
+PROMPT_VERSION = "v3"
+MAX_ABSTRACT_CHARS = 2000
 
 EXPECTED_SCORE_KEYS = frozenset({
     "topic_relevance",
@@ -58,30 +59,29 @@ def build_scoring_system_prompt(topic: str | None = None) -> str:
         )
 
     return f"""\
-You are an academic paper relevance scorer for research.
+You score academic papers for research triage.
 
-You evaluate papers on 5 criteria, each scored from 0.0 to 1.0:
-
+Score exactly these 5 criteria from 0.0 to 1.0:
 {topic_guidance}
-2. mathematical_rigor: Does the paper contain formal mathematical content — proofs, derivations, theorems, lemmas, or significant mathematical notation?
+2. mathematical_rigor: Formal math content such as derivations, proofs, theorems, lemmas, or substantial notation.
 {novelty_guidance}
-4. practical_applicability: Does the paper provide practical implementation guidance — real-world data, backtests, code, algorithms, or actionable strategies?
-5. data_quality: What is the quality of the methodology — dataset size, experimental design, reproducibility, statistical rigor?
+4. practical_applicability: Implementation value such as data, code, algorithms, backtests, or actionable procedures.
+5. data_quality: Methodology quality including datasets, experimental design, reproducibility, and statistics.
 
-Respond ONLY with valid JSON matching this exact schema:
+Return JSON only:
 {{
   "scores": {{
-    "topic_relevance": <float 0.0-1.0>,
-    "mathematical_rigor": <float 0.0-1.0>,
-    "novelty": <float 0.0-1.0>,
-    "practical_applicability": <float 0.0-1.0>,
-    "data_quality": <float 0.0-1.0>
+    "topic_relevance": <float>,
+    "mathematical_rigor": <float>,
+    "novelty": <float>,
+    "practical_applicability": <float>,
+    "data_quality": <float>
   }},
-  "reasoning": "<1-2 sentence explanation>"
+  "reasoning": "<1-2 sentences>"
 }}
 
-Do not include markdown fences, comments, or any text outside the JSON object.
-If the abstract is missing or very short (under 50 characters), note this limitation in reasoning and score conservatively."""
+No markdown, no comments, no extra text.
+If the abstract is missing or shorter than 50 characters, mention that and score conservatively."""
 
 
 # Default instance for backward compatibility
@@ -113,9 +113,11 @@ def format_scoring_prompt(
     abstract_text = (
         abstract if abstract and len(abstract) >= 50 else "(abstract not available)"
     )
+    if abstract_text != "(abstract not available)" and len(abstract_text) > MAX_ABSTRACT_CHARS:
+        abstract_text = f"{abstract_text[:MAX_ABSTRACT_CHARS].rstrip()}… [truncated]"
 
     return (
-        f"Score this academic paper:\n\n"
+        f"Paper for scoring:\n\n"
         f"Title: {title}\n"
         f"Authors: {authors_str}\n"
         f"Categories: {categories_str}\n\n"

@@ -1,7 +1,6 @@
 """End-to-end tests for Analyzer service — real LLM calls via fallback chain.
 
-These tests make real LLM calls using the configured fallback chain
-(gemini_cli → codex_cli → claude_cli → openrouter → ollama).
+These tests make real LLM calls using the configured fallback chain.
 They are skipped if no LLM provider is available.
 
 Run with: pytest tests/e2e/test_analyzer_e2e.py -m e2e -v
@@ -18,6 +17,7 @@ from shared.llm import fallback_chain
 from services.analyzer.main import AnalyzerHandler, migrate_db
 from services.analyzer.prompt import (
     EXPECTED_SCORE_KEYS,
+    PROMPT_VERSION,
     SCORING_SYSTEM_PROMPT,
     build_scoring_system_prompt,
     format_scoring_prompt,
@@ -121,7 +121,7 @@ class TestAnalyzerE2E:
         assert row["stage"] in ("analyzed", "rejected")
         assert row["score"] is not None
         assert 0.0 <= row["score"] <= 1.0
-        assert row["prompt_version"] == "v2"
+        assert row["prompt_version"] == PROMPT_VERSION
 
     def test_rejected_paper_not_kelly(self, e2e_db):
         """A clearly non-Kelly paper should be rejected or scored low."""

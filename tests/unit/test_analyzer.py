@@ -11,6 +11,7 @@ import pytest
 
 from services.analyzer.prompt import (
     EXPECTED_SCORE_KEYS,
+    MAX_ABSTRACT_CHARS,
     PROMPT_VERSION,
     SCORING_SYSTEM_PROMPT,
     build_scoring_system_prompt,
@@ -76,6 +77,13 @@ class TestFormatScoringPrompt:
         result = format_scoring_prompt("Title", abstract, ["A"], [])
         assert abstract in result
         assert "(abstract not available)" not in result
+
+    def test_long_abstract_is_truncated(self):
+        abstract = "x" * (MAX_ABSTRACT_CHARS + 200)
+        result = format_scoring_prompt("Title", abstract, ["A"], [])
+        assert abstract not in result
+        assert "… [truncated]" in result
+        assert "x" * MAX_ABSTRACT_CHARS in result
 
     def test_empty_categories(self):
         result = format_scoring_prompt("Title", None, ["A"], [])
@@ -903,7 +911,7 @@ class TestPromptConstants:
     """Tests for prompt.py constants."""
 
     def test_prompt_version(self):
-        assert PROMPT_VERSION == "v2"
+        assert PROMPT_VERSION == "v3"
 
     def test_expected_score_keys(self):
         assert EXPECTED_SCORE_KEYS == frozenset({

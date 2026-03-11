@@ -138,7 +138,7 @@ class TestAnalyzerHandlerIntegration:
         assert result["papers_accepted"] == 1
         assert result["papers_rejected"] == 0
         assert result["llm_provider"] == "ollama"
-        assert result["prompt_version"] == "v2"
+        assert result["prompt_version"] == PROMPT_VERSION
 
         # Verify DB state
         with transaction(self.db_path) as conn:
@@ -347,7 +347,7 @@ class TestScoreStorage:
             row = conn.execute(
                 "SELECT prompt_version FROM papers WHERE id=1"
             ).fetchone()
-        assert row["prompt_version"] == "v2"
+        assert row["prompt_version"] == PROMPT_VERSION
 
     def test_clamped_flag_stored(self, discovered_paper_db):
         db_path = str(discovered_paper_db)
