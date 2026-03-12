@@ -31,7 +31,7 @@ DEFAULT_RETRY_BACKOFF = 2.0
 _PROJECT_HOST_DIR_REQUIRED_SENTINEL = "__PEPERS_PROJECT_HOST_DIR_REQUIRED__"
 
 # Container→host path mapping for RAGAnything (host-based service)
-_PDF_DIR = os.environ.get("RP_EXTRACTOR_PDF_DIR", "/data/pdfs")
+_PDF_DIR = os.environ.get("RP_EXTRACTOR_PDF_DIR", "data/pdfs")
 _PDF_HOST_DIR = os.environ.get("RP_EXTRACTOR_PDF_HOST_DIR", "")
 _PROJECT_HOST_DIR = os.environ.get("RP_EXTRACTOR_PROJECT_HOST_DIR", "")
 _RAG_DATA_HOST = os.environ.get("RP_EXTRACTOR_RAG_DATA_HOST", "")
@@ -75,14 +75,19 @@ def _replace_path_prefix(
     """Replace only a true path prefix, not an arbitrary substring."""
     if not src_prefix:
         return None
-    try:
-        relative = PurePosixPath(path_str).relative_to(PurePosixPath(src_prefix))
-    except ValueError:
+    path = PurePosixPath(path_str)
+    src = PurePosixPath(src_prefix)
+    path_parts = tuple(part for part in path.parts if part != "/")
+    src_parts = tuple(part for part in src.parts if part != "/")
+    if not src_parts or len(path_parts) < len(src_parts):
         return None
+    if path_parts[:len(src_parts)] != src_parts:
+        return None
+    relative_parts = path_parts[len(src_parts):]
     dst_path = PurePosixPath(dst_prefix)
-    if str(relative) == ".":
+    if not relative_parts:
         return str(dst_path)
-    return str(dst_path / relative)
+    return str(dst_path.joinpath(*relative_parts))
 
 
 def _request_retries() -> int:
@@ -230,9 +235,13 @@ def _map_to_host_path(container_path: Path) -> str:
     if pdf_host_dir:
         mapped = _replace_path_prefix(path_str, _PDF_DIR, pdf_host_dir)
         if mapped is None:
-            return path_str
+            if Path(path_str).is_absolute():
+                return path_str
+            return str(container_path.resolve())
         logger.debug("Path mapped: %s → %s", path_str, mapped)
         return mapped
+    if not Path(path_str).is_absolute():
+        return str(container_path.resolve())
     return path_str
 
 
@@ -389,7 +398,7 @@ def read_markdown(output_dir: str) -> str:
         if path.exists():
             md_files = list(path.glob("**/*.md"))
             if md_files:
-                md_files.sort(key=lambda f: f.stat().st_size, reverse=True)
+                md_files.sort(key=lambda f: (-f.stat().st_size, str(f)))
                 logger.debug("Reading markdown from: %s", md_files[0])
                 return md_files[0].read_text(encoding="utf-8")
 

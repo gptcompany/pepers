@@ -311,9 +311,8 @@ def _query_papers(
                 )
             else:
                 cursor = conn.execute(
-                    f"SELECT * FROM papers WHERE id=? AND stage='analyzed' "
-                    f"AND {retryable_clause}",
-                    (paper_id, retryable_backoff),
+                    "SELECT * FROM papers WHERE id=? AND stage='analyzed'",
+                    (paper_id,),
                 )
         else:
             cursor = conn.execute(

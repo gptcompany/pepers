@@ -445,6 +445,46 @@ class TestSubmitPdf:
         body = json.loads(req.data.decode())
         assert body["pdf_path"] == "/datax/test.pdf"
 
+    @patch("services.extractor.rag_client.urllib.request.urlopen")
+    def test_prefix_mapping_handles_relative_path_against_absolute_prefix(
+        self,
+        mock_urlopen,
+        monkeypatch,
+        tmp_path,
+    ):
+        mock_resp = MagicMock()
+        mock_resp.read.return_value = json.dumps({"job_id": "j1"}).encode()
+        mock_urlopen.return_value = mock_resp
+        monkeypatch.chdir(tmp_path)
+        monkeypatch.setattr(rag_client_module, "_PDF_DIR", "/data/pdfs")
+        monkeypatch.setattr(rag_client_module, "_PDF_HOST_DIR", "/host/pdfs")
+        monkeypatch.setattr(rag_client_module, "_PROJECT_HOST_DIR", "/project")
+
+        submit_pdf(Path("data/pdfs/test.pdf"), "2401.00001", "http://rag:8767")
+        req = mock_urlopen.call_args[0][0]
+        body = json.loads(req.data.decode())
+        assert body["pdf_path"] == "/host/pdfs/test.pdf"
+
+    @patch("services.extractor.rag_client.urllib.request.urlopen")
+    def test_relative_local_pdf_path_resolves_to_absolute_without_host_mapping(
+        self,
+        mock_urlopen,
+        monkeypatch,
+        tmp_path,
+    ):
+        mock_resp = MagicMock()
+        mock_resp.read.return_value = json.dumps({"job_id": "j1"}).encode()
+        mock_urlopen.return_value = mock_resp
+        monkeypatch.chdir(tmp_path)
+        monkeypatch.setattr(rag_client_module, "_PDF_DIR", "data/pdfs")
+        monkeypatch.setattr(rag_client_module, "_PDF_HOST_DIR", "")
+        monkeypatch.setattr(rag_client_module, "_PROJECT_HOST_DIR", "")
+
+        submit_pdf(Path("data/pdfs/test.pdf"), "2401.00001", "http://rag:8767")
+        req = mock_urlopen.call_args[0][0]
+        body = json.loads(req.data.decode())
+        assert body["pdf_path"] == str((tmp_path / "data/pdfs/test.pdf").resolve())
+
 
 # ---------------------------------------------------------------------------
 # TestPollJob
@@ -587,6 +627,13 @@ class TestReadMarkdown:
 
         result = read_markdown(str(tmp_path))
         assert "large content" in result
+
+    def test_reads_deterministic_md_when_sizes_tie(self, tmp_path):
+        (tmp_path / "a.md").write_text("content-a")
+        (tmp_path / "b.md").write_text("content-b")
+
+        result = read_markdown(str(tmp_path))
+        assert result == "content-a"
 
     def test_container_path_mapping_1tb(self, tmp_path):
         # Create the expected host path structure
@@ -1252,7 +1299,7 @@ class TestExtractorRetryableErrors:
         _mark_retryable(db_path, 1, "timed out")
 
         papers = _query_papers(db_path, 1, 10, False)
-        assert papers == []
+        assert len(papers) == 1
 
         papers = _query_papers(db_path, 1, 10, True)
         assert len(papers) == 1
