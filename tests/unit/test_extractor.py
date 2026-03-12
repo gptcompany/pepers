@@ -303,6 +303,18 @@ class TestSubmitPdf:
 
         assert rag_client_module._submit_timeout() == pytest.approx(45.0)
 
+    def test_job_timeout_not_lower_than_submit_timeout(self, monkeypatch):
+        monkeypatch.setenv("RP_EXTRACTOR_RAG_REQUEST_TIMEOUT", "45")
+        monkeypatch.setenv("RP_EXTRACTOR_RAG_SUBMIT_TIMEOUT", "60")
+        monkeypatch.setenv("RP_EXTRACTOR_RAG_JOB_TIMEOUT", "30")
+
+        assert rag_client_module._job_timeout() == pytest.approx(60.0)
+
+    def test_poll_interval_reads_env_override(self, monkeypatch):
+        monkeypatch.setenv("RP_EXTRACTOR_RAG_POLL_INTERVAL", "45")
+
+        assert rag_client_module._poll_interval() == pytest.approx(45.0)
+
     @patch("services.extractor.rag_client.urllib.request.urlopen")
     def test_cached_result(self, mock_urlopen):
         mock_resp = MagicMock()
@@ -393,6 +405,23 @@ class TestPollJob:
         result = poll_job("job-1")
         assert result["output_dir"] == "/workspace/1TB/rag/out"
         mock_sleep.assert_not_called()
+
+    @patch("services.extractor.rag_client.time.sleep")
+    @patch("services.extractor.rag_client.urllib.request.urlopen")
+    def test_completed_after_env_default_interval(self, mock_urlopen, mock_sleep, monkeypatch):
+        monkeypatch.setenv("RP_EXTRACTOR_RAG_POLL_INTERVAL", "45")
+        pending = MagicMock()
+        pending.read.return_value = json.dumps({"status": "processing"}).encode()
+        completed = MagicMock()
+        completed.read.return_value = json.dumps({
+            "status": "completed",
+            "result": {"output_dir": "/out"},
+        }).encode()
+        mock_urlopen.side_effect = [pending, completed]
+
+        result = poll_job("job-1", timeout=600)
+        assert result["output_dir"] == "/out"
+        mock_sleep.assert_called_once_with(pytest.approx(45.0))
 
     @patch("services.extractor.rag_client.time.sleep")
     @patch("services.extractor.rag_client.urllib.request.urlopen")

@@ -330,7 +330,7 @@ class TestRunPipeline:
         self.runner.timeout = 5
         self.runner.retry_max = 0
         self.runner.retry_backoff = 1.0
-        self.runner.STAGE_TIMEOUTS = {"analyzer": 1800, "extractor": 7200, "codegen": 900}
+        self.runner.STAGE_TIMEOUTS = {"analyzer": 1800, "extractor": 15000, "codegen": 900}
 
     @patch.object(PipelineRunner, "_call_service_with_retry")
     def test_query_run_all_stages(self, mock_call):
@@ -459,7 +459,7 @@ class TestRunPipeline:
         runner.timeout = 5
         runner.retry_max = 0
         runner.retry_backoff = 1.0
-        runner.STAGE_TIMEOUTS = {"analyzer": 1800, "extractor": 7200, "codegen": 900}
+        runner.STAGE_TIMEOUTS = {"analyzer": 1800, "extractor": 15000, "codegen": 900}
         discovery_url = f"{_stage_url(*STAGE_ORDER[0])}/process"
         analyzer_url = f"{_stage_url(*STAGE_ORDER[1])}/process"
 
@@ -1772,12 +1772,12 @@ class TestPipelineRunnerInit:
         assert PipelineRunner.STAGE_TIMEOUTS.get("analyzer") == 1800
 
     def test_extractor_stage_timeout_default(self, clean_env):
-        assert PipelineRunner.STAGE_TIMEOUTS.get("extractor") == 7200
+        assert PipelineRunner.STAGE_TIMEOUTS.get("extractor") == 15000
 
     def test_instance_stage_timeout_defaults(self, clean_env, tmp_path):
         runner = PipelineRunner(tmp_path / "test.db")
         assert runner.STAGE_TIMEOUTS["analyzer"] == 1800
-        assert runner.STAGE_TIMEOUTS["extractor"] == 7200
+        assert runner.STAGE_TIMEOUTS["extractor"] == 15000
         assert runner.STAGE_TIMEOUTS["codegen"] == 900
 
     def test_env_override_analyzer_stage_timeout(self, tmp_path):
@@ -1806,7 +1806,7 @@ class TestRunInternals:
         self.runner.retry_backoff = 1.0
         self.runner.STAGE_TIMEOUTS = {
             "analyzer": 1800,
-            "extractor": 7200,
+            "extractor": 15000,
             "codegen": 900,
         }
 
@@ -1919,7 +1919,7 @@ class TestRunInternals:
         mock_call.return_value = {"ok": True}
         self.runner.STAGE_TIMEOUTS = {
             "analyzer": 777,
-            "extractor": 7200,
+            "extractor": 15000,
             "codegen": 900,
         }
 

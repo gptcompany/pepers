@@ -192,11 +192,15 @@ class TestExtractorRagDefaults:
             {
                 "RP_EXTRACTOR_RAG_REQUEST_TIMEOUT": "",
                 "RP_EXTRACTOR_RAG_SUBMIT_TIMEOUT": "",
+                "RP_EXTRACTOR_RAG_JOB_TIMEOUT": "",
+                "RP_EXTRACTOR_RAG_POLL_INTERVAL": "",
             }
         )
         env = config["services"]["extractor"]["environment"]
         assert env["RP_EXTRACTOR_RAG_REQUEST_TIMEOUT"] == "30"
         assert env["RP_EXTRACTOR_RAG_SUBMIT_TIMEOUT"] == "60"
+        assert env["RP_EXTRACTOR_RAG_JOB_TIMEOUT"] == "14400"
+        assert env["RP_EXTRACTOR_RAG_POLL_INTERVAL"] == "30"
 
 
 class TestOrchestratorStageTimeoutDefaults:
@@ -209,4 +213,4 @@ class TestOrchestratorStageTimeoutDefaults:
         )
         env = config["services"]["orchestrator"]["environment"]
         assert env["RP_ORCHESTRATOR_ANALYZER_TIMEOUT"] == "1800"
-        assert env["RP_ORCHESTRATOR_EXTRACTOR_TIMEOUT"] == "7200"
+        assert env["RP_ORCHESTRATOR_EXTRACTOR_TIMEOUT"] == "15000"

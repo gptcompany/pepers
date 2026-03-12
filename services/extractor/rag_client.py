@@ -20,8 +20,8 @@ from pathlib import Path
 logger = logging.getLogger(__name__)
 
 DEFAULT_BASE_URL = "http://localhost:8767"
-DEFAULT_POLL_INTERVAL = 10
-DEFAULT_TIMEOUT = 7200  # 2h — MinerU on CPU: ~10 min/page, 25-page paper = ~4h
+DEFAULT_POLL_INTERVAL = 30
+DEFAULT_TIMEOUT = 14400  # 4h — align with rag-service PROCESS_TIMEOUT on CPU
 DEFAULT_REQUEST_TIMEOUT = 30.0
 DEFAULT_SUBMIT_TIMEOUT = 60.0
 DEFAULT_REQUEST_RETRIES = 3
@@ -78,6 +78,30 @@ def _submit_timeout() -> float:
             os.environ.get(
                 "RP_EXTRACTOR_RAG_SUBMIT_TIMEOUT",
                 str(DEFAULT_SUBMIT_TIMEOUT),
+            )
+        ),
+    )
+
+
+def _job_timeout() -> float:
+    return max(
+        _submit_timeout(),
+        float(
+            os.environ.get(
+                "RP_EXTRACTOR_RAG_JOB_TIMEOUT",
+                str(DEFAULT_TIMEOUT),
+            )
+        ),
+    )
+
+
+def _poll_interval() -> float:
+    return max(
+        1.0,
+        float(
+            os.environ.get(
+                "RP_EXTRACTOR_RAG_POLL_INTERVAL",
+                str(DEFAULT_POLL_INTERVAL),
             )
         ),
     )
@@ -213,8 +237,8 @@ def submit_pdf(
 def poll_job(
     job_id: str,
     base_url: str = DEFAULT_BASE_URL,
-    timeout: float = DEFAULT_TIMEOUT,
-    interval: float = DEFAULT_POLL_INTERVAL,
+    timeout: float | None = None,
+    interval: float | None = None,
 ) -> dict:
     """Poll job status until completion or timeout.
 
@@ -222,7 +246,9 @@ def poll_job(
         RuntimeError: If job failed.
         TimeoutError: If job didn't complete within timeout.
     """
-    deadline = time.time() + timeout
+    effective_timeout = _job_timeout() if timeout is None else timeout
+    effective_interval = _poll_interval() if interval is None else interval
+    deadline = time.time() + effective_timeout
 
     while True:
         remaining = deadline - time.time()
@@ -241,7 +267,7 @@ def poll_job(
             remaining = deadline - time.time()
             if remaining <= 0:
                 break
-            sleep_for = min(interval, remaining)
+            sleep_for = min(effective_interval, remaining)
             logger.warning(
                 "Transient RAG polling error for %s, retrying in %.1fs: %s",
                 job_id, sleep_for, exc,
@@ -259,7 +285,7 @@ def poll_job(
         remaining = deadline - time.time()
         if remaining <= 0:
             break
-        sleep_for = min(interval, remaining)
+        sleep_for = min(effective_interval, remaining)
         logger.debug(
             "Job %s status: %s, waiting %.1fs",
             job_id,
@@ -268,7 +294,7 @@ def poll_job(
         )
         time.sleep(sleep_for)
 
-    raise TimeoutError(f"RAGAnything job {job_id} timed out after {timeout}s")
+    raise TimeoutError(f"RAGAnything job {job_id} timed out after {effective_timeout}s")
 
 
 def read_markdown(output_dir: str) -> str:
