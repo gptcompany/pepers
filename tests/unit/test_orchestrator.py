@@ -1038,6 +1038,7 @@ class TestOrchestratorHandler:
                 "paper_id": None,
                 "max_papers": 10,
                 "max_formulas": 50,
+                "force_parser": "docling",
                 "force": False,
                 "requeue_of": "run-old",
                 "requeue_strategy": "rerun_query",
@@ -1067,6 +1068,7 @@ class TestOrchestratorHandler:
         assert payload["queued"][0]["run_id"] == "run-new"
         mock_start_thread.assert_called_once()
         kwargs = mock_start_thread.call_args.kwargs
+        assert kwargs["force_parser"] == "docling"
         assert kwargs["extra_params"]["requeue_of"] == "run-old"
         assert kwargs["stages"] == 5
 

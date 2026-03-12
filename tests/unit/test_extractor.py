@@ -372,6 +372,23 @@ class TestSubmitPdf:
         req = mock_urlopen.call_args[0][0]
         body = json.loads(req.data.decode())
         assert body["force_parser"] == "docling"
+        assert body["force_reprocess"] is True
+
+    @patch("services.extractor.rag_client.urllib.request.urlopen")
+    def test_request_format_includes_explicit_force_reprocess(self, mock_urlopen):
+        mock_resp = MagicMock()
+        mock_resp.read.return_value = json.dumps({"job_id": "j1"}).encode()
+        mock_urlopen.return_value = mock_resp
+
+        submit_pdf(
+            Path("/data/pdfs/test.pdf"),
+            "2401.00001",
+            "http://rag:8767",
+            force_reprocess=True,
+        )
+        req = mock_urlopen.call_args[0][0]
+        body = json.loads(req.data.decode())
+        assert body["force_reprocess"] is True
 
     @patch("services.extractor.rag_client.urllib.request.urlopen")
     def test_request_format_resolves_relative_host_mapping(self, mock_urlopen, monkeypatch):
@@ -401,6 +418,14 @@ class TestSubmitPdf:
 
         assert mock_urlopen.call_count == 1
         mock_sleep.assert_not_called()
+
+    def test_relative_host_mapping_requires_project_host_dir(self, monkeypatch):
+        monkeypatch.setattr(rag_client_module, "_PDF_DIR", "/data/pdfs")
+        monkeypatch.setattr(rag_client_module, "_PDF_HOST_DIR", "../rag-service/data/pdfs")
+        monkeypatch.setattr(rag_client_module, "_PROJECT_HOST_DIR", "")
+
+        with pytest.raises(RuntimeError, match="PEPERS_PROJECT_HOST_DIR"):
+            submit_pdf(Path("/data/pdfs/test.pdf"), "2401.00001", "http://rag:8767")
 
 
 # ---------------------------------------------------------------------------
@@ -671,6 +696,7 @@ class TestProcessPaper:
             )
 
         assert mock_submit.call_args.kwargs["force_parser"] == "docling"
+        assert mock_submit.call_args.kwargs["force_reprocess"] is True
 
 
 # ---------------------------------------------------------------------------
@@ -1256,6 +1282,7 @@ class TestExtractorHandler:
         resp = handler.handle_process({"paper_id": 1, "force_parser": "docling"})
         assert resp["success"] is True
         assert mock_rag.call_args.kwargs["force_parser"] == "docling"
+        assert mock_rag.call_args.kwargs["force_reprocess"] is True
 
     def test_handle_process_rejects_invalid_force_parser(self, analyzed_paper_db):
         handler = ExtractorHandler.__new__(ExtractorHandler)
@@ -1303,6 +1330,7 @@ class TestExtractorHandler:
             "paper:1",
             "http://rag",
             force_parser=None,
+            force_reprocess=False,
         )
 
     def test_handle_process_paper_not_found(self, initialized_db):

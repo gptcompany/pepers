@@ -18,11 +18,17 @@ REPO_ROOT = Path(__file__).resolve().parent.parent.parent
 
 def _load_compose_config(env_overrides: dict[str, str] | None = None) -> dict:
     """Parse resolved docker-compose.yml via docker compose config."""
-    env = os.environ.copy()
+    env = {
+        key: os.environ[key]
+        for key in os.environ
+        if key in {"HOME", "PATH", "XDG_RUNTIME_DIR"}
+        or key.startswith("DOCKER_")
+        or key.startswith("COMPOSE_")
+    }
     if env_overrides:
         env.update(env_overrides)
     result = subprocess.run(
-        ["docker", "compose", "config", "--format", "json"],
+        ["docker", "compose", "--env-file", "/dev/null", "config", "--format", "json"],
         capture_output=True,
         text=True,
         cwd=str(REPO_ROOT),
@@ -129,7 +135,18 @@ class TestExtractorPathMapping:
     def test_compose_no_longer_uses_pwd_for_project_host_dir(self):
         content = (REPO_ROOT / "docker-compose.yml").read_text()
         assert "RP_EXTRACTOR_PROJECT_HOST_DIR=${PWD}" not in content
-        assert "RP_EXTRACTOR_PROJECT_HOST_DIR=${PEPERS_PROJECT_HOST_DIR:-}" in content
+        assert (
+            "RP_EXTRACTOR_PROJECT_HOST_DIR="
+            "${PEPERS_PROJECT_HOST_DIR:-__PEPERS_PROJECT_HOST_DIR_REQUIRED__}"
+            in content
+        )
+
+    def test_extractor_project_host_dir_is_explicitly_required_for_relative_defaults(self):
+        config = _load_compose_config({"PEPERS_PROJECT_HOST_DIR": ""})
+        env = config["services"]["extractor"]["environment"]
+        assert env["RP_EXTRACTOR_PROJECT_HOST_DIR"] == "__PEPERS_PROJECT_HOST_DIR_REQUIRED__"
+        assert env["RP_EXTRACTOR_PDF_HOST_DIR"] == "../rag-service/data/pdfs"
+        assert env["RP_EXTRACTOR_RAG_DATA_HOST"] == "../rag-service/data"
 
     def test_extractor_project_host_dir_uses_explicit_env(self):
         config = _load_compose_config(

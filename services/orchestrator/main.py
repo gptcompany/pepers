@@ -420,6 +420,7 @@ class OrchestratorHandler(BaseHandler):
                 max_formulas=requeue_params.get(
                     "max_formulas", get_default_max_formulas()
                 ),
+                force_parser=requeue_params.get("force_parser"),
                 force=requeue_params.get("force", False),
                 extra_params={
                     "requeue_of": requeue_params.get("requeue_of"),

@@ -210,6 +210,7 @@ class ExtractorHandler(BaseHandler):
                     _build_extraction_paper_id(paper),
                     self.rag_url,
                     force_parser=force_parser,
+                    force_reprocess=force or force_parser is not None,
                 )
 
                 # Step 3: Extract formulas

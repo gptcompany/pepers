@@ -28,6 +28,7 @@ DEFAULT_REQUEST_TIMEOUT = 30.0
 DEFAULT_SUBMIT_TIMEOUT = 60.0
 DEFAULT_REQUEST_RETRIES = 3
 DEFAULT_RETRY_BACKOFF = 2.0
+_PROJECT_HOST_DIR_REQUIRED_SENTINEL = "__PEPERS_PROJECT_HOST_DIR_REQUIRED__"
 
 # Container→host path mapping for RAGAnything (host-based service)
 _PDF_DIR = os.environ.get("RP_EXTRACTOR_PDF_DIR", "/data/pdfs")
@@ -36,13 +37,26 @@ _PROJECT_HOST_DIR = os.environ.get("RP_EXTRACTOR_PROJECT_HOST_DIR", "")
 _RAG_DATA_HOST = os.environ.get("RP_EXTRACTOR_RAG_DATA_HOST", "")
 
 
+def _configured_project_host_dir() -> str:
+    configured = _PROJECT_HOST_DIR.strip()
+    if configured == _PROJECT_HOST_DIR_REQUIRED_SENTINEL:
+        return ""
+    return configured
+
+
 def _resolve_host_dir(path_str: str) -> str:
     if not path_str:
         return ""
     path = Path(path_str)
-    if path.is_absolute() or not _PROJECT_HOST_DIR:
+    if path.is_absolute():
         return str(path)
-    return str((Path(_PROJECT_HOST_DIR) / path).resolve())
+    project_host_dir = _configured_project_host_dir()
+    if not project_host_dir:
+        raise RuntimeError(
+            "Relative extractor host paths require PEPERS_PROJECT_HOST_DIR "
+            "to be set in .env or the shell environment"
+        )
+    return str((Path(project_host_dir) / path).resolve())
 
 
 def _resolved_pdf_host_dir() -> str:
@@ -208,6 +222,7 @@ def submit_pdf(
     base_url: str = DEFAULT_BASE_URL,
     *,
     force_parser: str | None = None,
+    force_reprocess: bool = False,
 ) -> dict:
     """Submit PDF to RAGAnything for processing.
 
@@ -215,6 +230,9 @@ def submit_pdf(
         Dict with 'cached' bool and either 'result' or 'job_id'.
     """
     force_parser = normalize_rag_force_parser(force_parser)
+    # The current rag-service serves cached output before honoring parser
+    # selection, so parser overrides must bypass cache to be effective.
+    force_reprocess = bool(force_reprocess or force_parser is not None)
     host_path = _map_to_host_path(pdf_path)
     payload_obj = {
         "pdf_path": host_path,
@@ -222,6 +240,8 @@ def submit_pdf(
     }
     if force_parser is not None:
         payload_obj["force_parser"] = force_parser
+    if force_reprocess:
+        payload_obj["force_reprocess"] = True
     payload = json.dumps(payload_obj).encode()
 
     req = urllib.request.Request(
@@ -358,6 +378,7 @@ def process_paper(
     base_url: str = DEFAULT_BASE_URL,
     *,
     force_parser: str | None = None,
+    force_reprocess: bool = False,
 ) -> str:
     """High-level orchestration: check service, submit, poll, read markdown.
 
@@ -373,12 +394,14 @@ def process_paper(
         RuntimeError: On service or processing errors.
     """
     check_service(base_url)
+    force_reprocess = bool(force_reprocess or force_parser is not None)
 
     result = submit_pdf(
         pdf_path,
         paper_id,
         base_url,
         force_parser=force_parser,
+        force_reprocess=force_reprocess,
     )
 
     if result["cached"]:
