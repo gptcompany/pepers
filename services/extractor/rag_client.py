@@ -17,6 +17,8 @@ import urllib.error
 import urllib.request
 from pathlib import Path
 
+from shared.rag import normalize_rag_force_parser
+
 logger = logging.getLogger(__name__)
 
 DEFAULT_BASE_URL = "http://localhost:8767"
@@ -201,18 +203,26 @@ def _map_to_host_path(container_path: Path) -> str:
 
 
 def submit_pdf(
-    pdf_path: Path, paper_id: str, base_url: str = DEFAULT_BASE_URL
+    pdf_path: Path,
+    paper_id: str,
+    base_url: str = DEFAULT_BASE_URL,
+    *,
+    force_parser: str | None = None,
 ) -> dict:
     """Submit PDF to RAGAnything for processing.
 
     Returns:
         Dict with 'cached' bool and either 'result' or 'job_id'.
     """
+    force_parser = normalize_rag_force_parser(force_parser)
     host_path = _map_to_host_path(pdf_path)
-    payload = json.dumps({
+    payload_obj = {
         "pdf_path": host_path,
         "paper_id": paper_id,
-    }).encode()
+    }
+    if force_parser is not None:
+        payload_obj["force_parser"] = force_parser
+    payload = json.dumps(payload_obj).encode()
 
     req = urllib.request.Request(
         f"{base_url}/process",
@@ -343,7 +353,11 @@ def read_markdown(output_dir: str) -> str:
 
 
 def process_paper(
-    pdf_path: Path, paper_id: str, base_url: str = DEFAULT_BASE_URL
+    pdf_path: Path,
+    paper_id: str,
+    base_url: str = DEFAULT_BASE_URL,
+    *,
+    force_parser: str | None = None,
 ) -> str:
     """High-level orchestration: check service, submit, poll, read markdown.
 
@@ -360,7 +374,12 @@ def process_paper(
     """
     check_service(base_url)
 
-    result = submit_pdf(pdf_path, paper_id, base_url)
+    result = submit_pdf(
+        pdf_path,
+        paper_id,
+        base_url,
+        force_parser=force_parser,
+    )
 
     if result["cached"]:
         output_dir = result["result"].get("output_dir", "")

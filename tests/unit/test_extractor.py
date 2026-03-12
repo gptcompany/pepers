@@ -358,6 +358,22 @@ class TestSubmitPdf:
         assert body["paper_id"] == "2401.00001"
 
     @patch("services.extractor.rag_client.urllib.request.urlopen")
+    def test_request_format_includes_force_parser(self, mock_urlopen):
+        mock_resp = MagicMock()
+        mock_resp.read.return_value = json.dumps({"job_id": "j1"}).encode()
+        mock_urlopen.return_value = mock_resp
+
+        submit_pdf(
+            Path("/data/pdfs/test.pdf"),
+            "2401.00001",
+            "http://rag:8767",
+            force_parser="docling",
+        )
+        req = mock_urlopen.call_args[0][0]
+        body = json.loads(req.data.decode())
+        assert body["force_parser"] == "docling"
+
+    @patch("services.extractor.rag_client.urllib.request.urlopen")
     def test_request_format_resolves_relative_host_mapping(self, mock_urlopen, monkeypatch):
         mock_resp = MagicMock()
         mock_resp.read.return_value = json.dumps({"job_id": "j1"}).encode()
@@ -637,6 +653,24 @@ class TestProcessPaper:
 
         with pytest.raises(RuntimeError, match="No output_dir"):
             process_paper(Path("/tmp/test.pdf"), "2401.00001")
+
+    @patch("services.extractor.rag_client.submit_pdf")
+    @patch("services.extractor.rag_client.check_service")
+    def test_force_parser_is_forwarded(self, mock_check, mock_submit):
+        mock_check.return_value = {"status": "ok"}
+        mock_submit.return_value = {
+            "cached": True,
+            "result": {"output_dir": "/tmp/out"},
+        }
+
+        with patch("services.extractor.rag_client.read_markdown", return_value="# ok"):
+            process_paper(
+                Path("/tmp/test.pdf"),
+                "2401.00001",
+                force_parser="docling",
+            )
+
+        assert mock_submit.call_args.kwargs["force_parser"] == "docling"
 
 
 # ---------------------------------------------------------------------------
@@ -1204,6 +1238,41 @@ class TestExtractorHandler:
     @patch("services.extractor.main.pdf.download_pdf")
     @patch("services.extractor.main.rag_client.process_paper")
     @patch("services.extractor.main.rag_client.check_service")
+    def test_handle_process_forwards_force_parser_override(
+        self, mock_check, mock_rag, mock_pdf, mock_session, analyzed_paper_db
+    ):
+        db_path = str(analyzed_paper_db)
+        handler = ExtractorHandler.__new__(ExtractorHandler)
+        handler.db_path = db_path
+        handler.pdf_dir = "/tmp"
+        handler.download_delay = 0
+        handler.rag_url = "http://rag"
+        handler.rag_force_parser = "mineru"
+
+        mock_check.return_value = {"status": "ok"}
+        mock_pdf.return_value = Path("/tmp/p.pdf")
+        mock_rag.return_value = "Some text with $x + y$."
+
+        resp = handler.handle_process({"paper_id": 1, "force_parser": "docling"})
+        assert resp["success"] is True
+        assert mock_rag.call_args.kwargs["force_parser"] == "docling"
+
+    def test_handle_process_rejects_invalid_force_parser(self, analyzed_paper_db):
+        handler = ExtractorHandler.__new__(ExtractorHandler)
+        handler.db_path = str(analyzed_paper_db)
+        handler.rag_force_parser = None
+        handler.send_error_json = MagicMock()
+
+        resp = handler.handle_process({"paper_id": 1, "force_parser": "bad-parser"})
+        assert resp is None
+        handler.send_error_json.assert_called_once()
+        args = handler.send_error_json.call_args[0]
+        assert args[1] == "VALIDATION_ERROR"
+
+    @patch("services.extractor.main.pdf.create_session")
+    @patch("services.extractor.main.pdf.download_pdf")
+    @patch("services.extractor.main.rag_client.process_paper")
+    @patch("services.extractor.main.rag_client.check_service")
     def test_handle_process_non_arxiv_pdf_uses_fallback_document_id(
         self, mock_check, mock_rag, mock_pdf, mock_session, analyzed_paper_db
     ):
@@ -1229,7 +1298,12 @@ class TestExtractorHandler:
         resp = handler.handle_process({"paper_id": 1})
         assert resp["success"] is True
         assert resp["papers_processed"] == 1
-        mock_rag.assert_called_once_with(Path("/tmp/p.pdf"), "paper:1", "http://rag")
+        mock_rag.assert_called_once_with(
+            Path("/tmp/p.pdf"),
+            "paper:1",
+            "http://rag",
+            force_parser=None,
+        )
 
     def test_handle_process_paper_not_found(self, initialized_db):
         handler = ExtractorHandler.__new__(ExtractorHandler)

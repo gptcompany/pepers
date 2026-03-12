@@ -28,6 +28,7 @@ from pathlib import Path
 
 import requests
 
+from shared.rag import normalize_rag_force_parser
 from shared.config import load_config, resolve_localhost_url
 from shared.db import get_connection, init_db, transaction
 from shared.models import Formula, Paper
@@ -130,6 +131,7 @@ class ExtractorHandler(BaseHandler):
     max_papers_default: int = 10
     pdf_dir: str = "data/pdfs"
     rag_url: str = "http://localhost:8767"
+    rag_force_parser: str | None = None
     download_delay: float = 3.0
 
     @route("POST", "/process")
@@ -140,6 +142,7 @@ class ExtractorHandler(BaseHandler):
             {
                 "paper_id": 42,        # Optional: process specific paper
                 "max_papers": 10,      # Optional: batch limit (default 10)
+                "force_parser": "docling",  # Optional: override RAG parser
                 "force": false         # Optional: reprocess extracted/failed papers
             }
 
@@ -151,6 +154,13 @@ class ExtractorHandler(BaseHandler):
         paper_id = data.get("paper_id")
         max_papers: int = data.get("max_papers", self.max_papers_default)
         force = data.get("force", False)
+        force_parser = self.rag_force_parser
+        if "force_parser" in data:
+            try:
+                force_parser = normalize_rag_force_parser(data.get("force_parser"))
+            except ValueError as exc:
+                self.send_error_json(str(exc), "VALIDATION_ERROR", 400)
+                return None
 
         assert self.db_path is not None, "db_path must be set"
         db_path: str = self.db_path
@@ -196,7 +206,10 @@ class ExtractorHandler(BaseHandler):
 
                 # Step 2: RAGAnything processing
                 markdown = rag_client.process_paper(
-                    pdf_path, _build_extraction_paper_id(paper), self.rag_url
+                    pdf_path,
+                    _build_extraction_paper_id(paper),
+                    self.rag_url,
+                    force_parser=force_parser,
                 )
 
                 # Step 3: Extract formulas
@@ -349,6 +362,16 @@ def main() -> None:
     ExtractorHandler.rag_url = resolve_localhost_url(
         os.environ.get("RP_EXTRACTOR_RAG_URL", "http://localhost:8767")
     )
+    try:
+        ExtractorHandler.rag_force_parser = normalize_rag_force_parser(
+            os.environ.get("RP_EXTRACTOR_RAG_FORCE_PARSER")
+        )
+    except ValueError as exc:
+        logger.warning(
+            "Ignoring invalid RP_EXTRACTOR_RAG_FORCE_PARSER: %s",
+            exc,
+        )
+        ExtractorHandler.rag_force_parser = None
     ExtractorHandler.download_delay = float(
         os.environ.get("RP_EXTRACTOR_DOWNLOAD_DELAY", "3.0")
     )

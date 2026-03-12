@@ -35,6 +35,7 @@ from urllib.parse import parse_qs
 from shared.config import get_default_max_formulas, load_config, resolve_localhost_url
 from shared.db import init_db, transaction
 from shared.models import Formula, GitHubAnalysis, GitHubRepo, Paper
+from shared.rag import normalize_rag_force_parser
 from shared.server import BaseHandler, BaseService, route
 
 from services.orchestrator.github_search import search_and_analyze
@@ -75,6 +76,7 @@ def _resume_stuck_runs(runner: PipelineRunner) -> tuple[int, int]:
             stages=int(stuck.get("stages_requested") or 5),
             max_papers=params.get("max_papers", 10),
             max_formulas=params.get("max_formulas", get_default_max_formulas()),
+            force_parser=params.get("force_parser"),
             force=params.get("force", False),
         )
         resumed += 1
@@ -163,6 +165,7 @@ class OrchestratorHandler(BaseHandler):
                 "stages": 5,
                 "max_papers": 10,
                 "max_formulas": 100,
+                "force_parser": "docling",
                 "force": false
             }
 
@@ -176,8 +179,14 @@ class OrchestratorHandler(BaseHandler):
         stages = data.get("stages", 5)
         max_papers = data.get("max_papers", 10)
         max_formulas = data.get("max_formulas", get_default_max_formulas())
+        force_parser_raw = data.get("force_parser")
         force = data.get("force", False)
         skip_preflight = data.get("skip_preflight", False)
+        try:
+            force_parser = normalize_rag_force_parser(force_parser_raw)
+        except ValueError as exc:
+            self.send_error_json(str(exc), "VALIDATION_ERROR", 400)
+            return None
 
         # Validate
         if paper_id is not None and not isinstance(paper_id, int):
@@ -226,6 +235,7 @@ class OrchestratorHandler(BaseHandler):
             stages=stages,
             max_papers=max_papers,
             max_formulas=max_formulas,
+            force_parser=force_parser,
             force=force,
         )
 

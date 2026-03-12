@@ -150,6 +150,7 @@ class TestBuildStageParams:
             "paper_id": 42,
             "max_papers": 10,
             "max_formulas": 50,
+            "force_parser": "docling",
             "force": True,
         }
 
@@ -168,7 +169,12 @@ class TestBuildStageParams:
 
     def test_extractor_params(self):
         result = self.runner._build_stage_params("extractor", self.params)
-        assert result == {"paper_id": 42, "max_papers": 10, "force": True}
+        assert result == {
+            "paper_id": 42,
+            "max_papers": 10,
+            "force_parser": "docling",
+            "force": True,
+        }
 
     def test_validator_params(self):
         result = self.runner._build_stage_params("validator", self.params)
@@ -782,6 +788,40 @@ class TestOrchestratorHandler:
         assert mock_start_thread.call_args.kwargs["max_formulas"] == (
             get_default_max_formulas()
         )
+
+    @patch("services.orchestrator.main._start_pipeline_thread")
+    @patch(
+        "services.orchestrator.pipeline.PipelineRunner._generate_run_id",
+        return_value="run-125",
+    )
+    def test_handle_run_forwards_force_parser(
+        self, _mock_gen_id, mock_start_thread
+    ):
+        handler = OrchestratorHandler.__new__(OrchestratorHandler)
+        handler.runner = MagicMock()
+        handler.runner._resolve_stages.return_value = [("extractor", 8780)]
+        handler.runner.check_external_health.return_value = {
+            "all_healthy": True,
+            "deps": {
+                "rag": {"healthy": True},
+            },
+        }
+        handler.send_json = MagicMock()
+
+        handler.handle_run({"paper_id": 42, "stages": 1, "force_parser": "docling"})
+
+        assert mock_start_thread.call_args.kwargs["force_parser"] == "docling"
+
+    def test_handle_run_rejects_invalid_force_parser(self):
+        handler = OrchestratorHandler.__new__(OrchestratorHandler)
+        handler.runner = MagicMock()
+        handler.send_error_json = MagicMock()
+
+        res = handler.handle_run({"paper_id": 42, "force_parser": "invalid"})
+        assert res is None
+        handler.send_error_json.assert_called_once()
+        args = handler.send_error_json.call_args[0]
+        assert args[1] == "VALIDATION_ERROR"
 
     def test_handle_github_repos_no_paper_id(self):
         handler = OrchestratorHandler.__new__(OrchestratorHandler)
@@ -1731,7 +1771,10 @@ class TestPipelineConstants:
 
     def test_stage_params_extractor_mapping(self):
         assert STAGE_PARAMS["extractor"] == {
-            "paper_id": "paper_id", "max_papers": "max_papers", "force": "force",
+            "paper_id": "paper_id",
+            "max_papers": "max_papers",
+            "force_parser": "force_parser",
+            "force": "force",
         }
 
 

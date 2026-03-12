@@ -181,7 +181,12 @@ STAGE_PARAMS: dict[str, dict[str, str]] = {
         "max_papers": "max_papers",
         "force": "force",
     },
-    "extractor": {"paper_id": "paper_id", "max_papers": "max_papers", "force": "force"},
+    "extractor": {
+        "paper_id": "paper_id",
+        "max_papers": "max_papers",
+        "force_parser": "force_parser",
+        "force": "force",
+    },
     "validator": {
         "paper_id": "paper_id",
         "max_formulas": "max_formulas",
@@ -246,6 +251,7 @@ class PipelineRunner:
         stages: int = 5,
         max_papers: int = 10,
         max_formulas: int = get_default_max_formulas(),
+        force_parser: str | None = None,
         force: bool = False,
         run_id: str | None = None,
         extra_params: dict | None = None,
@@ -258,6 +264,7 @@ class PipelineRunner:
             stages: How many stages to advance (1-5).
             max_papers: Max papers per batch.
             max_formulas: Max formulas per batch.
+            force_parser: Optional RAG parser override for extractor.
             force: Reprocess already-processed items.
             run_id: Pre-generated run ID (for async runs).
 
@@ -275,6 +282,7 @@ class PipelineRunner:
             "paper_id": paper_id,
             "max_papers": max_papers,
             "max_formulas": max_formulas,
+            "force_parser": force_parser,
             "force": force,
         }
         if extra_params:
@@ -947,6 +955,7 @@ class PipelineRunner:
                 ),
                 default=get_default_max_formulas(),
             ),
+            "force_parser": source_params.get("force_parser"),
             "force": (
                 force if force is not None
                 else bool(source_params.get("force", False))
