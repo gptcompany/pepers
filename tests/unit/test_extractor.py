@@ -427,6 +427,24 @@ class TestSubmitPdf:
         with pytest.raises(RuntimeError, match="PEPERS_PROJECT_HOST_DIR"):
             submit_pdf(Path("/data/pdfs/test.pdf"), "2401.00001", "http://rag:8767")
 
+    @patch("services.extractor.rag_client.urllib.request.urlopen")
+    def test_prefix_mapping_does_not_match_partial_path_segment(
+        self,
+        mock_urlopen,
+        monkeypatch,
+    ):
+        mock_resp = MagicMock()
+        mock_resp.read.return_value = json.dumps({"job_id": "j1"}).encode()
+        mock_urlopen.return_value = mock_resp
+        monkeypatch.setattr(rag_client_module, "_PDF_DIR", "/data")
+        monkeypatch.setattr(rag_client_module, "_PDF_HOST_DIR", "/mnt/data")
+        monkeypatch.setattr(rag_client_module, "_PROJECT_HOST_DIR", "/project")
+
+        submit_pdf(Path("/datax/test.pdf"), "2401.00001", "http://rag:8767")
+        req = mock_urlopen.call_args[0][0]
+        body = json.loads(req.data.decode())
+        assert body["pdf_path"] == "/datax/test.pdf"
+
 
 # ---------------------------------------------------------------------------
 # TestPollJob
@@ -628,6 +646,30 @@ class TestReadMarkdown:
 
         result = read_markdown("../rag-service/data/out")
         assert "Relative output dir" in result
+
+    def test_replace_path_prefix_only_matches_true_prefix(self):
+        mapped = rag_client_module._replace_path_prefix(
+            "/data/out/file.md",
+            "/data",
+            "/rag-data",
+        )
+        assert mapped == "/rag-data/out/file.md"
+        assert (
+            rag_client_module._replace_path_prefix(
+                "/data-copy/out/file.md",
+                "/data",
+                "/rag-data",
+            )
+            is None
+        )
+
+    def test_replace_path_prefix_handles_relative_prefixes(self):
+        mapped = rag_client_module._replace_path_prefix(
+            "../rag-service/data/out/file.md",
+            "../rag-service/data",
+            "/rag-data",
+        )
+        assert mapped == "/rag-data/out/file.md"
 
 
 # ---------------------------------------------------------------------------
@@ -1144,6 +1186,17 @@ class TestExtractorRetryableErrors:
     def test_timeout_error_is_retryable(self):
         assert _is_retryable_extraction_error(TimeoutError("timed out")) is True
 
+    def test_read_timed_out_message_is_retryable(self):
+        assert _is_retryable_extraction_error(RuntimeError("Read timed out")) is True
+
+    def test_connection_reset_phrase_without_peer_is_not_retryable(self):
+        assert (
+            _is_retryable_extraction_error(
+                RuntimeError("connection reset is not allowed")
+            )
+            is False
+        )
+
     def test_query_papers_force_includes_failed(self, analyzed_paper_db):
         db_path = str(analyzed_paper_db)
         # Mark as failed
@@ -1166,6 +1219,43 @@ class TestExtractorRetryableErrors:
         _store_results(db_path, 1, [formula])
         # Calling again with same formula should not crash (UPDATE path)
         _store_results(db_path, 1, [formula])
+
+    def test_query_papers_skips_recent_retryable_within_cooldown(
+        self,
+        analyzed_paper_db,
+        monkeypatch,
+    ):
+        from shared.db import transaction
+
+        monkeypatch.setenv("RP_EXTRACTOR_RETRYABLE_COOLDOWN", "300")
+        db_path = str(analyzed_paper_db)
+        _mark_retryable(db_path, 1, "timed out")
+
+        papers = _query_papers(db_path, None, 10, False)
+        assert papers == []
+
+        with transaction(db_path) as conn:
+            conn.execute(
+                "UPDATE papers SET updated_at=datetime('now', '-10 minutes') WHERE id=1"
+            )
+
+        papers = _query_papers(db_path, None, 10, False)
+        assert len(papers) == 1
+
+    def test_query_specific_paper_skips_recent_retryable_without_force(
+        self,
+        analyzed_paper_db,
+        monkeypatch,
+    ):
+        monkeypatch.setenv("RP_EXTRACTOR_RETRYABLE_COOLDOWN", "300")
+        db_path = str(analyzed_paper_db)
+        _mark_retryable(db_path, 1, "timed out")
+
+        papers = _query_papers(db_path, 1, 10, False)
+        assert papers == []
+
+        papers = _query_papers(db_path, 1, 10, True)
+        assert len(papers) == 1
 
 
 class TestExtractorHandler:

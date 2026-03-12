@@ -22,6 +22,7 @@ from __future__ import annotations
 import http.client
 import logging
 import os
+import re
 import time
 import urllib.error
 from pathlib import Path
@@ -38,6 +39,16 @@ from services.extractor import latex, pdf, rag_client
 
 logger = logging.getLogger(__name__)
 _RETRYABLE_HTTP_STATUS = {408, 429, 500, 502, 503, 504}
+_RETRYABLE_COOLDOWN_SECONDS = 300
+_RETRYABLE_ERROR_PATTERNS = (
+    re.compile(r"\bread timed out\b"),
+    re.compile(r"\bconnect(?:ion)? timed out\b"),
+    re.compile(r"\bconnection reset by peer\b"),
+    re.compile(r"\bconnection aborted\b"),
+    re.compile(r"\bremote disconnected\b"),
+    re.compile(r"\bremote end closed connection without response\b"),
+    re.compile(r"\btemporarily unavailable\b"),
+)
 
 
 def _check_consistency(db_path: str) -> None:
@@ -87,6 +98,25 @@ def _build_extraction_paper_id(paper: Paper) -> str:
     raise ValueError("cannot build extraction document id")
 
 
+def _retryable_cooldown_seconds() -> int:
+    return max(
+        0,
+        int(
+            os.environ.get(
+                "RP_EXTRACTOR_RETRYABLE_COOLDOWN",
+                str(_RETRYABLE_COOLDOWN_SECONDS),
+            )
+        ),
+    )
+
+
+def _retryable_error_message(message: str) -> bool:
+    normalized = message.strip().lower()
+    if normalized in {"timed out", "timeout"}:
+        return True
+    return any(pattern.search(normalized) for pattern in _RETRYABLE_ERROR_PATTERNS)
+
+
 def _is_retryable_extraction_error(exc: BaseException) -> bool:
     """Return True when the extractor failure looks transient/retryable."""
     if isinstance(exc, requests.HTTPError):
@@ -107,18 +137,7 @@ def _is_retryable_extraction_error(exc: BaseException) -> bool:
         ),
     ):
         return True
-    message = str(exc).lower()
-    return any(
-        token in message
-        for token in (
-            "timed out",
-            "timeout",
-            "temporarily unavailable",
-            "connection reset",
-            "connection aborted",
-            "remote disconnected",
-        )
-    )
+    return _retryable_error_message(str(exc))
 
 
 class ExtractorHandler(BaseHandler):
@@ -277,6 +296,11 @@ def _query_papers(
     Batch mode filters out rows with no downloadable source so extractor does not
     spend its budget on papers that can only fail with `pdf/None`.
     """
+    retryable_clause = (
+        "(error IS NULL OR error NOT LIKE 'extractor retryable:%' "
+        "OR datetime(updated_at) <= datetime('now', ?))"
+    )
+    retryable_backoff = f"-{_retryable_cooldown_seconds()} seconds"
     with transaction(db_path) as conn:
         if paper_id is not None:
             if force:
@@ -287,16 +311,18 @@ def _query_papers(
                 )
             else:
                 cursor = conn.execute(
-                    "SELECT * FROM papers WHERE id=? AND stage='analyzed'",
-                    (paper_id,),
+                    f"SELECT * FROM papers WHERE id=? AND stage='analyzed' "
+                    f"AND {retryable_clause}",
+                    (paper_id, retryable_backoff),
                 )
         else:
             cursor = conn.execute(
                 "SELECT * FROM papers WHERE stage='analyzed' "
+                f"AND {retryable_clause} "
                 "AND (NULLIF(TRIM(COALESCE(arxiv_id, '')), '') IS NOT NULL "
                 "OR NULLIF(TRIM(COALESCE(pdf_url, '')), '') IS NOT NULL) "
                 "ORDER BY created_at ASC LIMIT ?",
-                (max_papers,),
+                (retryable_backoff, max_papers),
             )
         return [dict(row) for row in cursor.fetchall()]
 

@@ -15,7 +15,7 @@ import os
 import time
 import urllib.error
 import urllib.request
-from pathlib import Path
+from pathlib import Path, PurePosixPath
 
 from shared.rag import normalize_rag_force_parser
 
@@ -65,6 +65,24 @@ def _resolved_pdf_host_dir() -> str:
 
 def _resolved_rag_data_host() -> str:
     return _resolve_host_dir(_RAG_DATA_HOST)
+
+
+def _replace_path_prefix(
+    path_str: str,
+    src_prefix: str,
+    dst_prefix: str,
+) -> str | None:
+    """Replace only a true path prefix, not an arbitrary substring."""
+    if not src_prefix:
+        return None
+    try:
+        relative = PurePosixPath(path_str).relative_to(PurePosixPath(src_prefix))
+    except ValueError:
+        return None
+    dst_path = PurePosixPath(dst_prefix)
+    if str(relative) == ".":
+        return str(dst_path)
+    return str(dst_path / relative)
 
 
 def _request_retries() -> int:
@@ -209,8 +227,10 @@ def _map_to_host_path(container_path: Path) -> str:
     """Map container PDF path to host path for RAGAnything."""
     path_str = str(container_path)
     pdf_host_dir = _resolved_pdf_host_dir()
-    if pdf_host_dir and path_str.startswith(_PDF_DIR):
-        mapped = path_str.replace(_PDF_DIR, pdf_host_dir, 1)
+    if pdf_host_dir:
+        mapped = _replace_path_prefix(path_str, _PDF_DIR, pdf_host_dir)
+        if mapped is None:
+            return path_str
         logger.debug("Path mapped: %s → %s", path_str, mapped)
         return mapped
     return path_str
@@ -353,12 +373,16 @@ def read_markdown(output_dir: str) -> str:
             for mapping in custom.split(","):
                 if ":" in mapping:
                     src, dst = mapping.split(":", 1)
-                    add_candidate(base.replace(src, dst))
+                    mapped = _replace_path_prefix(base, src.strip(), dst.strip())
+                    if mapped:
+                        add_candidate(mapped)
     # Docker container: RAG data mounted at /rag-data
     rag_data_host = _resolved_rag_data_host()
     if rag_data_host:
         for base in list(candidates):
-            add_candidate(base.replace(rag_data_host, "/rag-data"))
+            mapped = _replace_path_prefix(base, rag_data_host, "/rag-data")
+            if mapped:
+                add_candidate(mapped)
 
     for candidate in candidates:
         path = Path(candidate)
