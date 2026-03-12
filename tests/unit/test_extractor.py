@@ -10,6 +10,7 @@ from pathlib import Path
 from unittest.mock import MagicMock, patch
 
 import pytest
+import requests
 
 from services.extractor.pdf import (
     EXPORT_BASE,
@@ -41,8 +42,10 @@ from services.extractor.main import (
     ExtractorHandler,
     _build_extraction_paper_id,
     _check_consistency,
+    _is_retryable_extraction_error,
     _load_notations,
     _mark_failed,
+    _mark_retryable,
     _query_papers,
     _store_results,
 )
@@ -567,6 +570,24 @@ class TestReadMarkdown:
         result = read_markdown(str(host_dir))
         assert "Relative host mapping" in result
 
+    def test_read_markdown_resolves_relative_output_dir(self, tmp_path, monkeypatch):
+        host_dir = tmp_path / "rag-service" / "data" / "out"
+        host_dir.mkdir(parents=True)
+        (host_dir / "output.md").write_text("# Relative output dir")
+        monkeypatch.setattr(
+            rag_client_module,
+            "_PROJECT_HOST_DIR",
+            str(tmp_path / "pepers"),
+        )
+        monkeypatch.setattr(
+            rag_client_module,
+            "_RAG_DATA_HOST",
+            "../rag-service/data",
+        )
+
+        result = read_markdown("../rag-service/data/out")
+        assert "Relative output dir" in result
+
 
 # ---------------------------------------------------------------------------
 # TestProcessPaper
@@ -1021,6 +1042,48 @@ class TestExtractorHelpers:
         assert "extractor error" in row["error"]
         conn.close()
 
+    def test_mark_retryable(self, analyzed_paper_db):
+        db_path = str(analyzed_paper_db)
+        _mark_retryable(db_path, 1, "timed out")
+        from shared.db import get_connection
+
+        conn = get_connection(db_path)
+        row = conn.execute("SELECT stage, error FROM papers WHERE id=1").fetchone()
+        assert row["stage"] == "analyzed"
+        assert "retryable" in row["error"]
+        assert "timed out" in row["error"]
+        conn.close()
+
+    def test_store_results_clears_previous_error(self, analyzed_paper_db):
+        db_path = str(analyzed_paper_db)
+        _mark_failed(db_path, 1, "old error")
+
+        formula = Formula(paper_id=1, latex="x=1+2", formula_type="inline", context="c")
+        _store_results(db_path, 1, [formula])
+
+        from shared.db import get_connection
+
+        conn = get_connection(db_path)
+        row = conn.execute("SELECT stage, error FROM papers WHERE id=1").fetchone()
+        assert row["stage"] == "extracted"
+        assert row["error"] is None
+        conn.close()
+
+
+class TestExtractorRetryableErrors:
+    def test_requests_http_429_is_retryable(self):
+        err = requests.HTTPError("429 Client Error")
+        err.response = MagicMock(status_code=429)
+        assert _is_retryable_extraction_error(err) is True
+
+    def test_requests_http_403_is_not_retryable(self):
+        err = requests.HTTPError("403 Client Error")
+        err.response = MagicMock(status_code=403)
+        assert _is_retryable_extraction_error(err) is False
+
+    def test_timeout_error_is_retryable(self):
+        assert _is_retryable_extraction_error(TimeoutError("timed out")) is True
+
     def test_query_papers_force_includes_failed(self, analyzed_paper_db):
         db_path = str(analyzed_paper_db)
         # Mark as failed
@@ -1102,6 +1165,39 @@ class TestExtractorHandler:
         conn = get_connection(db_path)
         p_row = conn.execute("SELECT stage FROM papers WHERE id=1").fetchone()
         assert p_row["stage"] == "extracted"
+        conn.close()
+
+    @patch("services.extractor.main.pdf.create_session")
+    @patch("services.extractor.main.pdf.download_pdf")
+    @patch("services.extractor.main.rag_client.process_paper")
+    @patch("services.extractor.main.rag_client.check_service")
+    def test_handle_process_retryable_failure_keeps_paper_analyzed(
+        self, mock_check, mock_rag, mock_pdf, mock_session, analyzed_paper_db
+    ):
+        from shared.db import get_connection
+
+        db_path = str(analyzed_paper_db)
+        handler = ExtractorHandler.__new__(ExtractorHandler)
+        handler.db_path = db_path
+        handler.pdf_dir = "/tmp"
+        handler.download_delay = 0
+        handler.rag_url = "http://rag"
+
+        mock_check.return_value = {"status": "ok"}
+        mock_pdf.return_value = Path("/tmp/p.pdf")
+        mock_rag.side_effect = TimeoutError("RAGAnything job timed out")
+
+        resp = handler.handle_process({"paper_id": 1})
+        assert resp["success"] is False
+        assert resp["papers_processed"] == 0
+        assert resp["papers_failed"] == 0
+        assert resp["papers_deferred"] == 1
+
+        conn = get_connection(db_path)
+        row = conn.execute("SELECT stage, error FROM papers WHERE id=1").fetchone()
+        assert row["stage"] == "analyzed"
+        assert "retryable" in row["error"]
+        assert "timed out" in row["error"]
         conn.close()
 
     @patch("services.extractor.main.pdf.create_session")

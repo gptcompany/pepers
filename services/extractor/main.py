@@ -19,10 +19,14 @@ Environment:
 
 from __future__ import annotations
 
+import http.client
 import logging
 import os
 import time
+import urllib.error
 from pathlib import Path
+
+import requests
 
 from shared.config import load_config, resolve_localhost_url
 from shared.db import get_connection, init_db, transaction
@@ -32,6 +36,7 @@ from shared.server import BaseHandler, BaseService, route
 from services.extractor import latex, pdf, rag_client
 
 logger = logging.getLogger(__name__)
+_RETRYABLE_HTTP_STATUS = {408, 429, 500, 502, 503, 504}
 
 
 def _check_consistency(db_path: str) -> None:
@@ -79,6 +84,40 @@ def _build_extraction_paper_id(paper: Paper) -> str:
     if paper.doi:
         return f"doi:{paper.doi}"
     raise ValueError("cannot build extraction document id")
+
+
+def _is_retryable_extraction_error(exc: BaseException) -> bool:
+    """Return True when the extractor failure looks transient/retryable."""
+    if isinstance(exc, requests.HTTPError):
+        status = getattr(getattr(exc, "response", None), "status_code", None)
+        return status in _RETRYABLE_HTTP_STATUS
+    if isinstance(exc, urllib.error.HTTPError):
+        return exc.code in _RETRYABLE_HTTP_STATUS
+    if isinstance(exc, (requests.Timeout, requests.ConnectionError)):
+        return True
+    if isinstance(
+        exc,
+        (
+            TimeoutError,
+            urllib.error.URLError,
+            ConnectionError,
+            ConnectionResetError,
+            http.client.HTTPException,
+        ),
+    ):
+        return True
+    message = str(exc).lower()
+    return any(
+        token in message
+        for token in (
+            "timed out",
+            "timeout",
+            "temporarily unavailable",
+            "connection reset",
+            "connection aborted",
+            "remote disconnected",
+        )
+    )
 
 
 class ExtractorHandler(BaseHandler):
@@ -138,6 +177,7 @@ class ExtractorHandler(BaseHandler):
         errors: list[str] = []
         total_formulas = 0
         papers_ok = 0
+        papers_deferred = 0
 
         for i, paper_row in enumerate(papers):
             pid = paper_row["id"]
@@ -183,7 +223,11 @@ class ExtractorHandler(BaseHandler):
             except Exception as e:
                 logger.error("Failed paper %d: %s", pid, e)
                 errors.append(f"paper {pid}: {e}")
-                _mark_failed(db_path, pid, str(e))
+                if _is_retryable_extraction_error(e):
+                    papers_deferred += 1
+                    _mark_retryable(db_path, pid, str(e))
+                else:
+                    _mark_failed(db_path, pid, str(e))
 
             # Rate limit between papers
             if i < len(papers) - 1:
@@ -201,7 +245,8 @@ class ExtractorHandler(BaseHandler):
             "service": "extractor",
             "papers_processed": papers_ok,
             "formulas_extracted": total_formulas,
-            "papers_failed": len(errors),
+            "papers_failed": len(errors) - papers_deferred,
+            "papers_deferred": papers_deferred,
             "errors": errors,
             "time_ms": elapsed_ms,
         }
@@ -265,9 +310,19 @@ def _store_results(db_path: str, paper_id: int, formulas: list[Formula]) -> None
             )
 
         conn.execute(
-            "UPDATE papers SET stage='extracted', updated_at=datetime('now') "
+            "UPDATE papers SET stage='extracted', error=NULL, updated_at=datetime('now') "
             "WHERE id=?",
             (paper_id,),
+        )
+
+
+def _mark_retryable(db_path: str, paper_id: int, error: str) -> None:
+    """Keep paper retryable when extractor failed for a transient reason."""
+    with transaction(db_path) as conn:
+        conn.execute(
+            "UPDATE papers SET stage='analyzed', error=?, "
+            "updated_at=datetime('now') WHERE id=?",
+            (f"extractor retryable: {error}", paper_id),
         )
 
 

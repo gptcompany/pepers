@@ -308,17 +308,27 @@ def read_markdown(output_dir: str) -> str:
     """
     # Path mappings to try (RAGAnything output → accessible path)
     # Configure via RP_EXTRACTOR_PATH_MAPPINGS="src1:dst1,src2:dst2"
-    candidates = [output_dir]
+    candidates: list[str] = []
+
+    def add_candidate(path_str: str) -> None:
+        if path_str and path_str not in candidates:
+            candidates.append(path_str)
+
+    add_candidate(output_dir)
+    add_candidate(_resolve_host_dir(output_dir))
+
     custom = os.environ.get("RP_EXTRACTOR_PATH_MAPPINGS", "")
     if custom:
-        for mapping in custom.split(","):
-            if ":" in mapping:
-                src, dst = mapping.split(":", 1)
-                candidates.append(output_dir.replace(src, dst))
+        for base in list(candidates):
+            for mapping in custom.split(","):
+                if ":" in mapping:
+                    src, dst = mapping.split(":", 1)
+                    add_candidate(base.replace(src, dst))
     # Docker container: RAG data mounted at /rag-data
     rag_data_host = _resolved_rag_data_host()
     if rag_data_host:
-        candidates.append(output_dir.replace(rag_data_host, "/rag-data"))
+        for base in list(candidates):
+            add_candidate(base.replace(rag_data_host, "/rag-data"))
 
     for candidate in candidates:
         path = Path(candidate)
@@ -329,9 +339,7 @@ def read_markdown(output_dir: str) -> str:
                 logger.debug("Reading markdown from: %s", md_files[0])
                 return md_files[0].read_text(encoding="utf-8")
 
-    raise FileNotFoundError(
-        f"No markdown files found. Tried: {[c for c in candidates if c != output_dir]}"
-    )
+    raise FileNotFoundError(f"No markdown files found. Tried: {candidates}")
 
 
 def process_paper(
