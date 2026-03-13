@@ -40,6 +40,7 @@ from services.extractor import latex, pdf, rag_client
 logger = logging.getLogger(__name__)
 _RETRYABLE_HTTP_STATUS = {408, 429, 500, 502, 503, 504}
 _RETRYABLE_COOLDOWN_SECONDS = 300
+_MATH_SIGNAL_CHARS = frozenset("∑∫∞∂∇≤≥≈→←↔±×·√αβγδλμστωφθπ")
 _RETRYABLE_ERROR_PATTERNS = (
     re.compile(r"\bread timed out\b"),
     re.compile(r"\bconnect(?:ion)? timed out\b"),
@@ -145,6 +146,34 @@ def _is_retryable_extraction_error(exc: BaseException) -> bool:
     return _retryable_error_message(str(exc))
 
 
+def _has_math_signals(text: str) -> bool:
+    """Return True when markdown still looks equation-heavy without LaTeX markup."""
+    if any(ch in text for ch in _MATH_SIGNAL_CHARS):
+        return True
+
+    return bool(
+        re.search(
+            r"[A-Za-z0-9α-ωΑ-Ω]\s*=\s*[A-Za-z0-9α-ωΑ-Ω({\[]",
+            text,
+        )
+        or re.search(r"\b(?:argmin|argmax|minimize|maximize)\b", text, re.IGNORECASE)
+    )
+
+
+def _should_retry_with_mineru(
+    parser: str | None,
+    markdown: str,
+    raw_formulas: list[dict],
+    filtered_formulas: list[dict],
+) -> bool:
+    """Fallback to MinerU when alternate parsers flatten math into plain text."""
+    if parser in {None, "mineru"}:
+        return False
+    if raw_formulas or filtered_formulas:
+        return False
+    return _has_math_signals(markdown)
+
+
 class ExtractorHandler(BaseHandler):
     """Handler for the Extractor service.
 
@@ -245,6 +274,23 @@ class ExtractorHandler(BaseHandler):
                 # Step 3: Extract formulas
                 raw = latex.extract_formulas(markdown)
                 filtered = latex.filter_formulas(raw)
+
+                if _should_retry_with_mineru(force_parser, markdown, raw, filtered):
+                    logger.info(
+                        "Paper %d: %s yielded 0 LaTeX formulas despite math "
+                        "signals; retrying with mineru",
+                        pid,
+                        force_parser,
+                    )
+                    markdown = rag_client.process_paper(
+                        pdf_path,
+                        _build_extraction_paper_id(paper),
+                        self.rag_url,
+                        force_parser="mineru",
+                        force_reprocess=True,
+                    )
+                    raw = latex.extract_formulas(markdown)
+                    filtered = latex.filter_formulas(raw)
 
                 # Step 3b: Expand custom notations
                 notations = _load_notations(db_path)

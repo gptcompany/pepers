@@ -42,11 +42,13 @@ from services.extractor.main import (
     ExtractorHandler,
     _build_extraction_paper_id,
     _check_consistency,
+    _has_math_signals,
     _is_retryable_extraction_error,
     _load_notations,
     _mark_failed,
     _mark_retryable,
     _query_papers,
+    _should_retry_with_mineru,
     _store_results,
 )
 from shared.models import Formula, Paper
@@ -1326,6 +1328,18 @@ class TestExtractorRetryableErrors:
 class TestExtractorHandler:
     """Tests for ExtractorHandler.handle_process()."""
 
+    def test_has_math_signals_detects_plaintext_equations(self):
+        assert _has_math_signals("H = H kin + H int and α_i = 1 / sqrt(N)") is True
+        assert _has_math_signals("Pure prose without equations or symbols.") is False
+
+    def test_should_retry_with_mineru_only_for_non_mineru_zero_formula_results(self):
+        markdown = "H = H kin + H int where α_i = 1 / sqrt(N)"
+
+        assert _should_retry_with_mineru("docling", markdown, [], []) is True
+        assert _should_retry_with_mineru("mineru", markdown, [], []) is False
+        assert _should_retry_with_mineru(None, markdown, [], []) is False
+        assert _should_retry_with_mineru("docling", markdown, [{"latex": "x"}], []) is False
+
     @patch("services.extractor.main.pdf.create_session")
     @patch("services.extractor.main.pdf.download_pdf")
     @patch("services.extractor.main.rag_client.process_paper")
@@ -1369,7 +1383,7 @@ class TestExtractorHandler:
         mock_check.return_value = {"status": "ok"}
         mock_pdf.return_value = Path("/tmp/p.pdf")
         # Formula needs to be > 10 chars and have an operator to be non-trivial
-        mock_rag.return_value = "$$ E = m c^2 + \alpha \beta \gamma $$"
+        mock_rag.return_value = "$$ E = m c^2 + \\alpha \\beta \\gamma $$"
         
         resp = handler.handle_process({"paper_id": 1})
         assert resp["success"] is True
@@ -1438,6 +1452,67 @@ class TestExtractorHandler:
         assert resp["success"] is True
         assert mock_rag.call_args.kwargs["force_parser"] == "docling"
         assert mock_rag.call_args.kwargs["force_reprocess"] is True
+
+    @patch("services.extractor.main.pdf.create_session")
+    @patch("services.extractor.main.pdf.download_pdf")
+    @patch("services.extractor.main.rag_client.process_paper")
+    @patch("services.extractor.main.rag_client.check_service")
+    def test_handle_process_retries_mineru_when_docling_flattens_math(
+        self, mock_check, mock_rag, mock_pdf, mock_session, analyzed_paper_db
+    ):
+        db_path = str(analyzed_paper_db)
+        handler = ExtractorHandler.__new__(ExtractorHandler)
+        handler.db_path = db_path
+        handler.pdf_dir = "/tmp"
+        handler.download_delay = 0
+        handler.rag_url = "http://rag"
+        handler.rag_force_parser = None
+
+        mock_check.return_value = {"status": "ok"}
+        mock_pdf.return_value = Path("/tmp/p.pdf")
+        mock_rag.side_effect = [
+            "H = H kin + H int where α_i = 1 / sqrt(N)",
+            "$$ E = m c^2 + \\alpha \\beta \\gamma $$",
+        ]
+
+        resp = handler.handle_process({"paper_id": 1, "force_parser": "docling"})
+
+        assert resp["success"] is True
+        assert resp["papers_processed"] == 1
+        assert resp["formulas_extracted"] == 1
+        assert mock_rag.call_count == 2
+        first_call = mock_rag.call_args_list[0].kwargs
+        second_call = mock_rag.call_args_list[1].kwargs
+        assert first_call["force_parser"] == "docling"
+        assert first_call["force_reprocess"] is True
+        assert second_call["force_parser"] == "mineru"
+        assert second_call["force_reprocess"] is True
+
+    @patch("services.extractor.main.pdf.create_session")
+    @patch("services.extractor.main.pdf.download_pdf")
+    @patch("services.extractor.main.rag_client.process_paper")
+    @patch("services.extractor.main.rag_client.check_service")
+    def test_handle_process_skips_mineru_retry_for_non_math_markdown(
+        self, mock_check, mock_rag, mock_pdf, mock_session, analyzed_paper_db
+    ):
+        db_path = str(analyzed_paper_db)
+        handler = ExtractorHandler.__new__(ExtractorHandler)
+        handler.db_path = db_path
+        handler.pdf_dir = "/tmp"
+        handler.download_delay = 0
+        handler.rag_url = "http://rag"
+        handler.rag_force_parser = None
+
+        mock_check.return_value = {"status": "ok"}
+        mock_pdf.return_value = Path("/tmp/p.pdf")
+        mock_rag.return_value = "This document is prose-only and contains no equations."
+
+        resp = handler.handle_process({"paper_id": 1, "force_parser": "docling"})
+
+        assert resp["success"] is True
+        assert resp["papers_processed"] == 1
+        assert resp["formulas_extracted"] == 0
+        mock_rag.assert_called_once()
 
     def test_handle_process_rejects_invalid_force_parser(self, analyzed_paper_db):
         handler = ExtractorHandler.__new__(ExtractorHandler)
