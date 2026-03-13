@@ -99,15 +99,20 @@ def _build_extraction_paper_id(paper: Paper) -> str:
 
 
 def _retryable_cooldown_seconds() -> int:
-    return max(
-        0,
-        int(
-            os.environ.get(
-                "RP_EXTRACTOR_RETRYABLE_COOLDOWN",
-                str(_RETRYABLE_COOLDOWN_SECONDS),
-            )
-        ),
+    raw = os.environ.get(
+        "RP_EXTRACTOR_RETRYABLE_COOLDOWN",
+        str(_RETRYABLE_COOLDOWN_SECONDS),
     )
+    try:
+        parsed = int(raw)
+    except (TypeError, ValueError):
+        logger.warning(
+            "Ignoring invalid RP_EXTRACTOR_RETRYABLE_COOLDOWN=%r; using %d",
+            raw,
+            _RETRYABLE_COOLDOWN_SECONDS,
+        )
+        parsed = _RETRYABLE_COOLDOWN_SECONDS
+    return max(0, parsed)
 
 
 def _retryable_error_message(message: str) -> bool:

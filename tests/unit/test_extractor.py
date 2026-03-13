@@ -1231,6 +1231,13 @@ class TestExtractorHelpers:
 
 
 class TestExtractorRetryableErrors:
+    def test_invalid_retryable_cooldown_env_uses_default(self, monkeypatch):
+        monkeypatch.setenv("RP_EXTRACTOR_RETRYABLE_COOLDOWN", "not-a-number")
+        assert rag_client_module is not None  # keep module imported for monkeypatch scope
+        from services.extractor.main import _retryable_cooldown_seconds
+
+        assert _retryable_cooldown_seconds() == 300
+
     def test_requests_http_429_is_retryable(self):
         err = requests.HTTPError("429 Client Error")
         err.response = MagicMock(status_code=429)
