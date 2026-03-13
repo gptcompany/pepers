@@ -427,6 +427,17 @@ class TestSubmitPdf:
         with pytest.raises(RuntimeError, match="PEPERS_PROJECT_HOST_DIR"):
             submit_pdf(Path("/data/pdfs/test.pdf"), "2401.00001", "http://rag:8767")
 
+    def test_validate_path_config_rejects_relative_host_paths_without_project_root(
+        self,
+        monkeypatch,
+    ):
+        monkeypatch.setattr(rag_client_module, "_PDF_HOST_DIR", "../rag-service/data/pdfs")
+        monkeypatch.setattr(rag_client_module, "_RAG_DATA_HOST", "../rag-service/data")
+        monkeypatch.setattr(rag_client_module, "_PROJECT_HOST_DIR", "")
+
+        with pytest.raises(RuntimeError, match="PEPERS_PROJECT_HOST_DIR"):
+            rag_client_module.validate_path_config()
+
     @patch("services.extractor.rag_client.urllib.request.urlopen")
     def test_prefix_mapping_does_not_match_partial_path_segment(
         self,
@@ -1520,3 +1531,33 @@ class TestExtractorHandler:
         resp = handler.handle_process({})
         assert resp is None
         handler.send_error_json.assert_called_once()
+
+    @patch("services.extractor.main.rag_client.validate_path_config")
+    @patch("services.extractor.main.rag_client.check_service")
+    def test_handle_process_bad_path_config_returns_service_error(
+        self,
+        mock_check,
+        mock_validate,
+        analyzed_paper_db,
+    ):
+        from shared.db import get_connection
+
+        db_path = str(analyzed_paper_db)
+        handler = ExtractorHandler.__new__(ExtractorHandler)
+        handler.db_path = db_path
+        handler.pdf_dir = "/tmp"
+        handler.rag_url = "http://rag"
+        handler.send_error_json = MagicMock()
+        mock_check.return_value = {"status": "ok"}
+        mock_validate.side_effect = RuntimeError("Relative extractor host paths require PEPERS_PROJECT_HOST_DIR")
+
+        resp = handler.handle_process({"paper_id": 1})
+        assert resp is None
+        handler.send_error_json.assert_called_once()
+        args = handler.send_error_json.call_args[0]
+        assert args[1] == "CONFIG_ERROR"
+
+        conn = get_connection(db_path)
+        row = conn.execute("SELECT stage FROM papers WHERE id=1").fetchone()
+        conn.close()
+        assert row["stage"] == "analyzed"

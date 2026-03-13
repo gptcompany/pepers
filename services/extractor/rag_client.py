@@ -67,6 +67,14 @@ def _resolved_rag_data_host() -> str:
     return _resolve_host_dir(_RAG_DATA_HOST)
 
 
+def validate_path_config() -> None:
+    """Fail fast on host-path mapping misconfiguration."""
+    if _PDF_HOST_DIR:
+        _resolved_pdf_host_dir()
+    if _RAG_DATA_HOST:
+        _resolved_rag_data_host()
+
+
 def _replace_path_prefix(
     path_str: str,
     src_prefix: str,

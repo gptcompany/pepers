@@ -201,6 +201,11 @@ class ExtractorHandler(BaseHandler):
         except Exception as e:
             self.send_error_json(str(e), "SERVICE_UNAVAILABLE", 503)
             return None
+        try:
+            rag_client.validate_path_config()
+        except RuntimeError as e:
+            self.send_error_json(str(e), "CONFIG_ERROR", 503)
+            return None
 
         session = pdf.create_session()
         errors: list[str] = []
