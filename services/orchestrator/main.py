@@ -207,7 +207,12 @@ class OrchestratorHandler(BaseHandler):
 
         # Preflight: check only the external deps needed by requested stages
         if not skip_preflight:
-            stage_list = self.runner._resolve_stages(query, paper_id, stages)
+            stage_list = self.runner._resolve_stages(
+                query,
+                paper_id,
+                stages,
+                force=force,
+            )
             ok, down = self._check_required_deps(
                 [stage_name for stage_name, _ in stage_list]
             )

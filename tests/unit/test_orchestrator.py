@@ -107,6 +107,27 @@ class TestResolveStages:
         stages = self.runner._resolve_stages(query=None, paper_id=42, stages=5)
         assert stages == []
 
+    @patch.object(PipelineRunner, "_get_paper_stage", return_value="failed")
+    def test_failed_paper_force_restarts_extractor(self, mock_stage):
+        stages = self.runner._resolve_stages(
+            query=None,
+            paper_id=42,
+            stages=2,
+            force=True,
+        )
+        assert [name for name, _ in stages] == ["extractor", "validator"]
+
+    @patch.object(PipelineRunner, "_get_paper_stage", return_value="failed")
+    def test_failed_paper_force_uses_failed_stage_hint(self, mock_stage):
+        stages = self.runner._resolve_stages(
+            query=None,
+            paper_id=42,
+            stages=2,
+            force=True,
+            failed_stage="validator",
+        )
+        assert [name for name, _ in stages] == ["validator", "codegen"]
+
     def test_stages_clamped_to_1_min(self):
         stages = self.runner._resolve_stages(query="test", paper_id=None, stages=0)
         assert len(stages) == 1
@@ -459,6 +480,84 @@ class TestRunPipeline:
 
         assert "time_ms" in result
         assert isinstance(result["time_ms"], int)
+
+    @patch.object(PipelineRunner, "_get_paper_stage", return_value="failed")
+    @patch.object(PipelineRunner, "_call_service_with_retry")
+    def test_force_run_restarts_failed_paper_from_extractor(self, mock_call, mock_stage):
+        mock_call.side_effect = [
+            {
+                "success": True,
+                "service": "extractor",
+                "papers_processed": 1,
+                "formulas_extracted": 3,
+                "papers_failed": 0,
+                "errors": [],
+            },
+            {
+                "success": True,
+                "service": "validator",
+                "formulas_processed": 3,
+                "errors": [],
+            },
+            {
+                "success": True,
+                "service": "validator",
+                "formulas_processed": 0,
+                "errors": [],
+            },
+        ]
+
+        result = self.runner.run(paper_id=42, stages=2, force=True)
+
+        assert result["status"] == "completed"
+        assert list(result["results"]) == ["extractor", "validator"]
+        assert mock_call.call_args_list[0].args[0].endswith("/process")
+        assert mock_call.call_args_list[0].args[1]["paper_id"] == 42
+        assert mock_call.call_args_list[0].args[1]["force"] is True
+
+
+class TestBuildRequeuePlan:
+    def test_failed_paper_run_requeue_forces_restart_from_failed_stage(
+        self, initialized_db
+    ):
+        runner = PipelineRunner(str(initialized_db))
+        with transaction(str(initialized_db)) as conn:
+            conn.execute(
+                "INSERT INTO papers (id, title, stage, created_at, updated_at) "
+                "VALUES (42, 'Test paper', 'failed', datetime('now'), datetime('now'))"
+            )
+
+        runner._create_run_record(
+            "run-old",
+            {
+                "paper_id": 42,
+                "max_papers": 10,
+                "max_formulas": 5,
+                "force": False,
+            },
+            2,
+        )
+        runner._update_run_record(
+            "run-old",
+            {
+                "status": "failed",
+                "results": {
+                    "extractor": {
+                        "status": "failed",
+                        "error": "timed out",
+                    }
+                },
+                "errors": ["extractor: timed out"],
+                "stages_completed": 0,
+            },
+        )
+
+        plan = runner.build_requeue_plan("run-old")
+
+        assert plan["strategy"] == "resume_from_current_stage"
+        assert plan["params"]["force"] is True
+        assert plan["params"]["requeue_source_failed_stage"] == "extractor"
+        assert plan["stage_names"] == ["extractor", "validator"]
 
     def test_run_persists_progress_between_stages(self, initialized_db):
         runner = PipelineRunner(str(initialized_db))
