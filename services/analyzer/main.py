@@ -46,20 +46,59 @@ logger = logging.getLogger(__name__)
 
 DEFAULT_ANALYZER_FALLBACK_ORDER = [
     "gemini_cli",
-    "gemini_sdk",
-    "openrouter",
     "ollama",
+    "openrouter",
 ]
 
 
 def _analyzer_fallback_order() -> list[str]:
-    """Prefer fast Gemini/OpenRouter providers before local heavy fallbacks."""
+    """Use gemini_cli as the only Gemini path and drop gemini_sdk entirely."""
     raw = os.environ.get("RP_ANALYZER_LLM_FALLBACK_ORDER")
     if raw is not None:
-        return parse_provider_order(raw, DEFAULT_ANALYZER_FALLBACK_ORDER)
+        order = parse_provider_order(raw, DEFAULT_ANALYZER_FALLBACK_ORDER)
+    else:
+        global_raw = os.environ.get("RP_LLM_FALLBACK_ORDER")
+        order = parse_provider_order(global_raw, DEFAULT_ANALYZER_FALLBACK_ORDER)
 
-    global_raw = os.environ.get("RP_LLM_FALLBACK_ORDER")
-    return parse_provider_order(global_raw, DEFAULT_ANALYZER_FALLBACK_ORDER)
+    filtered = [provider for provider in order if provider != "gemini_sdk"]
+    return filtered or list(DEFAULT_ANALYZER_FALLBACK_ORDER)
+
+
+def _call_analyzer_llm(
+    prompt: str,
+    system_prompt: str,
+    fallback_order: list[str],
+) -> tuple[str, str]:
+    """Try configured providers first, then analyzer-specific rescue providers."""
+    try:
+        return fallback_chain(
+            prompt,
+            system_prompt,
+            order=fallback_order,
+        )
+    except RuntimeError as primary_error:
+        remaining_order: list[str] = []
+        for provider in ["ollama", *DEFAULT_ANALYZER_FALLBACK_ORDER]:
+            if provider not in fallback_order and provider not in remaining_order:
+                remaining_order.append(provider)
+
+        if not remaining_order:
+            raise
+
+        logger.warning(
+            "Analyzer LLM retry with remaining providers: %s",
+            ",".join(remaining_order),
+        )
+        try:
+            return fallback_chain(
+                prompt,
+                system_prompt,
+                order=remaining_order,
+            )
+        except RuntimeError as remaining_error:
+            raise RuntimeError(
+                f"{primary_error}; remaining providers failed: {remaining_error}"
+            ) from remaining_error
 
 
 def migrate_db(db_path: str) -> None:
@@ -199,10 +238,10 @@ class AnalyzerHandler(BaseHandler):
 
             # Call LLM
             try:
-                response_text, provider = fallback_chain(
+                response_text, provider = _call_analyzer_llm(
                     prompt,
                     system_prompt,
-                    order=fallback_order,
+                    fallback_order,
                 )
                 last_provider = provider
             except RuntimeError as e:
@@ -338,16 +377,18 @@ def _parse_llm_response(
     except json.JSONDecodeError:
         logger.warning("Invalid JSON from LLM for paper %d, retrying", paper_id)
 
+    retry_order = fallback_order or DEFAULT_ANALYZER_FALLBACK_ORDER
+
     # Retry with stricter suffix
     retry_prompt = (
         prompt
         + "\n\nRespond ONLY with valid JSON, no markdown fences, no extra text."
     )
     try:
-        response_text, _ = fallback_chain(
+        response_text, _ = _call_analyzer_llm(
             retry_prompt,
             system_prompt,
-            order=fallback_order,
+            retry_order,
         )
         return json.loads(_clean_json_text(response_text))
     except (json.JSONDecodeError, RuntimeError) as e:

@@ -110,21 +110,25 @@ class TestAnalyzerFallbackOrder:
     def test_default_order(self, monkeypatch):
         monkeypatch.delenv("RP_ANALYZER_LLM_FALLBACK_ORDER", raising=False)
         monkeypatch.delenv("RP_LLM_FALLBACK_ORDER", raising=False)
-        assert _analyzer_fallback_order() == DEFAULT_ANALYZER_FALLBACK_ORDER
+        assert _analyzer_fallback_order() == [
+            "gemini_cli",
+            "ollama",
+            "openrouter",
+        ]
 
     def test_global_env_fallback(self, monkeypatch):
         monkeypatch.delenv("RP_ANALYZER_LLM_FALLBACK_ORDER", raising=False)
-        monkeypatch.setenv("RP_LLM_FALLBACK_ORDER", "openrouter,ollama")
+        monkeypatch.setenv("RP_LLM_FALLBACK_ORDER", "openrouter,gemini_sdk,ollama")
         assert _analyzer_fallback_order() == ["openrouter", "ollama"]
 
     def test_env_override(self, monkeypatch):
         monkeypatch.setenv("RP_LLM_FALLBACK_ORDER", "openrouter,ollama")
         monkeypatch.setenv(
             "RP_ANALYZER_LLM_FALLBACK_ORDER",
-            "gemini_sdk,openrouter,ollama",
+            "gemini_cli,gemini_sdk,openrouter,ollama",
         )
         assert _analyzer_fallback_order() == [
-            "gemini_sdk",
+            "gemini_cli",
             "openrouter",
             "ollama",
         ]
@@ -538,21 +542,59 @@ class TestAnalyzerHandlerValidation:
             {"id": 1, "title": "Test", "abstract": "A " * 30,
              "authors": '["A"]', "categories": '["math.RT"]'},
         ]
-        mock_fc.return_value = (sample_llm_response_json, "gemini_sdk")
+        mock_fc.return_value = (sample_llm_response_json, "gemini_cli")
         monkeypatch.setenv(
             "RP_ANALYZER_LLM_FALLBACK_ORDER",
-            "gemini_sdk,openrouter,ollama",
+            "gemini_cli,openrouter,ollama",
         )
 
         handler = self._make_handler()
         AnalyzerHandler.handle_process(handler, {})
 
         assert mock_fc.call_args.kwargs["order"] == [
-            "gemini_sdk",
+            "gemini_cli",
             "openrouter",
             "ollama",
         ]
         mock_update.assert_called_once()
+
+    @patch("services.analyzer.main._update_paper_score")
+    @patch("services.analyzer.main.fallback_chain")
+    @patch("services.analyzer.main._query_papers")
+    def test_handle_process_retries_remaining_providers(
+        self,
+        mock_query,
+        mock_fc,
+        mock_update,
+        sample_llm_response_json,
+        monkeypatch,
+    ):
+        mock_query.return_value = [
+            {"id": 1, "title": "Test", "abstract": "A " * 30,
+             "authors": '["A"]', "categories": '["math.RT"]'},
+        ]
+        mock_fc.side_effect = [
+            RuntimeError("configured providers failed"),
+            (sample_llm_response_json, "ollama"),
+        ]
+        monkeypatch.setenv(
+            "RP_ANALYZER_LLM_FALLBACK_ORDER",
+            "gemini_cli",
+        )
+
+        handler = self._make_handler()
+        result = AnalyzerHandler.handle_process(handler, {})
+
+        assert result["papers_analyzed"] == 1
+        assert result["llm_provider"] == "ollama"
+        mock_update.assert_called_once()
+        assert mock_fc.call_args_list[0].kwargs["order"] == [
+            "gemini_cli",
+        ]
+        assert mock_fc.call_args_list[1].kwargs["order"] == [
+            "ollama",
+            "openrouter",
+        ]
 
     @patch("services.analyzer.main._update_paper_score")
     @patch("services.analyzer.main.fallback_chain")
