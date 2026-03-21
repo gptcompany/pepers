@@ -526,6 +526,20 @@ class TestReadMarkdown:
         result = read_markdown(str(tmp_path))
         assert "large content" in result
 
+    def test_prefers_formula_rich_md_file_over_larger_docling_dump(self, tmp_path):
+        docling_dir = tmp_path / "docling"
+        docling_dir.mkdir()
+        hybrid_dir = tmp_path / "hybrid_auto"
+        hybrid_dir.mkdir()
+
+        (docling_dir / "paper.md").write_text("plain text " * 500)
+        (hybrid_dir / "paper.md").write_text(
+            r"Model uses $\alpha + \beta = \gamma$ and \[x = y + z\]."
+        )
+
+        result = read_markdown(str(tmp_path))
+        assert r"\alpha + \beta" in result
+
     def test_container_path_mapping_1tb(self, tmp_path):
         # Create the expected host path structure
         host_dir = tmp_path / "media" / "sam" / "1TB" / "rag" / "out"
@@ -604,6 +618,27 @@ class TestProcessPaper:
         result = process_paper(Path("/tmp/test.pdf"), "2401.00001")
         assert result == "# New extraction"
         mock_poll.assert_called_once_with("job-42", "http://localhost:8767")
+
+    @patch("services.extractor.rag_client.read_markdown")
+    @patch("services.extractor.rag_client.submit_pdf")
+    @patch("services.extractor.rag_client.poll_job")
+    @patch("services.extractor.rag_client.check_service")
+    def test_recovers_cached_output_after_failed_job(
+        self, mock_check, mock_poll, mock_submit, mock_read
+    ):
+        mock_check.return_value = {"status": "ok"}
+        mock_submit.side_effect = [
+            {"cached": False, "job_id": "job-42"},
+            {"cached": True, "result": {"output_dir": "/workspace/1TB/rag/cached"}},
+        ]
+        mock_poll.side_effect = RuntimeError("RAGAnything job job-42 failed: timeout")
+        mock_read.return_value = "# Cached recovery"
+
+        result = process_paper(Path("/tmp/test.pdf"), "2401.00001")
+
+        assert result == "# Cached recovery"
+        assert mock_submit.call_count == 2
+        mock_read.assert_called_once_with("/workspace/1TB/rag/cached")
 
     @patch("services.extractor.rag_client.submit_pdf")
     @patch("services.extractor.rag_client.check_service")
@@ -1091,17 +1126,48 @@ class TestExtractorHandler:
         mock_check.return_value = {"status": "ok"}
         mock_pdf.return_value = Path("/tmp/p.pdf")
         # Formula needs to be > 10 chars and have an operator to be non-trivial
-        mock_rag.return_value = "$$ E = m c^2 + \alpha \beta \gamma $$"
-        
+        mock_rag.return_value = r"$$ E = m c^2 + \alpha \beta \gamma $$"
+
         resp = handler.handle_process({"paper_id": 1})
         assert resp["success"] is True
         assert resp["papers_processed"] == 1
         assert resp["formulas_extracted"] == 1
-        
+
         from shared.db import get_connection
         conn = get_connection(db_path)
         p_row = conn.execute("SELECT stage FROM papers WHERE id=1").fetchone()
         assert p_row["stage"] == "extracted"
+        conn.close()
+
+    @patch("services.extractor.main.pdf.create_session")
+    @patch("services.extractor.main.pdf.download_pdf")
+    @patch("services.extractor.main.rag_client.process_paper")
+    @patch("services.extractor.main.rag_client.check_service")
+    def test_handle_process_fails_when_math_signals_have_zero_formulas(
+        self, mock_check, mock_rag, mock_pdf, mock_session, analyzed_paper_db
+    ):
+        from shared.db import get_connection
+
+        db_path = str(analyzed_paper_db)
+        handler = ExtractorHandler.__new__(ExtractorHandler)
+        handler.db_path = db_path
+        handler.pdf_dir = "/tmp"
+        handler.download_delay = 0
+        handler.rag_url = "http://rag"
+
+        mock_check.return_value = {"status": "ok"}
+        mock_pdf.return_value = Path("/tmp/p.pdf")
+        mock_rag.return_value = "We optimize J = α + β with x = y + z over the dataset."
+
+        resp = handler.handle_process({"paper_id": 1})
+        assert resp["success"] is False
+        assert resp["papers_processed"] == 0
+        assert resp["papers_failed"] == 1
+
+        conn = get_connection(db_path)
+        row = conn.execute("SELECT stage, error FROM papers WHERE id=1").fetchone()
+        assert row["stage"] == "failed"
+        assert "0 formulas despite math signals" in row["error"]
         conn.close()
 
     @patch("services.extractor.main.pdf.create_session")

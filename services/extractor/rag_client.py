@@ -300,15 +300,18 @@ def poll_job(
 def read_markdown(output_dir: str) -> str:
     """Read markdown output from RAGAnything's extraction directory.
 
-    Handles container→host path mapping and finds the largest .md file.
-    Tries multiple path mappings to support both Docker and host execution.
+    Handles container->host path mapping and chooses the markdown candidate
+    most likely to preserve LaTeX formulas. Tries multiple path mappings to
+    support both Docker and host execution.
 
     Raises:
         FileNotFoundError: If no markdown files found.
     """
-    # Path mappings to try (RAGAnything output → accessible path)
+    from services.extractor import latex
+
+    # Path mappings to try (RAGAnything output -> accessible path)
     # Configure via RP_EXTRACTOR_PATH_MAPPINGS="src1:dst1,src2:dst2"
-    candidates = [output_dir]
+    candidates: list[str] = [output_dir]
     custom = os.environ.get("RP_EXTRACTOR_PATH_MAPPINGS", "")
     if custom:
         for mapping in custom.split(","):
@@ -320,14 +323,70 @@ def read_markdown(output_dir: str) -> str:
     if rag_data_host:
         candidates.append(output_dir.replace(rag_data_host, "/rag-data"))
 
+    def math_signal_score(text: str) -> int:
+        tokens = (
+            r"\begin{",
+            r"\[",
+            r"\(",
+            "$$",
+            "$",
+            r"\frac",
+            r"\sum",
+            r"\int",
+            r"\alpha",
+            r"\beta",
+            r"\theta",
+            "^",
+            "_",
+            "=",
+        )
+        return sum(text.count(token) for token in tokens)
+
+    ranked_files: list[tuple[tuple[int, int, int, int, str], Path, str]] = []
     for candidate in candidates:
         path = Path(candidate)
-        if path.exists():
-            md_files = list(path.glob("**/*.md"))
-            if md_files:
-                md_files.sort(key=lambda f: f.stat().st_size, reverse=True)
-                logger.debug("Reading markdown from: %s", md_files[0])
-                return md_files[0].read_text(encoding="utf-8")
+        if not path.exists():
+            continue
+
+        for md_file in path.glob("**/*.md"):
+            try:
+                markdown = md_file.read_text(encoding="utf-8")
+                size = md_file.stat().st_size
+            except OSError as exc:
+                logger.warning("Skipping unreadable markdown %s: %s", md_file, exc)
+                continue
+
+            raw_formulas = latex.extract_formulas(markdown)
+            filtered_formulas = latex.filter_formulas(raw_formulas)
+            rank = (
+                len(filtered_formulas),
+                len(raw_formulas),
+                math_signal_score(markdown),
+                size,
+                str(md_file),
+            )
+            ranked_files.append((rank, md_file, markdown))
+
+    if ranked_files:
+        ranked_files.sort(
+            key=lambda item: (
+                -item[0][0],
+                -item[0][1],
+                -item[0][2],
+                -item[0][3],
+                item[0][4],
+            )
+        )
+        rank, selected_file, selected_markdown = ranked_files[0]
+        logger.debug(
+            "Reading markdown from: %s (filtered=%d raw=%d signals=%d size=%d)",
+            selected_file,
+            rank[0],
+            rank[1],
+            rank[2],
+            rank[3],
+        )
+        return selected_markdown
 
     raise FileNotFoundError(
         f"No markdown files found. Tried: {[c for c in candidates if c != output_dir]}"
@@ -357,8 +416,27 @@ def process_paper(
     if result["cached"]:
         output_dir = result["result"].get("output_dir", "")
     else:
-        job_result = poll_job(result["job_id"], base_url)
-        output_dir = job_result.get("output_dir", "")
+        output_dir = ""
+        try:
+            job_result = poll_job(result["job_id"], base_url)
+        except (RuntimeError, TimeoutError) as exc:
+            logger.warning(
+                "RAGAnything job for %s ended without a usable result, attempting cached recovery: %s",
+                paper_id,
+                exc,
+            )
+            recovered = submit_pdf(pdf_path, paper_id, base_url)
+            if recovered.get("cached"):
+                output_dir = recovered["result"].get("output_dir", "")
+                if output_dir:
+                    logger.warning(
+                        "Recovered cached extraction output for %s after job failure",
+                        paper_id,
+                    )
+            if not output_dir:
+                raise
+        else:
+            output_dir = job_result.get("output_dir", "")
 
     if not output_dir:
         raise RuntimeError(f"No output_dir in RAGAnything result for {paper_id}")

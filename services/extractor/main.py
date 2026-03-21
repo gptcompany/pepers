@@ -21,6 +21,7 @@ from __future__ import annotations
 
 import logging
 import os
+import re
 import time
 from pathlib import Path
 
@@ -32,6 +33,8 @@ from shared.server import BaseHandler, BaseService, route
 from services.extractor import latex, pdf, rag_client
 
 logger = logging.getLogger(__name__)
+
+_MATH_SIGNAL_CHARS = frozenset("∑∫∞∂∇≤≥≈→←↔±×·√αβγδλμστωφθπ")
 
 
 def _check_consistency(db_path: str) -> None:
@@ -79,6 +82,20 @@ def _build_extraction_paper_id(paper: Paper) -> str:
     if paper.doi:
         return f"doi:{paper.doi}"
     raise ValueError("cannot build extraction document id")
+
+
+def _has_math_signals(text: str) -> bool:
+    """Return True when markdown still looks equation-heavy without LaTeX markup."""
+    if any(ch in text for ch in _MATH_SIGNAL_CHARS):
+        return True
+
+    return bool(
+        re.search(
+            r"[A-Za-z0-9α-ωΑ-Ω]\s*=\s*[A-Za-z0-9α-ωΑ-Ω({\[]",
+            text,
+        )
+        or re.search(r"\b(?:argmin|argmax|minimize|maximize)\b", text, re.IGNORECASE)
+    )
 
 
 class ExtractorHandler(BaseHandler):
@@ -169,6 +186,10 @@ class ExtractorHandler(BaseHandler):
                     filtered = latex.expand_custom_notations(filtered, notations)
 
                 formulas = latex.formulas_to_models(pid, markdown, filtered)
+                if not formulas and _has_math_signals(markdown):
+                    raise ValueError(
+                        "extraction produced 0 formulas despite math signals"
+                    )
 
                 # Step 4: Store formulas + update paper
                 _store_results(db_path, pid, formulas)
