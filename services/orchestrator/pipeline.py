@@ -181,7 +181,12 @@ STAGE_PARAMS: dict[str, dict[str, str]] = {
         "max_papers": "max_papers",
         "force": "force",
     },
-    "extractor": {"paper_id": "paper_id", "max_papers": "max_papers", "force": "force"},
+    "extractor": {
+        "paper_id": "paper_id",
+        "max_papers": "max_papers",
+        "force_parser": "force_parser",
+        "force": "force",
+    },
     "validator": {
         "paper_id": "paper_id",
         "max_formulas": "max_formulas",
@@ -202,6 +207,10 @@ DB_STAGE_INDEX: dict[str, int] = {
     "extracted": 2,   # After extractor (idx 2)
     "validated": 3,   # After validator (idx 3)
     "codegen": 4,     # After codegen (idx 4)
+}
+
+STAGE_NAME_INDEX: dict[str, int] = {
+    name: idx for idx, (name, _) in enumerate(STAGE_ORDER)
 }
 
 
@@ -225,6 +234,9 @@ class PipelineRunner:
         self.retry_backoff = float(
             os.environ.get("RP_ORCHESTRATOR_RETRY_BACKOFF", "4.0")
         )
+        self.external_health_timeout = float(
+            os.environ.get("RP_ORCHESTRATOR_EXTERNAL_HEALTH_TIMEOUT", "5")
+        )
         # Keep per-instance overrides so tests and env patches are predictable.
         self.STAGE_TIMEOUTS = {
             "analyzer": int(
@@ -246,6 +258,7 @@ class PipelineRunner:
         stages: int = 5,
         max_papers: int = 10,
         max_formulas: int = get_default_max_formulas(),
+        force_parser: str | None = None,
         force: bool = False,
         run_id: str | None = None,
         extra_params: dict | None = None,
@@ -258,6 +271,7 @@ class PipelineRunner:
             stages: How many stages to advance (1-5).
             max_papers: Max papers per batch.
             max_formulas: Max formulas per batch.
+            force_parser: Optional RAG parser override for extractor.
             force: Reprocess already-processed items.
             run_id: Pre-generated run ID (for async runs).
 
@@ -275,13 +289,19 @@ class PipelineRunner:
             "paper_id": paper_id,
             "max_papers": max_papers,
             "max_formulas": max_formulas,
+            "force_parser": force_parser,
             "force": force,
         }
         if extra_params:
             params.update(extra_params)
 
         # Determine which stages to run
-        stage_list = self._resolve_stages(query, paper_id, stages)
+        stage_list = self._resolve_stages(
+            query,
+            paper_id,
+            stages,
+            force=force,
+        )
 
         # Persist run record
         try:
@@ -472,6 +492,9 @@ class PipelineRunner:
         query: str | None,
         paper_id: int | None,
         stages: int,
+        *,
+        force: bool = False,
+        failed_stage: str | None = None,
     ) -> list[tuple[str, int]]:
         """Determine which stages to execute.
 
@@ -479,6 +502,8 @@ class PipelineRunner:
             query: If provided, start from Discovery.
             paper_id: If provided, start from paper's current stage + 1.
             stages: Max number of stages to run.
+            force: Allow explicit restart for terminal failed papers.
+            failed_stage: Known failed service stage for forced reruns.
 
         Returns:
             List of (stage_name, port) tuples to execute.
@@ -493,8 +518,13 @@ class PipelineRunner:
             # Determine paper's current stage and start from next
             current = self._get_paper_stage(paper_id)
 
-            if current in ("rejected", "failed"):
+            if current == "rejected":
                 return []  # Can't advance rejected/failed papers
+            if current == "failed":
+                if not force:
+                    return []
+                idx = STAGE_NAME_INDEX.get(failed_stage or "", STAGE_NAME_INDEX["extractor"])
+                return STAGE_ORDER[idx : idx + stages]
 
             # Map DB stage names to STAGE_ORDER index (after which service)
             idx = DB_STAGE_INDEX.get(current, -1) + 1
@@ -750,7 +780,7 @@ class PipelineRunner:
         for name, base_url, health_path in EXTERNAL_DEPS:
             url = f"{base_url}{health_path}"
             try:
-                resp = requests.get(url, timeout=3)
+                resp = requests.get(url, timeout=self.external_health_timeout)
                 payload: dict | None = None
                 try:
                     data = resp.json()
@@ -931,6 +961,23 @@ class PipelineRunner:
         )
         chosen_strategy = self._select_requeue_strategy(source_params, strategy)
 
+        detected_failed_stage = self._detect_failed_stage(source)
+        current_stage = None
+        if chosen_strategy == "resume_from_current_stage":
+            paper_id = source_params.get("paper_id")
+            if isinstance(paper_id, int):
+                current_stage = self._get_paper_stage(paper_id)
+
+        resume_failed_paper = (
+            chosen_strategy == "resume_from_current_stage"
+            and current_stage == "failed"
+            and source_status in {"partial", "failed"}
+        )
+        requeue_force = (
+            force if force is not None
+            else bool(source_params.get("force", False) or resume_failed_paper)
+        )
+
         requeue_params = {
             "query": source_params.get("query"),
             "topic": source_params.get("topic"),
@@ -947,17 +994,15 @@ class PipelineRunner:
                 ),
                 default=get_default_max_formulas(),
             ),
-            "force": (
-                force if force is not None
-                else bool(source_params.get("force", False))
-            ),
+            "force_parser": source_params.get("force_parser"),
+            "force": requeue_force,
             "requeue_of": run_id,
             "requeue_strategy": chosen_strategy,
             "requeue_source_status": source_status,
             "requeue_requested_at": datetime.now(timezone.utc).isoformat(),
             "requeue_source_stages_completed": source.get("stages_completed", 0),
             "requeue_source_stages_requested": source.get("stages_requested", 0),
-            "requeue_source_failed_stage": self._detect_failed_stage(source),
+            "requeue_source_failed_stage": detected_failed_stage,
         }
 
         if chosen_strategy == "resume_from_current_stage":
@@ -969,9 +1014,15 @@ class PipelineRunner:
                     status=409,
                 )
             requeue_params["query"] = None
-            stage_list = self._resolve_stages(None, paper_id, requested_stages)
+            stage_list = self._resolve_stages(
+                None,
+                paper_id,
+                requested_stages,
+                force=requeue_force,
+                failed_stage=detected_failed_stage,
+            )
             if not stage_list:
-                current_stage = self._get_paper_stage(paper_id)
+                current_stage = current_stage or self._get_paper_stage(paper_id)
                 raise RequeueError(
                     f"Paper {paper_id} is already at terminal stage {current_stage!r}",
                     code="RUN_ALREADY_AT_TERMINAL_STAGE",
