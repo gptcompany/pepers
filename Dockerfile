@@ -42,4 +42,12 @@ RUN groupadd -g 1000 pepers \
 ARG SERVICE=orchestrator
 ENV SERVICE_NAME=${SERVICE}
 
+ARG VERSION=unknown
+ARG COMMIT_SHA=unknown
+ARG BUILD_AT=unknown
+
+ENV RP_VERSION=${VERSION}
+ENV RP_COMMIT_SHA=${COMMIT_SHA}
+ENV RP_BUILD_AT=${BUILD_AT}
+
 CMD ["sh", "-c", "python -m services.${SERVICE_NAME}.main"]

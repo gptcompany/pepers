@@ -182,12 +182,25 @@ class AggregatedHealthCheck:
             url = f"http://localhost:{actual_port}{health_path}"
             expected = None if svc_name == "mcp" else svc_name
             ok = _check_http(url, expected_service=expected)
+            details = f":{actual_port}"
+            if ok:
+                try:
+                    resp = requests.get(url, timeout=1.0)
+                    data = resp.json()
+                    v = data.get("version")
+                    sha = data.get("commit_sha")
+                    if v:
+                        details += f" (v{v})"
+                    if sha and sha != "unknown":
+                        details += f" @ {sha}"
+                except Exception:
+                    pass
             rows.append(
                 (
                     svc_name.capitalize(),
                     url,
                     ok,
-                    f":{actual_port}",
+                    details,
                 )
             )
             if not ok:
@@ -226,13 +239,24 @@ class AggregatedHealthCheck:
             details = ""
             if ok:
                 extra = ""
+                try:
+                    resp = requests.get(host_url, timeout=1.0)
+                    data = resp.json()
+                    v = data.get("version")
+                    sha = data.get("commit_sha")
+                    if v:
+                        extra = f"v{v}"
+                    if sha and sha != "unknown":
+                        extra += f" @ {sha}"
+                except Exception:
+                    pass
                 if host_ok:
                     if name == "CAS Service":
-                        extra = _discover_cas_details(base.rstrip("/"))
+                        extra += " " + _discover_cas_details(base.rstrip("/"))
                     elif name == "RAG Service":
-                        extra = _discover_rag_details(base.rstrip("/"))
+                        extra += " " + _discover_rag_details(base.rstrip("/"))
                 if extra:
-                    detail_parts.append(extra)
+                    detail_parts.append(extra.strip())
             details = "; ".join(part for part in detail_parts if part)
             rows.append((name, display_url, ok, details))
             if not ok:

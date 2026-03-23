@@ -93,8 +93,20 @@ jobs:
         run: |
           echo "::warning::Coverage badge update failed. Check GIST_TOKEN validity/scope and gist access for ac39e6516b7114f96b84ba445b8e7a83."
 
+      - name: Extract Metadata
+        id: meta
+        run: |
+          VERSION=$(grep '^version =' pyproject.toml | cut -d '"' -f 2)
+          echo "version=$VERSION" >> "$GITHUB_OUTPUT"
+          echo "sha=${GITHUB_SHA::7}" >> "$GITHUB_OUTPUT"
+          echo "build_at=$(date -u +'%Y-%m-%dT%H:%M:%SZ')" >> "$GITHUB_OUTPUT"
+
       - name: Resolve dispatch token via dotenvx (self-hosted fallback)
         id: tokens
+        env:
+          RP_VERSION: ${{ steps.meta.outputs.version }}
+          RP_COMMIT_SHA: ${{ steps.meta.outputs.sha }}
+          RP_BUILD_AT: ${{ steps.meta.outputs.build_at }}
         run: |
           TOKEN="${{ secrets.PAT }}"
           if [[ -z "$TOKEN" ]] && command -v dotenvx &> /dev/null && [[ -f .env ]]; then
@@ -118,7 +130,7 @@ jobs:
           repository: gptcompany/progressive-deploy
           event-type: pepers-build
           client-payload: >-
-            {"ref":"${{ github.sha }}","source_repo":"${{ github.repository }}","source_ref":"${{ github.ref_name }}","source_sha":"${{ github.sha }}","source_workflow":"${{ github.workflow }}"}
+            {"ref":"${{ github.sha }}","version":"${{ steps.meta.outputs.version }}","commit_sha":"${{ steps.meta.outputs.sha }}","build_at":"${{ steps.meta.outputs.build_at }}","source_repo":"${{ github.repository }}","source_ref":"${{ github.ref_name }}","source_sha":"${{ github.sha }}","source_workflow":"${{ github.workflow }}"}
 
       - name: Warn if progressive-deploy dispatch was skipped
         if: success() && github.event_name == 'push' && github.ref == 'refs/heads/main' && steps.tokens.outputs.pd_token == ''

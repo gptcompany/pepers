@@ -26,6 +26,9 @@ services:
       context: .
       dockerfile: Dockerfile
       args:
+        VERSION: ${RP_VERSION:-unknown}
+        COMMIT_SHA: ${RP_COMMIT_SHA:-unknown}
+        BUILD_AT: ${RP_BUILD_AT:-unknown}
         SERVICE: discovery
     init: true
     <<: *runtime-service
@@ -58,6 +61,9 @@ services:
       context: .
       dockerfile: Dockerfile
       args:
+        VERSION: ${RP_VERSION:-unknown}
+        COMMIT_SHA: ${RP_COMMIT_SHA:-unknown}
+        BUILD_AT: ${RP_BUILD_AT:-unknown}
         SERVICE: analyzer
     init: true
     <<: *runtime-service
@@ -107,6 +113,9 @@ services:
       context: .
       dockerfile: Dockerfile
       args:
+        VERSION: ${RP_VERSION:-unknown}
+        COMMIT_SHA: ${RP_COMMIT_SHA:-unknown}
+        BUILD_AT: ${RP_BUILD_AT:-unknown}
         SERVICE: extractor
     init: true
     <<: *runtime-service
@@ -153,6 +162,9 @@ services:
       context: .
       dockerfile: Dockerfile
       args:
+        VERSION: ${RP_VERSION:-unknown}
+        COMMIT_SHA: ${RP_COMMIT_SHA:-unknown}
+        BUILD_AT: ${RP_BUILD_AT:-unknown}
         SERVICE: validator
     init: true
     <<: *runtime-service
@@ -189,6 +201,9 @@ services:
       context: .
       dockerfile: Dockerfile
       args:
+        VERSION: ${RP_VERSION:-unknown}
+        COMMIT_SHA: ${RP_COMMIT_SHA:-unknown}
+        BUILD_AT: ${RP_BUILD_AT:-unknown}
         SERVICE: codegen
     init: true
     <<: *runtime-service
@@ -226,6 +241,9 @@ services:
       context: .
       dockerfile: Dockerfile
       args:
+        VERSION: ${RP_VERSION:-unknown}
+        COMMIT_SHA: ${RP_COMMIT_SHA:-unknown}
+        BUILD_AT: ${RP_BUILD_AT:-unknown}
         SERVICE: orchestrator
     init: true
     <<: *runtime-service
@@ -277,6 +295,9 @@ services:
       context: .
       dockerfile: Dockerfile
       args:
+        VERSION: ${RP_VERSION:-unknown}
+        COMMIT_SHA: ${RP_COMMIT_SHA:-unknown}
+        BUILD_AT: ${RP_BUILD_AT:-unknown}
         SERVICE: mcp
     init: true
     <<: *runtime-service

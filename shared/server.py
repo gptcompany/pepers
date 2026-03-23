@@ -288,7 +288,7 @@ class BaseService:
 
         # Inject service metadata into handler class
         handler.service_name = name
-        handler.service_version = "0.1.0"
+        handler.service_version = os.environ.get("RP_VERSION", "0.1.0")
         handler.service_start_time = self._start_time
         handler.db_path = db_path
 
@@ -305,6 +305,9 @@ class BaseService:
             result: dict[str, Any] = {
                 "status": "ok",
                 "service": handler.service_name,
+                "version": handler.service_version,
+                "commit_sha": os.environ.get("RP_COMMIT_SHA", "unknown"),
+                "build_at": os.environ.get("RP_BUILD_AT", "unknown"),
                 "uptime_seconds": round(
                     time.time() - handler.service_start_time, 1
                 ),
