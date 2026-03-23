@@ -388,3 +388,6 @@ Internal project.
 ---
 
 **Docs**: [Architecture](docs/ARCHITECTURE.md) | [Runbook](docs/RUNBOOK.md)
+
+## Professional Monitoring
+PePeRS follows the [gptcompany Monitoring Standard](https://github.com/gptcompany/progressive-deploy/blob/master/docs/MONITORING_STANDARD.md).
