@@ -32,7 +32,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        runner: [[self-hosted, Linux, X64]]
+        runner: [[self-hosted, Linux, X64, sam-workstation]]
         python-version: ["3.11"]
 
     steps:
@@ -93,24 +93,39 @@ jobs:
         run: |
           echo "::warning::Coverage badge update failed. Check GIST_TOKEN validity/scope and gist access for ac39e6516b7114f96b84ba445b8e7a83."
 
+      - name: Resolve dispatch token via dotenvx (self-hosted fallback)
+        id: tokens
+        run: |
+          TOKEN="${{ secrets.PAT }}"
+          if [[ -z "$TOKEN" ]] && command -v dotenvx &> /dev/null && [[ -f .env ]]; then
+             echo "Resolving token via dotenvx on self-hosted runner..."
+             TOKEN=$(dotenvx get GITHUB_PAT || dotenvx get PAT || true)
+          fi
+          if [[ -n "$TOKEN" ]]; then
+            echo "pd_token=$TOKEN" >> "$GITHUB_OUTPUT"
+            echo "::add-mask::$TOKEN"
+          fi
+
       - name: Trigger progressive-deploy build
         id: progressive_dispatch
-        if: success() && github.event_name == 'push' && github.ref == 'refs/heads/main' && env.PROGRESSIVE_DEPLOY_TOKEN != ''
+        env:
+          PD_TOKEN: ${{ steps.tokens.outputs.pd_token }}
+        if: success() && github.event_name == 'push' && github.ref == 'refs/heads/main' && env.PD_TOKEN != ''
         continue-on-error: true
         uses: peter-evans/repository-dispatch@v3
         with:
-          token: ${{ env.PROGRESSIVE_DEPLOY_TOKEN }}
+          token: ${{ steps.tokens.outputs.pd_token }}
           repository: gptcompany/progressive-deploy
           event-type: pepers-build
           client-payload: >-
             {"ref":"${{ github.sha }}","source_repo":"${{ github.repository }}","source_ref":"${{ github.ref_name }}","source_sha":"${{ github.sha }}","source_workflow":"${{ github.workflow }}"}
 
       - name: Warn if progressive-deploy dispatch was skipped
-        if: success() && github.event_name == 'push' && github.ref == 'refs/heads/main' && env.PROGRESSIVE_DEPLOY_TOKEN == ''
+        if: success() && github.event_name == 'push' && github.ref == 'refs/heads/main' && steps.tokens.outputs.pd_token == ''
         run: |
           echo "::warning::Skipping progressive-deploy dispatch because PAT is not configured for this workflow."
 
       - name: Warn if progressive-deploy dispatch failed
-        if: always() && github.event_name == 'push' && github.ref == 'refs/heads/main' && env.PROGRESSIVE_DEPLOY_TOKEN != '' && steps.progressive_dispatch.outcome == 'failure'
+        if: always() && github.event_name == 'push' && github.ref == 'refs/heads/main' && steps.tokens.outputs.pd_token != '' && steps.progressive_dispatch.outcome == 'failure'
         run: |
           echo "::warning::progressive-deploy dispatch failed. Check PAT validity/scope and access to gptcompany/progressive-deploy."
