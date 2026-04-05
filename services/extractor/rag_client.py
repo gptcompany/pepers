@@ -200,8 +200,8 @@ def _map_to_host_path(container_path: Path) -> str:
     return path_str
 
 
-def submit_pdf(force: bool = False, 
-    pdf_path: Path, paper_id: str, base_url: str = DEFAULT_BASE_URL
+def submit_pdf(
+    pdf_path: Path, paper_id: str, base_url: str = DEFAULT_BASE_URL, force: bool = False
 ) -> dict:
     """Submit PDF to RAGAnything for processing.
 
@@ -393,8 +393,8 @@ def read_markdown(output_dir: str) -> str:
     )
 
 
-def process_paper(force: bool = False, 
-    pdf_path: Path, paper_id: str, base_url: str = DEFAULT_BASE_URL
+def process_paper(
+    pdf_path: Path, paper_id: str, base_url: str = DEFAULT_BASE_URL, force: bool = False
 ) -> str:
     """High-level orchestration: check service, submit, poll, read markdown.
 

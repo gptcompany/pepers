@@ -172,10 +172,9 @@ class ExtractorHandler(BaseHandler):
                 )
 
                 # Step 2: RAGAnything processing
-                markdown = rag_client.process_paper(force=force, 
-                    pdf_path, _build_extraction_paper_id(paper), self.rag_url
+                markdown = rag_client.process_paper(
+                    pdf_path, _build_extraction_paper_id(paper), self.rag_url, force=force
                 )
-
                 # Step 3: Extract formulas
                 raw = latex.extract_formulas(markdown)
                 filtered = latex.filter_formulas(raw)
