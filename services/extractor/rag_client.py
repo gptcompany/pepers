@@ -200,7 +200,7 @@ def _map_to_host_path(container_path: Path) -> str:
     return path_str
 
 
-def submit_pdf(
+def submit_pdf(force: bool = False, 
     pdf_path: Path, paper_id: str, base_url: str = DEFAULT_BASE_URL
 ) -> dict:
     """Submit PDF to RAGAnything for processing.
@@ -209,7 +209,7 @@ def submit_pdf(
         Dict with 'cached' bool and either 'result' or 'job_id'.
     """
     host_path = _map_to_host_path(pdf_path)
-    payload = json.dumps({
+    payload = json.dumps({"force_reprocess": force, 
         "pdf_path": host_path,
         "paper_id": paper_id,
     }).encode()
@@ -393,7 +393,7 @@ def read_markdown(output_dir: str) -> str:
     )
 
 
-def process_paper(
+def process_paper(force: bool = False, 
     pdf_path: Path, paper_id: str, base_url: str = DEFAULT_BASE_URL
 ) -> str:
     """High-level orchestration: check service, submit, poll, read markdown.
