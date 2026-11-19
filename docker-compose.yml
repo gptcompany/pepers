@@ -6,6 +6,7 @@ x-logging: &default-logging
     max-size: "10m"
     max-file: "3"
 
+# memswap_limit == limite memory (decisione limiti-risorse-calcolo-agenti): niente swap.
 x-deploy-service: &default-deploy
   resources:
     limits:
@@ -44,9 +45,10 @@ services:
     volumes:
       - ${PEPERS_DATA_DIR:-./data}:/data
     user: "${PEPERS_UID:-1000}:${PEPERS_GID:-1000}"
-    restart: always
+    restart: unless-stopped
     logging: *default-logging
     deploy: *default-deploy
+    memswap_limit: 512m
     stop_grace_period: 10s
     healthcheck:
       test: ["CMD", "python", "-c",
@@ -92,9 +94,10 @@ services:
       - /media/sam/1TB/gemini-config:/media/sam/1TB/gemini-config:ro
       - ./config/gemini-settings-container.json:/home/pepers/.gemini/settings.json:ro
     user: "${PEPERS_UID:-1000}:${PEPERS_GID:-1000}"
-    restart: always
+    restart: unless-stopped
     logging: *default-logging
     deploy: *default-deploy
+    memswap_limit: 512m
     stop_grace_period: 10s
     healthcheck:
       test: ["CMD", "python", "-c",
@@ -141,9 +144,10 @@ services:
       - ${PEPERS_DATA_DIR:-./data}:/data
       - ${RAG_DATA_HOST:-${RAG_DATA_PATH:-../rag-service/data}}:/rag-data
     user: "${PEPERS_UID:-1000}:${PEPERS_GID:-1000}"
-    restart: always
+    restart: unless-stopped
     logging: *default-logging
     deploy: *default-deploy
+    memswap_limit: 512m
     stop_grace_period: 10s
     healthcheck:
       test: ["CMD", "python", "-c",
@@ -180,9 +184,10 @@ services:
     volumes:
       - ${PEPERS_DATA_DIR:-./data}:/data
     user: "${PEPERS_UID:-1000}:${PEPERS_GID:-1000}"
-    restart: always
+    restart: unless-stopped
     logging: *default-logging
     deploy: *default-deploy
+    memswap_limit: 512m
     stop_grace_period: 10s
     healthcheck:
       test: ["CMD", "python", "-c",
@@ -220,9 +225,10 @@ services:
     volumes:
       - ${PEPERS_DATA_DIR:-./data}:/data
     user: "${PEPERS_UID:-1000}:${PEPERS_GID:-1000}"
-    restart: always
+    restart: unless-stopped
     logging: *default-logging
     deploy: *default-deploy
+    memswap_limit: 512m
     stop_grace_period: 10s
     healthcheck:
       test: ["CMD", "python", "-c",
@@ -274,9 +280,10 @@ services:
     volumes:
       - ${PEPERS_DATA_DIR:-./data}:/data
     user: "${PEPERS_UID:-1000}:${PEPERS_GID:-1000}"
-    restart: always
+    restart: unless-stopped
     logging: *default-logging
     deploy: *orchestrator-deploy
+    memswap_limit: 1g
     stop_grace_period: 20s
     healthcheck:
       test: ["CMD", "python", "-c",
@@ -312,9 +319,10 @@ services:
     volumes:
       - ${PEPERS_DATA_DIR:-./data}:/data
     user: "${PEPERS_UID:-1000}:${PEPERS_GID:-1000}"
-    restart: always
+    restart: unless-stopped
     logging: *default-logging
     deploy: *default-deploy
+    memswap_limit: 512m
     stop_grace_period: 10s
     command: ["python", "-m", "services.mcp"]
     healthcheck:

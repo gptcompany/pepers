@@ -374,7 +374,7 @@ def call_openrouter(
 def call_ollama(
     prompt: str,
     system: str,
-    model: str = "qwen3:8b",
+    model: str | None = None,
     timeout: int = int(os.environ.get("RP_LLM_TIMEOUT_OLLAMA", "600")),
     base_url: str | None = None,
     format: str | dict = "json",
@@ -386,7 +386,7 @@ def call_ollama(
     Args:
         prompt: User prompt text.
         system: System instruction text.
-        model: Ollama model name.
+        model: Ollama model name; default RP_ANALYZER_OLLAMA_MODEL, else qwen3:8b.
         timeout: HTTP timeout in seconds.
         base_url: Ollama server URL.
         format: Output format — "json" for free-form JSON, or a
@@ -403,6 +403,8 @@ def call_ollama(
         RuntimeError: On connection error, timeout, or non-200 response.
     """
     base_url = _resolve_ollama_base_url(base_url)
+    model = model or os.environ.get("RP_ANALYZER_OLLAMA_MODEL") or "qwen3:8b"
+    logger.info("call_ollama model=%s", model)
 
     if options is None:
         options = {"temperature": temperature, "seed": LLM_SEED, "num_predict": 4096}
