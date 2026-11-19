@@ -229,3 +229,12 @@ class TestOrchestratorStageTimeoutDefaults:
         env = config["services"]["orchestrator"]["environment"]
         assert env["RP_ORCHESTRATOR_ANALYZER_TIMEOUT"] == "1800"
         assert env["RP_ORCHESTRATOR_EXTRACTOR_TIMEOUT"] == "15000"
+
+
+class TestOllamaModelPassthrough:
+    """F-775: il modello ollama dichiarato nell'ambiente di lancio arriva ai container che chiamano call_ollama."""
+
+    def test_model_override_reaches_analyzer_and_codegen(self):
+        config = _load_compose_config({"RP_ANALYZER_OLLAMA_MODEL": "qwen3.5:9b"})
+        for name in ("analyzer", "codegen"):
+            assert config["services"][name]["environment"]["RP_ANALYZER_OLLAMA_MODEL"] == "qwen3.5:9b"
