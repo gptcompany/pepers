@@ -106,14 +106,29 @@ class TestInitProcess:
             assert init is True, f"{name} missing init: true"
 
 
+class TestNoSwap:
+    """F-775 (limiti-risorse-calcolo-agenti): memswap_limit == limite di memoria, niente swap."""
+
+    def test_memswap_limit_equals_memory_limit(self, compose_config):
+        for name in SERVICES:
+            svc = compose_config["services"][name]
+            mem = int(svc["deploy"]["resources"]["limits"]["memory"])
+            assert int(svc.get("memswap_limit", 0)) == mem, f"{name} memswap_limit != memory limit"
+
+    def test_all_ports_bound_to_loopback(self, compose_config):
+        for name in SERVICES:
+            for port in compose_config["services"][name].get("ports", []):
+                assert port.get("host_ip") == "127.0.0.1", f"{name} port {port} not on 127.0.0.1"
+
+
 class TestAutoStart:
     """DEP-03: All containers restart after host reboot."""
 
     def test_all_services_restart_unless_stopped(self, compose_config):
         for name in SERVICES:
             restart = compose_config["services"][name].get("restart", "no")
-            assert restart in ("always", "unless-stopped"), (
-                f"{name} restart policy is '{restart}', expected 'always' or 'unless-stopped'"
+            assert restart == "unless-stopped", (
+                f"{name} restart policy is '{restart}', expected 'unless-stopped'"
             )
 
     def test_docker_daemon_enabled(self):

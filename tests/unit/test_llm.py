@@ -117,6 +117,30 @@ class TestCallOllama:
         assert payload["options"]["temperature"] == 0.0
 
     @patch("shared.llm.urllib.request.urlopen")
+    def test_call_ollama_model_from_env(self, mock_urlopen, monkeypatch):
+        """Il modello arriva da RP_ANALYZER_OLLAMA_MODEL, unica variabile (F-775)."""
+        monkeypatch.setenv("RP_ANALYZER_OLLAMA_MODEL", "qwen3.5:9b")
+        import shared.llm as llm_mod
+
+        mock_urlopen.return_value = _fake_urlopen({"response": "test"})
+        llm_mod.call_ollama("hello", "system prompt")
+
+        assert json.loads(mock_urlopen.call_args[0][0].data)["model"] == "qwen3.5:9b"
+
+    @patch("shared.llm.urllib.request.urlopen")
+    def test_call_ollama_model_default_and_explicit_override(self, mock_urlopen, monkeypatch):
+        monkeypatch.delenv("RP_ANALYZER_OLLAMA_MODEL", raising=False)
+        import shared.llm as llm_mod
+
+        mock_urlopen.return_value = _fake_urlopen({"response": "test"})
+        llm_mod.call_ollama("hello", "system prompt")
+        assert json.loads(mock_urlopen.call_args[0][0].data)["model"] == "qwen3:8b"
+
+        monkeypatch.setenv("RP_ANALYZER_OLLAMA_MODEL", "qwen3.5:9b")
+        llm_mod.call_ollama("hello", "system prompt", model="qwen3.5:4b")
+        assert json.loads(mock_urlopen.call_args[0][0].data)["model"] == "qwen3.5:4b"
+
+    @patch("shared.llm.urllib.request.urlopen")
     def test_call_ollama_includes_seed(self, mock_urlopen, monkeypatch):
         """call_ollama includes seed=42 in options."""
         monkeypatch.delenv("RP_LLM_TEMPERATURE", raising=False)
