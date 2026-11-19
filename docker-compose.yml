@@ -82,6 +82,7 @@ services:
       - RP_LLM_TIMEOUT_GEMINI_SDK=20
       - RP_LLM_TIMEOUT_OPENROUTER=20
       - RP_LLM_TIMEOUT_OLLAMA=${RP_LLM_TIMEOUT_OLLAMA:-120}
+      - RP_ANALYZER_OLLAMA_MODEL=${RP_ANALYZER_OLLAMA_MODEL:-}
       - RP_DOCKER_HOST_GATEWAY=host.docker.internal
       - RP_LOG_LEVEL=INFO
       - HOME=/home/pepers
@@ -218,6 +219,7 @@ services:
       - RP_CODEGEN_PORT=${RP_CODEGEN_PORT:-8774}
       - RP_DB_PATH=/data/research.db
       - RP_CODEGEN_OLLAMA_URL=${RP_CODEGEN_OLLAMA_URL:-http://localhost:11434}
+      - RP_ANALYZER_OLLAMA_MODEL=${RP_ANALYZER_OLLAMA_MODEL:-}
       - RP_DOCKER_HOST_GATEWAY=host.docker.internal
       - RP_LOG_LEVEL=INFO
       - HOME=/tmp
