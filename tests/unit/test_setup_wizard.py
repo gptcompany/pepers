@@ -708,6 +708,13 @@ class TestComposePortOwnershipHostNetwork:
         """MCP del progetto su 8777 (rete host); un'altra istanza risponde su 8776: la 8776 non e' sua."""
         assert not self._owns(tmp_path, {**self.HOST_SAME, "Config.Env": '["RP_MCP_PORT=8777"]\n'})
 
+    def test_porta_con_zeri_iniziali_e_la_stessa_porta(self, tmp_path):
+        """Compose conserva la grafia del .env ("08776"), il servizio lega 8776: stesso numero."""
+        assert self._owns(tmp_path, {**self.HOST_SAME, "Config.Env": '["RP_MCP_PORT=08776"]\n'})
+
+    def test_porta_non_numerica_nel_container_non_la_possiede(self, tmp_path):
+        assert not self._owns(tmp_path, {**self.HOST_SAME, "Config.Env": '["RP_MCP_PORT=http"]\n'})
+
     def test_container_in_rete_host_senza_porta_dichiarata_non_possiede_nulla(self, tmp_path):
         assert not self._owns(tmp_path, {**self.HOST_SAME, "Config.Env": '["RP_ORCHESTRATOR_PORT=8776"]\n'})
 
