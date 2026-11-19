@@ -227,7 +227,7 @@ mcp = FastMCP(
         "The pipeline is async: run_pipeline returns immediately, "
         "use get_run_status to track progress."
     ),
-    host="0.0.0.0",
+    host=os.environ.get("RP_BIND_HOST", "").strip() or "0.0.0.0",
     port=MCP_PORT,
 )
 

@@ -396,9 +396,10 @@ class BaseService:
         if threading.current_thread() is threading.main_thread():
             signal.signal(signal.SIGTERM, self._handle_sigterm)
 
-        self.server = ThreadingHTTPServer(("0.0.0.0", self.port), self.handler)
+        host = os.environ.get("RP_BIND_HOST", "").strip() or "0.0.0.0"
+        self.server = ThreadingHTTPServer((host, self.port), self.handler)
         self.server.daemon_threads = True
-        logger.info("Starting %s on port %d (threaded)", self.name, self.port)
+        logger.info("Starting %s on %s:%d (threaded)", self.name, host, self.port)
 
         try:
             self.server.serve_forever()
