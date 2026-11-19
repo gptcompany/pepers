@@ -536,6 +536,7 @@ RP_LLM_TIMEOUT_CLAUDE_CLI=180
 | Variable | Default | Description |
 |----------|---------|-------------|
 | `RP_CODEGEN_OLLAMA_URL` | `http://localhost:11434` | Ollama base URL for codegen |
+| `RP_ANALYZER_OLLAMA_MODEL` | `qwen3:8b` | Single Ollama generation model read by `call_ollama` (analyzer and codegen) |
 | `RP_CODEGEN_MAX_FORMULAS` | 50 | Max formulas per codegen run |
 | `RP_ORCHESTRATOR_CODEGEN_TIMEOUT` | 900 | Codegen stage timeout in seconds (vs 300 for other stages) |
 

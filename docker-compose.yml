@@ -6,6 +6,7 @@ x-logging: &default-logging
     max-size: "10m"
     max-file: "3"
 
+# memswap_limit == limite memory (decisione limiti-risorse-calcolo-agenti): niente swap.
 x-deploy-service: &default-deploy
   resources:
     limits:
@@ -16,9 +17,12 @@ x-deploy-orchestrator: &orchestrator-deploy
     limits:
       memory: 1g
 
+# Rete dell'host (decisione dell'operatore 19/11): niente ports/extra_hosts; ogni servizio
+# ascolta solo su 127.0.0.1 (RP_BIND_HOST) e tutti gli URL puntano a 127.0.0.1.
+# pull_policy build: in rete host un'immagine precedente ignorerebbe RP_BIND_HOST e ascolterebbe su 0.0.0.0.
 x-runtime-service: &runtime-service
-  extra_hosts:
-    - "host.docker.internal:host-gateway"
+  network_mode: host
+  pull_policy: build
 
 services:
   discovery:
@@ -32,21 +36,21 @@ services:
         SERVICE: discovery
     init: true
     <<: *runtime-service
-    ports:
-      - "127.0.0.1:${RP_DISCOVERY_PORT:-8770}:${RP_DISCOVERY_PORT:-8770}"
     environment:
       - RP_DISCOVERY_PORT=${RP_DISCOVERY_PORT:-8770}
       - RP_DB_PATH=/data/research.db
       - RP_DISCOVERY_SOURCES=arxiv,openalex
-      - RP_DOCKER_HOST_GATEWAY=host.docker.internal
+      - RP_DOCKER_HOST_GATEWAY=
+      - RP_BIND_HOST=127.0.0.1
       - RP_LOG_LEVEL=INFO
     env_file: .env
     volumes:
       - ${PEPERS_DATA_DIR:-./data}:/data
     user: "${PEPERS_UID:-1000}:${PEPERS_GID:-1000}"
-    restart: always
+    restart: unless-stopped
     logging: *default-logging
     deploy: *default-deploy
+    memswap_limit: 512m
     stop_grace_period: 10s
     healthcheck:
       test: ["CMD", "python", "-c",
@@ -67,8 +71,6 @@ services:
         SERVICE: analyzer
     init: true
     <<: *runtime-service
-    ports:
-      - "127.0.0.1:${RP_ANALYZER_PORT:-8771}:${RP_ANALYZER_PORT:-8771}"
     environment:
       - RP_ANALYZER_PORT=${RP_ANALYZER_PORT:-8771}
       - RP_DB_PATH=/data/research.db
@@ -80,7 +82,9 @@ services:
       - RP_LLM_TIMEOUT_GEMINI_SDK=20
       - RP_LLM_TIMEOUT_OPENROUTER=20
       - RP_LLM_TIMEOUT_OLLAMA=${RP_LLM_TIMEOUT_OLLAMA:-120}
-      - RP_DOCKER_HOST_GATEWAY=host.docker.internal
+      - RP_ANALYZER_OLLAMA_MODEL=${RP_ANALYZER_OLLAMA_MODEL:-qwen3:8b}
+      - RP_DOCKER_HOST_GATEWAY=
+      - RP_BIND_HOST=127.0.0.1
       - RP_LOG_LEVEL=INFO
       - HOME=/home/pepers
       - RP_GEMINI_CLI_USE_OAUTH=${RP_GEMINI_CLI_USE_OAUTH:-true}
@@ -92,9 +96,10 @@ services:
       - /media/sam/1TB/gemini-config:/media/sam/1TB/gemini-config:ro
       - ./config/gemini-settings-container.json:/home/pepers/.gemini/settings.json:ro
     user: "${PEPERS_UID:-1000}:${PEPERS_GID:-1000}"
-    restart: always
+    restart: unless-stopped
     logging: *default-logging
     deploy: *default-deploy
+    memswap_limit: 512m
     stop_grace_period: 10s
     healthcheck:
       test: ["CMD", "python", "-c",
@@ -119,8 +124,6 @@ services:
         SERVICE: extractor
     init: true
     <<: *runtime-service
-    ports:
-      - "127.0.0.1:${RP_EXTRACTOR_PORT:-8772}:${RP_EXTRACTOR_PORT:-8772}"
     environment:
       - RP_EXTRACTOR_PORT=${RP_EXTRACTOR_PORT:-8772}
       - RP_DB_PATH=/data/research.db
@@ -128,22 +131,24 @@ services:
       - RP_EXTRACTOR_PDF_DIR=/rag-data/pdfs
       - RP_EXTRACTOR_PDF_HOST_DIR=${RP_EXTRACTOR_PDF_HOST_DIR:-${RAG_DATA_HOST:-${RAG_DATA_PATH:-../rag-service/data}}/pdfs}
       - RP_EXTRACTOR_PROJECT_HOST_DIR=${PEPERS_PROJECT_HOST_DIR:-${PWD}}
-      - RP_EXTRACTOR_RAG_URL=${RP_EXTRACTOR_RAG_URL:-http://localhost:8767}
+      - RP_EXTRACTOR_RAG_URL=${RP_EXTRACTOR_RAG_URL:-http://127.0.0.1:8767}
       - RP_EXTRACTOR_RAG_REQUEST_TIMEOUT=${RP_EXTRACTOR_RAG_REQUEST_TIMEOUT:-30}
       - RP_EXTRACTOR_RAG_SUBMIT_TIMEOUT=${RP_EXTRACTOR_RAG_SUBMIT_TIMEOUT:-60}
       - RP_EXTRACTOR_RAG_JOB_TIMEOUT=${RP_EXTRACTOR_RAG_JOB_TIMEOUT:-14400}
       - RP_EXTRACTOR_RAG_POLL_INTERVAL=${RP_EXTRACTOR_RAG_POLL_INTERVAL:-30}
       - RP_EXTRACTOR_RAG_DATA_HOST=${RAG_DATA_HOST:-${RAG_DATA_PATH:-../rag-service/data}}
-      - RP_DOCKER_HOST_GATEWAY=host.docker.internal
+      - RP_DOCKER_HOST_GATEWAY=
+      - RP_BIND_HOST=127.0.0.1
       - RP_LOG_LEVEL=INFO
     env_file: .env
     volumes:
       - ${PEPERS_DATA_DIR:-./data}:/data
       - ${RAG_DATA_HOST:-${RAG_DATA_PATH:-../rag-service/data}}:/rag-data
     user: "${PEPERS_UID:-1000}:${PEPERS_GID:-1000}"
-    restart: always
+    restart: unless-stopped
     logging: *default-logging
     deploy: *default-deploy
+    memswap_limit: 512m
     stop_grace_period: 10s
     healthcheck:
       test: ["CMD", "python", "-c",
@@ -168,21 +173,21 @@ services:
         SERVICE: validator
     init: true
     <<: *runtime-service
-    ports:
-      - "127.0.0.1:${RP_VALIDATOR_PORT:-8773}:${RP_VALIDATOR_PORT:-8773}"
     environment:
       - RP_VALIDATOR_PORT=${RP_VALIDATOR_PORT:-8773}
       - RP_DB_PATH=/data/research.db
-      - RP_VALIDATOR_CAS_URL=${RP_VALIDATOR_CAS_URL:-http://localhost:8769}
-      - RP_DOCKER_HOST_GATEWAY=host.docker.internal
+      - RP_VALIDATOR_CAS_URL=${RP_VALIDATOR_CAS_URL:-http://127.0.0.1:8769}
+      - RP_DOCKER_HOST_GATEWAY=
+      - RP_BIND_HOST=127.0.0.1
       - RP_LOG_LEVEL=INFO
     env_file: .env
     volumes:
       - ${PEPERS_DATA_DIR:-./data}:/data
     user: "${PEPERS_UID:-1000}:${PEPERS_GID:-1000}"
-    restart: always
+    restart: unless-stopped
     logging: *default-logging
     deploy: *default-deploy
+    memswap_limit: 512m
     stop_grace_period: 10s
     healthcheck:
       test: ["CMD", "python", "-c",
@@ -207,22 +212,23 @@ services:
         SERVICE: codegen
     init: true
     <<: *runtime-service
-    ports:
-      - "127.0.0.1:${RP_CODEGEN_PORT:-8774}:${RP_CODEGEN_PORT:-8774}"
     environment:
       - RP_CODEGEN_PORT=${RP_CODEGEN_PORT:-8774}
       - RP_DB_PATH=/data/research.db
-      - RP_CODEGEN_OLLAMA_URL=${RP_CODEGEN_OLLAMA_URL:-http://localhost:11434}
-      - RP_DOCKER_HOST_GATEWAY=host.docker.internal
+      - RP_CODEGEN_OLLAMA_URL=${RP_CODEGEN_OLLAMA_URL:-http://127.0.0.1:11434}
+      - RP_ANALYZER_OLLAMA_MODEL=${RP_ANALYZER_OLLAMA_MODEL:-qwen3:8b}
+      - RP_DOCKER_HOST_GATEWAY=
+      - RP_BIND_HOST=127.0.0.1
       - RP_LOG_LEVEL=INFO
       - HOME=/tmp
     env_file: .env
     volumes:
       - ${PEPERS_DATA_DIR:-./data}:/data
     user: "${PEPERS_UID:-1000}:${PEPERS_GID:-1000}"
-    restart: always
+    restart: unless-stopped
     logging: *default-logging
     deploy: *default-deploy
+    memswap_limit: 512m
     stop_grace_period: 10s
     healthcheck:
       test: ["CMD", "python", "-c",
@@ -247,17 +253,16 @@ services:
         SERVICE: orchestrator
     init: true
     <<: *runtime-service
-    ports:
-      - "127.0.0.1:${RP_ORCHESTRATOR_PORT:-8775}:${RP_ORCHESTRATOR_PORT:-8775}"
     environment:
       - RP_ORCHESTRATOR_PORT=${RP_ORCHESTRATOR_PORT:-8775}
       - RP_DB_PATH=/data/research.db
-      - RP_DISCOVERY_URL=http://discovery:${RP_DISCOVERY_PORT:-8770}
-      - RP_ANALYZER_URL=http://analyzer:${RP_ANALYZER_PORT:-8771}
-      - RP_EXTRACTOR_URL=http://extractor:${RP_EXTRACTOR_PORT:-8772}
-      - RP_VALIDATOR_URL=http://validator:${RP_VALIDATOR_PORT:-8773}
-      - RP_CODEGEN_URL=http://codegen:${RP_CODEGEN_PORT:-8774}
-      - RP_DOCKER_HOST_GATEWAY=host.docker.internal
+      - RP_DISCOVERY_URL=http://127.0.0.1:${RP_DISCOVERY_PORT:-8770}
+      - RP_ANALYZER_URL=http://127.0.0.1:${RP_ANALYZER_PORT:-8771}
+      - RP_EXTRACTOR_URL=http://127.0.0.1:${RP_EXTRACTOR_PORT:-8772}
+      - RP_VALIDATOR_URL=http://127.0.0.1:${RP_VALIDATOR_PORT:-8773}
+      - RP_CODEGEN_URL=http://127.0.0.1:${RP_CODEGEN_PORT:-8774}
+      - RP_DOCKER_HOST_GATEWAY=
+      - RP_BIND_HOST=127.0.0.1
       - RP_ORCHESTRATOR_CRON=0 8 * * *
       - RP_ORCHESTRATOR_CRON_ENABLED=false
       - RP_ORCHESTRATOR_STAGES_PER_RUN=5
@@ -274,9 +279,10 @@ services:
     volumes:
       - ${PEPERS_DATA_DIR:-./data}:/data
     user: "${PEPERS_UID:-1000}:${PEPERS_GID:-1000}"
-    restart: always
+    restart: unless-stopped
     logging: *default-logging
     deploy: *orchestrator-deploy
+    memswap_limit: 1g
     stop_grace_period: 20s
     healthcheck:
       test: ["CMD", "python", "-c",
@@ -301,20 +307,20 @@ services:
         SERVICE: mcp
     init: true
     <<: *runtime-service
-    ports:
-      - "127.0.0.1:${RP_MCP_PORT:-8776}:${RP_MCP_PORT:-8776}"
     environment:
       - RP_MCP_PORT=${RP_MCP_PORT:-8776}
-      - RP_ORCHESTRATOR_URL=http://orchestrator:${RP_ORCHESTRATOR_PORT:-8775}
-      - RP_DOCKER_HOST_GATEWAY=host.docker.internal
+      - RP_ORCHESTRATOR_URL=http://127.0.0.1:${RP_ORCHESTRATOR_PORT:-8775}
+      - RP_DOCKER_HOST_GATEWAY=
+      - RP_BIND_HOST=127.0.0.1
       - RP_MCP_FLAVOR=arcade
     env_file: .env
     volumes:
       - ${PEPERS_DATA_DIR:-./data}:/data
     user: "${PEPERS_UID:-1000}:${PEPERS_GID:-1000}"
-    restart: always
+    restart: unless-stopped
     logging: *default-logging
     deploy: *default-deploy
+    memswap_limit: 512m
     stop_grace_period: 10s
     command: ["python", "-m", "services.mcp"]
     healthcheck:

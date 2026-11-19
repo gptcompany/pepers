@@ -207,6 +207,8 @@ cd /path/to/pepers
 
 ### Clean-room Docker setup (macOS)
 
+> The versioned `docker-compose.yml` uses `network_mode: host` and binds every service to `127.0.0.1` (`RP_BIND_HOST`). On macOS this needs Docker Desktop 4.34+ with *Enable host networking* turned on; on Linux nothing extra is needed.
+
 If you want a fully isolated, disposable setup on macOS (fresh `.env`, fresh containers, no state):
 
 ```bash

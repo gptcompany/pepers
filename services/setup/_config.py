@@ -285,6 +285,11 @@ class EnvConfig:
         docker = _docker_bin()
         if docker is None:
             return False
+        return self._published_port_matches(docker, service_name, port) or (
+            self._host_network_listens_on(docker, service_name, port)
+        )
+
+    def _published_port_matches(self, docker: str, service_name: str, port: int) -> bool:
         try:
             result = subprocess.run(
                 [docker, "compose", "port", service_name, str(port)],
@@ -304,6 +309,41 @@ class EnvConfig:
             for line in output.splitlines()
             if ":" in line
         )
+
+    def _host_network_listens_on(self, docker: str, service_name: str, port: int) -> bool:
+        """Con network_mode: host `compose port` non riporta nulla: la porta e' del servizio solo se il suo
+        container compose in esecuzione e' in rete host E ascolta proprio `port` (RP_<SERVICE>_PORT del container).
+
+        Il /health del listener dice che servizio e' ma non quale istanza: un'altra istanza su un'altra porta
+        non deve far conservare una porta che il container del progetto non usa.
+        """
+        env_key = f"RP_{service_name.upper()}_PORT"
+
+        def inspect(cid: str, fmt: str) -> str:
+            return subprocess.run(
+                [docker, "inspect", "-f", fmt, cid],
+                check=True,
+                capture_output=True,
+                text=True,
+                env=_docker_env(),
+            ).stdout.strip()
+
+        try:
+            ids = subprocess.run(
+                [docker, "compose", "ps", "-q", "--status", "running", service_name],
+                cwd=self._root,
+                check=True,
+                capture_output=True,
+                text=True,
+                env=_docker_env(),
+            ).stdout.split()
+            return bool(ids) and all(
+                inspect(cid, "{{.HostConfig.NetworkMode}}") == "host"
+                and any(_same_port(e, env_key, port) for e in json.loads(inspect(cid, "{{json .Config.Env}}") or "[]"))
+                for cid in ids
+            )
+        except (subprocess.CalledProcessError, FileNotFoundError, ValueError):
+            return False
 
     def _reconcile_services_after_port_change(self, console: Console) -> None:
         compose_file = self._root / "docker-compose.yml"
@@ -400,6 +440,12 @@ def _is_expected_service_on_port(port: int, service_name: str) -> bool:
             return payload.get("service") == service_name
     except Exception:
         return False
+
+
+def _same_port(env_entry: str, env_key: str, port: int) -> bool:
+    """`RP_X_PORT=08776` e `8776` sono la stessa porta: si confronta il numero, non la grafia del .env."""
+    key, _, value = env_entry.partition("=")
+    return key == env_key and value.strip().isdigit() and int(value) == port
 
 
 def _docker_bin() -> str | None:
