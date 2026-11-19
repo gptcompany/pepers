@@ -286,7 +286,7 @@ class EnvConfig:
         if docker is None:
             return False
         return self._published_port_matches(docker, service_name, port) or (
-            self._runs_on_host_network(docker, service_name)
+            self._host_network_listens_on(docker, service_name, port)
         )
 
     def _published_port_matches(self, docker: str, service_name: str, port: int) -> bool:
@@ -310,12 +310,24 @@ class EnvConfig:
             if ":" in line
         )
 
-    def _runs_on_host_network(self, docker: str, service_name: str) -> bool:
-        """Con network_mode: host la porta e' dell'host e `compose port` non la riporta.
+    def _host_network_listens_on(self, docker: str, service_name: str, port: int) -> bool:
+        """Con network_mode: host `compose port` non riporta nulla: la porta e' del servizio solo se il suo
+        container compose in esecuzione e' in rete host E ascolta proprio `port` (RP_<SERVICE>_PORT del container).
 
-        Il servizio la possiede se il suo container compose e' in esecuzione in rete host
-        (il chiamante ha gia' verificato dal /health che il listener e' quel servizio).
+        Il /health del listener dice che servizio e' ma non quale istanza: un'altra istanza su un'altra porta
+        non deve far conservare una porta che il container del progetto non usa.
         """
+        env_key = f"RP_{service_name.upper()}_PORT"
+
+        def inspect(cid: str, fmt: str) -> str:
+            return subprocess.run(
+                [docker, "inspect", "-f", fmt, cid],
+                check=True,
+                capture_output=True,
+                text=True,
+                env=_docker_env(),
+            ).stdout.strip()
+
         try:
             ids = subprocess.run(
                 [docker, "compose", "ps", "-q", "--status", "running", service_name],
@@ -326,17 +338,11 @@ class EnvConfig:
                 env=_docker_env(),
             ).stdout.split()
             return bool(ids) and all(
-                subprocess.run(
-                    [docker, "inspect", "-f", "{{.HostConfig.NetworkMode}}", cid],
-                    check=True,
-                    capture_output=True,
-                    text=True,
-                    env=_docker_env(),
-                ).stdout.strip()
-                == "host"
+                inspect(cid, "{{.HostConfig.NetworkMode}}") == "host"
+                and f"{env_key}={port}" in json.loads(inspect(cid, "{{json .Config.Env}}") or "[]")
                 for cid in ids
             )
-        except (subprocess.CalledProcessError, FileNotFoundError):
+        except (subprocess.CalledProcessError, FileNotFoundError, ValueError):
             return False
 
     def _reconcile_services_after_port_change(self, console: Console) -> None:
