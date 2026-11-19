@@ -677,6 +677,41 @@ class TestEnvConfig:
         assert values["RP_MCP_PORT"] == "8776"
 
 
+class TestComposePortOwnershipHostNetwork:
+    """Con network_mode: host la porta e' dell'host: `compose port` e' vuoto, il servizio resta il proprietario."""
+
+    @staticmethod
+    def _run(responses):
+        def fake(cmd, **kwargs):
+            key = " ".join(cmd[1:])
+            for needle, out in responses.items():
+                if needle in key:
+                    if out is None:
+                        raise subprocess.CalledProcessError(1, cmd)
+                    return MagicMock(stdout=out)
+            raise AssertionError(f"comando inatteso: {cmd}")
+        return fake
+
+    def _owns(self, tmp_path, responses):
+        (tmp_path / "docker-compose.yml").write_text("services: {}\n")
+        with patch("services.setup._config._docker_bin", return_value="docker"), patch(
+            "services.setup._config.subprocess.run", side_effect=self._run(responses)
+        ):
+            return EnvConfig(tmp_path)._compose_service_owns_port("mcp", 8776)
+
+    def test_servizio_compose_in_rete_host_possiede_la_porta(self, tmp_path):
+        assert self._owns(tmp_path, {"compose port": "", "compose ps": "abc123\n", "inspect": "host\n"})
+
+    def test_container_in_bridge_senza_porta_pubblicata_non_la_possiede(self, tmp_path):
+        assert not self._owns(tmp_path, {"compose port": "", "compose ps": "abc123\n", "inspect": "bridge\n"})
+
+    def test_servizio_compose_fermo_non_possiede_la_porta(self, tmp_path):
+        assert not self._owns(tmp_path, {"compose port": None, "compose ps": "\n"})
+
+    def test_porta_pubblicata_resta_riconosciuta(self, tmp_path):
+        assert self._owns(tmp_path, {"compose port": "127.0.0.1:8776\n"})
+
+
 # ── ExternalServiceCheck ─────────────────────────────────────
 
 class TestExternalServiceCheck:
