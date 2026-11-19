@@ -339,7 +339,7 @@ class EnvConfig:
             ).stdout.split()
             return bool(ids) and all(
                 inspect(cid, "{{.HostConfig.NetworkMode}}") == "host"
-                and f"{env_key}={port}" in json.loads(inspect(cid, "{{json .Config.Env}}") or "[]")
+                and any(_same_port(e, env_key, port) for e in json.loads(inspect(cid, "{{json .Config.Env}}") or "[]"))
                 for cid in ids
             )
         except (subprocess.CalledProcessError, FileNotFoundError, ValueError):
@@ -440,6 +440,12 @@ def _is_expected_service_on_port(port: int, service_name: str) -> bool:
             return payload.get("service") == service_name
     except Exception:
         return False
+
+
+def _same_port(env_entry: str, env_key: str, port: int) -> bool:
+    """`RP_X_PORT=08776` e `8776` sono la stessa porta: si confronta il numero, non la grafia del .env."""
+    key, _, value = env_entry.partition("=")
+    return key == env_key and value.strip().isdigit() and int(value) == port
 
 
 def _docker_bin() -> str | None:
