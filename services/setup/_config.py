@@ -285,6 +285,11 @@ class EnvConfig:
         docker = _docker_bin()
         if docker is None:
             return False
+        return self._published_port_matches(docker, service_name, port) or (
+            self._runs_on_host_network(docker, service_name)
+        )
+
+    def _published_port_matches(self, docker: str, service_name: str, port: int) -> bool:
         try:
             result = subprocess.run(
                 [docker, "compose", "port", service_name, str(port)],
@@ -304,6 +309,35 @@ class EnvConfig:
             for line in output.splitlines()
             if ":" in line
         )
+
+    def _runs_on_host_network(self, docker: str, service_name: str) -> bool:
+        """Con network_mode: host la porta e' dell'host e `compose port` non la riporta.
+
+        Il servizio la possiede se il suo container compose e' in esecuzione in rete host
+        (il chiamante ha gia' verificato dal /health che il listener e' quel servizio).
+        """
+        try:
+            ids = subprocess.run(
+                [docker, "compose", "ps", "-q", "--status", "running", service_name],
+                cwd=self._root,
+                check=True,
+                capture_output=True,
+                text=True,
+                env=_docker_env(),
+            ).stdout.split()
+            return bool(ids) and all(
+                subprocess.run(
+                    [docker, "inspect", "-f", "{{.HostConfig.NetworkMode}}", cid],
+                    check=True,
+                    capture_output=True,
+                    text=True,
+                    env=_docker_env(),
+                ).stdout.strip()
+                == "host"
+                for cid in ids
+            )
+        except (subprocess.CalledProcessError, FileNotFoundError):
+            return False
 
     def _reconcile_services_after_port_change(self, console: Console) -> None:
         compose_file = self._root / "docker-compose.yml"
