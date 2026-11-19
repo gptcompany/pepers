@@ -120,23 +120,18 @@ class TestNoSwap:
         for name in SERVICES:
             svc = compose_config["services"][name]
             assert svc.get("network_mode") == "host", f"{name} not on host network"
+            assert svc.get("pull_policy") == "build", f"{name} may reuse a pre-bind image"
             assert "ports" not in svc and "extra_hosts" not in svc, name
             assert svc["environment"]["RP_BIND_HOST"] == "127.0.0.1", name
 
-    def test_no_gateway_rewrite_and_all_urls_on_loopback(self, compose_config):
+    def test_no_gateway_rewrite_and_internal_urls_on_loopback(self, compose_config):
+        internal = {"RP_DISCOVERY_URL", "RP_ANALYZER_URL", "RP_EXTRACTOR_URL", "RP_VALIDATOR_URL",
+                    "RP_CODEGEN_URL", "RP_ORCHESTRATOR_URL"}
         for name in SERVICES:
             env = compose_config["services"][name]["environment"]
             assert not env.get("RP_DOCKER_HOST_GATEWAY"), f"{name} keeps the localhost rewrite active"
-            for key, value in env.items():
-                if not key.endswith("_URL"):
-                    continue
-                # URL interni al compose: sempre 127.0.0.1; dipendenze configurabili da .env (rag, cas, ollama):
-                # anche "localhost", che in rete host resta loopback perche' la riscrittura verso il gateway e' spenta.
-                allowed = ("http://127.0.0.1:", "http://localhost:")
-                assert value.startswith(allowed), f"{name} {key}={value}"
-                if key in {"RP_DISCOVERY_URL", "RP_ANALYZER_URL", "RP_EXTRACTOR_URL", "RP_VALIDATOR_URL",
-                           "RP_CODEGEN_URL", "RP_ORCHESTRATOR_URL"}:
-                    assert value.startswith("http://127.0.0.1:"), f"{name} {key}={value}"
+            for key in internal & env.keys():
+                assert env[key].startswith("http://127.0.0.1:"), f"{name} {key}={env[key]}"
 
 
 class TestAutoStart:

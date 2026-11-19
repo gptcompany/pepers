@@ -19,8 +19,10 @@ x-deploy-orchestrator: &orchestrator-deploy
 
 # Rete dell'host (decisione dell'operatore 19/11): niente ports/extra_hosts; ogni servizio
 # ascolta solo su 127.0.0.1 (RP_BIND_HOST) e tutti gli URL puntano a 127.0.0.1.
+# pull_policy build: in rete host un'immagine precedente ignorerebbe RP_BIND_HOST e ascolterebbe su 0.0.0.0.
 x-runtime-service: &runtime-service
   network_mode: host
+  pull_policy: build
 
 services:
   discovery:
