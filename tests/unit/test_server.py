@@ -459,7 +459,7 @@ class TestBindHost:
             monkeypatch.delenv("RP_BIND_HOST", raising=False)
         else:
             monkeypatch.setenv("RP_BIND_HOST", env)
-        service = BaseService("bind-test", 0, BaseHandler)
+        service = BaseService("bind-test", 0, type("BindTestHandler", (BaseHandler,), {}))
         with patch("shared.server.ThreadingHTTPServer") as server_cls:
             server_cls.return_value.serve_forever.side_effect = KeyboardInterrupt()
             try:
