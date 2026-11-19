@@ -699,11 +699,37 @@ class TestComposePortOwnershipHostNetwork:
         ):
             return EnvConfig(tmp_path)._compose_service_owns_port("mcp", 8776)
 
+    HOST_SAME = {"compose port": "", "compose ps": "abc123\n", "NetworkMode": "host\n", "Config.Env": '["RP_MCP_PORT=8776"]\n'}
+
     def test_servizio_compose_in_rete_host_possiede_la_porta(self, tmp_path):
-        assert self._owns(tmp_path, {"compose port": "", "compose ps": "abc123\n", "inspect": "host\n"})
+        assert self._owns(tmp_path, self.HOST_SAME)
+
+    def test_container_in_rete_host_su_un_altra_porta_non_possiede_quella_richiesta(self, tmp_path):
+        """MCP del progetto su 8777 (rete host); un'altra istanza risponde su 8776: la 8776 non e' sua."""
+        assert not self._owns(tmp_path, {**self.HOST_SAME, "Config.Env": '["RP_MCP_PORT=8777"]\n'})
+
+    def test_container_in_rete_host_senza_porta_dichiarata_non_possiede_nulla(self, tmp_path):
+        assert not self._owns(tmp_path, {**self.HOST_SAME, "Config.Env": '["RP_ORCHESTRATOR_PORT=8776"]\n'})
+
+    def test_ogni_container_del_servizio_deve_avere_la_porta_richiesta(self, tmp_path):
+        calls = iter(['["RP_MCP_PORT=8776"]\n', '["RP_MCP_PORT=8777"]\n'])
+
+        def fake(cmd, **kwargs):
+            key = " ".join(cmd[1:])
+            if "compose port" in key:
+                return MagicMock(stdout="")
+            if "compose ps" in key:
+                return MagicMock(stdout="a\nb\n")
+            return MagicMock(stdout="host\n" if "NetworkMode" in key else next(calls))
+
+        (tmp_path / "docker-compose.yml").write_text("services: {}\n")
+        with patch("services.setup._config._docker_bin", return_value="docker"), patch(
+            "services.setup._config.subprocess.run", side_effect=fake
+        ):
+            assert not EnvConfig(tmp_path)._compose_service_owns_port("mcp", 8776)
 
     def test_container_in_bridge_senza_porta_pubblicata_non_la_possiede(self, tmp_path):
-        assert not self._owns(tmp_path, {"compose port": "", "compose ps": "abc123\n", "inspect": "bridge\n"})
+        assert not self._owns(tmp_path, {**self.HOST_SAME, "NetworkMode": "bridge\n"})
 
     def test_servizio_compose_fermo_non_possiede_la_porta(self, tmp_path):
         assert not self._owns(tmp_path, {"compose port": None, "compose ps": "\n"})
