@@ -128,7 +128,14 @@ class TestNoSwap:
             env = compose_config["services"][name]["environment"]
             assert not env.get("RP_DOCKER_HOST_GATEWAY"), f"{name} keeps the localhost rewrite active"
             for key, value in env.items():
-                if key.endswith("_URL"):
+                if not key.endswith("_URL"):
+                    continue
+                # URL interni al compose: sempre 127.0.0.1; dipendenze configurabili da .env (rag, cas, ollama):
+                # anche "localhost", che in rete host resta loopback perche' la riscrittura verso il gateway e' spenta.
+                allowed = ("http://127.0.0.1:", "http://localhost:")
+                assert value.startswith(allowed), f"{name} {key}={value}"
+                if key in {"RP_DISCOVERY_URL", "RP_ANALYZER_URL", "RP_EXTRACTOR_URL", "RP_VALIDATOR_URL",
+                           "RP_CODEGEN_URL", "RP_ORCHESTRATOR_URL"}:
                     assert value.startswith("http://127.0.0.1:"), f"{name} {key}={value}"
 
 
