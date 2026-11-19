@@ -115,10 +115,21 @@ class TestNoSwap:
             mem = int(svc["deploy"]["resources"]["limits"]["memory"])
             assert int(svc.get("memswap_limit", 0)) == mem, f"{name} memswap_limit != memory limit"
 
-    def test_all_ports_bound_to_loopback(self, compose_config):
+    def test_host_network_with_explicit_loopback_bind(self, compose_config):
+        """Decisione dell'operatore (19/11): rete host, niente ports/extra_hosts, bind su 127.0.0.1."""
         for name in SERVICES:
-            for port in compose_config["services"][name].get("ports", []):
-                assert port.get("host_ip") == "127.0.0.1", f"{name} port {port} not on 127.0.0.1"
+            svc = compose_config["services"][name]
+            assert svc.get("network_mode") == "host", f"{name} not on host network"
+            assert "ports" not in svc and "extra_hosts" not in svc, name
+            assert svc["environment"]["RP_BIND_HOST"] == "127.0.0.1", name
+
+    def test_no_gateway_rewrite_and_all_urls_on_loopback(self, compose_config):
+        for name in SERVICES:
+            env = compose_config["services"][name]["environment"]
+            assert not env.get("RP_DOCKER_HOST_GATEWAY"), f"{name} keeps the localhost rewrite active"
+            for key, value in env.items():
+                if key.endswith("_URL"):
+                    assert value.startswith("http://127.0.0.1:"), f"{name} {key}={value}"
 
 
 class TestAutoStart:
@@ -238,3 +249,10 @@ class TestOllamaModelPassthrough:
         config = _load_compose_config({"RP_ANALYZER_OLLAMA_MODEL": "qwen3.5:9b"})
         for name in ("analyzer", "codegen"):
             assert config["services"][name]["environment"]["RP_ANALYZER_OLLAMA_MODEL"] == "qwen3.5:9b"
+
+    def test_model_is_versioned_in_compose_when_env_is_unset(self):
+        """Una sola fonte versionata: il default del deploy sta nel compose, non solo nel .env gitignorato."""
+        env = {"RP_ANALYZER_OLLAMA_MODEL": ""}
+        config = _load_compose_config(env)
+        for name in ("analyzer", "codegen"):
+            assert config["services"][name]["environment"]["RP_ANALYZER_OLLAMA_MODEL"] == "qwen3:8b"

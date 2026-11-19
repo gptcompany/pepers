@@ -444,3 +444,26 @@ class TestConcurrentRequests:
             results = [f.result() for f in as_completed(futures)]
 
         assert len(results) == 10
+
+
+class TestBindHost:
+    """F-775: l'indirizzo di ascolto e' configurabile con RP_BIND_HOST (compose in rete host => 127.0.0.1)."""
+
+    @pytest.mark.parametrize(
+        ("env", "expected"), [(None, "0.0.0.0"), ("127.0.0.1", "127.0.0.1"), ("  ", "0.0.0.0")]
+    )
+    def test_run_binds_configured_host(self, monkeypatch, env, expected):
+        from unittest.mock import patch
+
+        if env is None:
+            monkeypatch.delenv("RP_BIND_HOST", raising=False)
+        else:
+            monkeypatch.setenv("RP_BIND_HOST", env)
+        service = BaseService("bind-test", 0, BaseHandler)
+        with patch("shared.server.ThreadingHTTPServer") as server_cls:
+            server_cls.return_value.serve_forever.side_effect = KeyboardInterrupt()
+            try:
+                service.run()
+            except KeyboardInterrupt:
+                pass
+        assert server_cls.call_args[0][0] == (expected, 0)
